@@ -19,7 +19,8 @@
 #include "utils/FileVersion.h"
 #include "utils/http_request.h"
 #include "utils/OsVersion.h"
-#include "utils/ProcessUtil.h"#include "json11/json11.h"
+#include "utils/ProcessUtil.h"
+#include "json11/json11.h"
 #include "./gshell.h"
 #include "utils/Log.h"
 #include "utils/AssistPath.h"
@@ -64,9 +65,9 @@ bool LaunchProcessAndWaitForExit(char* path,char* commandLines, bool wait) {
 		return false;
 	} else if (pid == 0) {
 		if(execl(path, commandLines,(char * )0) == -1) {
-				Log::Error("Failed to launch AliYunAssistService task process: %s",strerror(errno));
-				return false;	
-			}
+			Log::Error("Failed to launch AliYunAssistService task process: %s",strerror(errno));
+		}
+		exit(0);
 	} else if (wait){
 		int stat;
 		pid_t newPID;
@@ -151,7 +152,7 @@ void*  SignalProcessingThreadFunc(void* arg)
 			pthread_exit(NULL);
 			break;
 		case SIGUSR1:
-      Singleton<task_engine::TaskSchedule>::I().Fetch();
+            Singleton<task_engine::TaskSchedule>::I().Fetch();
 			LaunchProcessAndWaitForExit(UPDATERFILE, UPDATERCMD, false);
 			break;
 		default:
@@ -266,12 +267,12 @@ int BecomeDeamon()
 	}
 
 	/*close the file descriptors inheritting from parent process*/
-	if (fileDescriptorLimit.rlim_max == RLIM_INFINITY) {
+	/*if (fileDescriptorLimit.rlim_max == RLIM_INFINITY) {
 		fileDescriptorLimit.rlim_max = 1024;
 	}
 	for (i = 0; i < fileDescriptorLimit.rlim_max; i++) {
 		close(i);
-	}
+	}*/
 
 	/* Close out the standard file descriptors */
 	close(STDIN_FILENO);
@@ -361,17 +362,8 @@ int InitService()
 		return -1;
 	}
 
-  ret = pthread_join(pXenCmdExecThread, NULL);
-  if (ret != 0) {
-    Log::Error("Failed to join the AliYunAssistService xen cmd exec thread: %s", strerror(errno));
-    return -1;
-  }
-
-  ret = pthread_join(pXenCmdReadThread, NULL);
-  if (ret != 0) {
-    Log::Error("Failed to join the AliYunAssistService xen cmd read thread: %s", strerror(errno));
-    return -1;
-  }
+  pthread_join(pXenCmdExecThread, NULL);
+  pthread_join(pXenCmdReadThread, NULL);
 }
 
 using optparse::OptionParser;
@@ -441,12 +433,12 @@ int main(int argc, char *argv[]) {
       Log::Error("Failed to set signal mask for AliYunAssistService: %s", strerror(errno));
       exit(EXIT_FAILURE);
    }
-
-    if (pthread_sigmask(SIG_SETMASK, &sigOldMask, NULL) != 0) {
-      Log::Error("Failed to reset signal mask: %s", strerror(errno));
-    }
     /*Initialize the service*/
     InitService();
+	
+	if (pthread_sigmask(SIG_SETMASK, &sigOldMask, NULL) != 0) {
+      Log::Error("Failed to reset signal mask: %s", strerror(errno));
+    }
 
     Log::Info("exit deamon");
     exit(EXIT_SUCCESS);
