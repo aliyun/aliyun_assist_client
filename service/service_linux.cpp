@@ -56,7 +56,7 @@ sigset_t sigMask;
 bool gTerminated = false;
 th_param param;
 
-bool LaunchProcessAndWaitForExit(char* path,char* commandLines, bool wait) {
+bool LaunchProcessAndWaitForExit(char* path, char* name, char* commandLines, bool wait) {
   pid_t pid;
 
   pid = fork();
@@ -64,7 +64,7 @@ bool LaunchProcessAndWaitForExit(char* path,char* commandLines, bool wait) {
 		Log::Error("Failed to fork AliYunAssistService task process: %s",strerror(errno));
 		return false;
 	} else if (pid == 0) {
-		if(execl(path, commandLines,(char * )0) == -1) {
+		if(execl(path, name, commandLines,(char * )0) == -1) {
 			Log::Error("Failed to launch AliYunAssistService task process: %s",strerror(errno));
 		}
 		exit(0);
@@ -82,36 +82,18 @@ bool LaunchProcessAndWaitForExit(char* path,char* commandLines, bool wait) {
 
 void*  ProducerThreadFunc(void*)
 {
-	int fd;
-	size_t sReadBytes;
-	char  cReadBuffer[0x1000];
+  Gshell gshell([]() {
+    pthread_mutex_lock(&signalQueueMutex);
+    gMessageCount++;
+    pthread_mutex_unlock(&signalQueueMutex);
+  });
 
-	fd = open("/dev/virtio-ports/org.qemu.guest_agent.0", O_RDONLY, S_IRUSR);
+  bool result = true;
+  while (!terminatingService && result) {
+      result = gshell.Poll();
+  }
 
-	if (fd != -1) {
-		while (true)
-		{
-			sReadBytes = read(fd, cReadBuffer, sizeof(cReadBuffer));
-			if (sReadBytes > 0) {
-				cReadBuffer[sReadBytes] = 0;
-				//DoParse(cReadBuffer, sReadBytes);
-				pthread_mutex_lock(&signalQueueMutex);
-				gMessageCount++;
-				pthread_mutex_unlock(&signalQueueMutex);
-			}
-
-			if (gTerminated)
-			{
-				break;
-			}
-			sleep(THREAD_SLEEP_TIME);
-		}
-	} else {
-		printf("device open failure/n");
-	}
-
-	close(fd);
-	return 0;
+  return TRUE;
 }
 
 void* ConsumerThreadFunc(void*) {
@@ -136,6 +118,10 @@ void* ConsumerThreadFunc(void*) {
 
 void*  SignalProcessingThreadFunc(void* arg)
 {
+  AssistPath path_service("");
+  std::string update_path = path_service.GetCurrDir();
+  update_path += FileUtils::separator();
+  update_path += "aliyun_assist_main.log";
 	int errCode, sigNo;
 
 	for (;;) {
@@ -152,11 +138,11 @@ void*  SignalProcessingThreadFunc(void* arg)
 			pthread_exit(NULL);
 			break;
 		case SIGUSR1:
-            Singleton<task_engine::TaskSchedule>::I().Fetch();
-			LaunchProcessAndWaitForExit(UPDATERFILE, UPDATERCMD, false);
+      Singleton<task_engine::TaskSchedule>::I().Fetch();
+      Log::Info("poll to fetch tasks");
+      LaunchProcessAndWaitForExit(update_path.c_str(), "aliyun-assist-update", "--check_update", false);
 			break;
 		default:
-			//exit(EXIT_FAILURE);
 			break;
 		}	
 	}
@@ -191,8 +177,7 @@ void* UpdaterThreadFunc(void *arg) {
 	}
 } 
 
-int IsServiceRunning(void)
-{
+int IsServiceRunning(void) {
 	int fd;
 	char pIDStr[16]	;
 	
@@ -292,7 +277,7 @@ int BecomeDeamon()
 
 int InitService()
 {
-    Log::Info("InitService");
+  Log::Info("InitService");
   Singleton<task_engine::TimerManager>::I().Start();
   Singleton<task_engine::TaskSchedule>::I().Fetch();
   Singleton<task_engine::TaskSchedule>::I().FetchPeriodTask();
@@ -324,43 +309,43 @@ int InitService()
 		return -1;
 	}
 
-    param.bTerminated = &gTerminated;
-    param.kicker = []() {
-    pthread_mutex_lock(&signalQueueMutex);
-    gMessageCount++;
-    pthread_mutex_unlock(&signalQueueMutex);
-    };
+  param.bTerminated = &gTerminated;
+  param.kicker = []() {
+  pthread_mutex_lock(&signalQueueMutex);
+  gMessageCount++;
+  pthread_mutex_unlock(&signalQueueMutex);
+  };
 
-    Log::Info("Call XSShellStart");
-    ret = XSShellStart(&param, &pXenCmdExecThread, &pXenCmdReadThread);
-    if (ret != 1) {
-		Log::Error("XSShellStart Failed: %d", ret);
-		return -1;
-	}
+  Log::Info("Call XSShellStart");
+  ret = XSShellStart(&param, &pXenCmdExecThread, &pXenCmdReadThread);
+  if (ret != 1) {
+    Log::Error("XSShellStart Failed: %d", ret);
+    return -1;
+  }
 
-	ret = pthread_join(pUpdaterThread, NULL);
-	if (ret != 0) {
-		Log::Error("Failed to join the AliYunAssistService updater thread: %s", strerror(errno));
-		return -1;
-	}
+  ret = pthread_join(pUpdaterThread, NULL);
+  if (ret != 0) {
+    Log::Error("Failed to join the AliYunAssistService updater thread: %s", strerror(errno));
+    return -1;
+  }
 
-	ret = pthread_join(pConsumerThread, NULL);
-	if (ret != 0) {
-		Log::Error("Failed to join the AliYunAssistService comsumer thread: %s", strerror(errno));
-		return -1;
-	}
+  ret = pthread_join(pConsumerThread, NULL);
+  if (ret != 0) {
+    Log::Error("Failed to join the AliYunAssistService comsumer thread: %s", strerror(errno));
+    return -1;
+  }
 
-	ret = pthread_join(pProducerThread, NULL);
-	if (ret != 0) {
-		Log::Error("Failed to join the AliYunAssistService producer thread: %s", strerror(errno));
-		return -1;
-	}
+  ret = pthread_join(pProducerThread, NULL);
+  if (ret != 0) {
+    Log::Error("Failed to join the AliYunAssistService producer thread: %s", strerror(errno));
+    return -1;
+  }
 
-	ret = pthread_join(pSignalProcessingThread, NULL);
-	if (ret != 0) {
-		Log::Error("Failed to join the AliYunAssistService signal processing thread: %s", strerror(errno));
-		return -1;
-	}
+  ret = pthread_join(pSignalProcessingThread, NULL);
+  if (ret != 0) {
+    Log::Error("Failed to join the AliYunAssistService signal processing thread: %s", strerror(errno));
+    return -1;
+  }
 
   pthread_join(pXenCmdExecThread, NULL);
   pthread_join(pXenCmdReadThread, NULL);
@@ -433,12 +418,12 @@ int main(int argc, char *argv[]) {
       Log::Error("Failed to set signal mask for AliYunAssistService: %s", strerror(errno));
       exit(EXIT_FAILURE);
    }
-    /*Initialize the service*/
-    InitService();
-	
-	if (pthread_sigmask(SIG_SETMASK, &sigOldMask, NULL) != 0) {
-      Log::Error("Failed to reset signal mask: %s", strerror(errno));
-    }
+
+  InitService();
+
+  if (pthread_sigmask(SIG_SETMASK, &sigOldMask, NULL) != 0) {
+    Log::Error("Failed to reset signal mask: %s", strerror(errno));
+  }
 
     Log::Info("exit deamon");
     exit(EXIT_SUCCESS);
