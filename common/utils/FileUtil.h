@@ -1,0 +1,20 @@
+// Copyright (c) 2017-2018 Alibaba Group Holding Limited.
+#pragma once
+
+#include <exception>
+#include <string>
+
+class FileUtils {
+ public:
+  static std::string dirname(const char* path);
+  static void mkpath(const char* dir);
+  static bool fileExists(const char* path);
+  static void mkdir(const char* dir);
+  static void copyFile(const char* src, const char* dest);
+  static char separator();
+  static void rmdirRecursive(const char* path);
+  static void rmdir(const char* dir);
+  static void removeFile(const char* src);
+  static bool ReadFileToString(const std::string& path, std::string& content);
+};
+

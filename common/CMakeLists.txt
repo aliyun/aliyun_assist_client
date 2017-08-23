@@ -1,0 +1,31 @@
+CMAKE_MINIMUM_REQUIRED(VERSION 3.1)
+# CMake 最低版本号要求
+PROJECT (alyun-assist) 
+
+include_directories(../third_party)
+INCLUDE_DIRECTORIES(../common)
+
+include_directories(../third_party/libcurl/include)
+link_directories(../third_party/libcurl/lib)
+
+add_definitions(-DCURL_STATICLIB)
+if(WIN32)
+    set(LIB_NAME assist-common)
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
+    set(CMAKE_CXX_FLAGS_DEBUG   "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
+	add_definitions(-DUNICODE -D_UNICODE)
+	link_libraries(libcurl)
+    link_libraries(setupapi)
+else(UNIX)
+    INCLUDE_DIRECTORIES(/usr/include)
+    LINK_DIRECTORIES(/usr/lib)
+    LINK_DIRECTORIES(/usr/local/lib)
+    add_compile_options(-std=c++11)
+   # link_libraries(libcurl.a)
+endif()
+
+aux_source_directory(utils DIR_SRCS)
+ADD_LIBRARY(assist-common ${DIR_SRCS})
+if(UNIX)
+TARGET_LINK_LIBRARIES(assist-common -lcurl)
+endif()
