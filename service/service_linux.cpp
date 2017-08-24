@@ -140,7 +140,7 @@ void*  SignalProcessingThreadFunc(void* arg)
 		case SIGUSR1:
       Singleton<task_engine::TaskSchedule>::I().Fetch();
       Log::Info("poll to fetch tasks");
-      LaunchProcessAndWaitForExit(update_path.c_str(), "aliyun-assist-update", "--check_update", false);
+      LaunchProcessAndWaitForExit((char*)update_path.c_str(), "aliyun-assist-update", "--check_update", false);
 			break;
 		default:
 			break;
