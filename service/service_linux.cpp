@@ -89,7 +89,7 @@ void*  ProducerThreadFunc(void*)
   });
 
   bool result = true;
-  while (!terminatingService && result) {
+  while (!gTerminated && result) {
       result = gshell.Poll();
   }
 
