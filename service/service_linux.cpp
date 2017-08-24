@@ -93,7 +93,7 @@ void*  ProducerThreadFunc(void*)
       result = gshell.Poll();
   }
 
-  return TRUE;
+  return true;
 }
 
 void* ConsumerThreadFunc(void*) {
