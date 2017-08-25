@@ -65,7 +65,7 @@ bool LaunchProcessAndWaitForExit(char* path, char* name, char* commandLines, boo
 		return false;
 	} else if (pid == 0) {
 		if(execl(path, name, commandLines,(char * )0) == -1) {
-			Log::Error("Failed to launch AliYunAssistService task process: %s",strerror(errno));
+			Log::Error("path:%s Failed to launch AliYunAssistService task process: %s", path, strerror(errno));
 		}
 		exit(0);
 	} else if (wait){
@@ -121,7 +121,7 @@ void*  SignalProcessingThreadFunc(void* arg)
   AssistPath path_service("");
   std::string update_path = path_service.GetCurrDir();
   update_path += FileUtils::separator();
-  update_path += "aliyun_assist_main.log";
+  update_path += "aliyun_assist_update";
 	int errCode, sigNo;
 
 	for (;;) {
