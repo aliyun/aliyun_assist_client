@@ -370,6 +370,11 @@ OptionParser& initParser() {
     .action("store_true")
     .dest("deamon")
     .help("start as deamon");
+    
+  parser.add_option("-t", "--test-service")
+    .action("store_true")
+    .dest("test-service")
+    .help("start as user process");
 
   return parser;
 }
@@ -401,15 +406,16 @@ int main(int argc, char *argv[]) {
     struct sigaction sigActionUpdate;
     sigset_t sigOldMask;
 
+    if (!options.is_set("test-service")) {
     /*Ensure AliYunAssistService run in Singleton mode*/	
-    if(ProcessUtils::is_single_proc_inst_running("aliyun-service") == false) {
-      Log::Error("Failed to launch AliYunAssistService more than one instance");
-      exit(EXIT_SUCCESS);
+      if(ProcessUtils::is_single_proc_inst_running("aliyun-service") == false) {
+        Log::Error("Failed to launch AliYunAssistService more than one instance");
+        exit(EXIT_SUCCESS);
+      }
+
+      /*Create the daemon service*/
+      BecomeDeamon();
     }
-
-    /*Create the daemon service*/
-    BecomeDeamon();
-
     /*Process SIGTERM and SIGUSR1 signals in a seperate signal processing thread and block them in all other threads */
     sigemptyset(&sigMask);
     sigaddset(&sigMask, SIGTERM);
