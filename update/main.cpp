@@ -89,6 +89,7 @@ int main(int argc, char *argv[]) {
       Log::Error("could not find a match region host");
     }
     alyun_assist_update::Appcast update_info;
+    memset(&update_info, 0, sizeof (alyun_assist_update::Appcast));
     alyun_assist_update::UpdateProcess process(update_info);
     bool need_update = process.CheckUpdate();
     if (need_update) {
