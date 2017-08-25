@@ -48,7 +48,7 @@ static size_t WriteFileCallback(void *contents, size_t size, size_t nmemb, void 
 bool HttpRequest::http_request_post(const std::string& url,
                                     const std::string& post_content, std::string& response) {
   CURL *curl;
-  CURLcode res;
+  CURLcode res = CURLE_OK;
 
   struct MemoryStruct chunk;
   chunk.size = 0;  /* no data at this point */
@@ -97,7 +97,7 @@ bool HttpRequest::http_request_post(const std::string& url,
 bool HttpRequest::download_file(const std::string& url,
                                 const std::string& file_path) {
   CURL *curl;
-  CURLcode res;
+  CURLcode res = CURLE_OK;
   FILE * fp = fopen(file_path.c_str(), "wb");
   if (fp == nullptr) {
     fclose(fp);
