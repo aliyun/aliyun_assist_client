@@ -423,13 +423,14 @@ int main(int argc, char *argv[]) {
     if (pthread_sigmask(SIG_BLOCK, &sigMask, &sigOldMask) != 0) {
       Log::Error("Failed to set signal mask for AliYunAssistService: %s", strerror(errno));
       exit(EXIT_FAILURE);
-   }
+    }
 
-  InitService();
+    signal(SIGCHLD,SIG_IGN);
+    InitService();
 
-  if (pthread_sigmask(SIG_SETMASK, &sigOldMask, NULL) != 0) {
-    Log::Error("Failed to reset signal mask: %s", strerror(errno));
-  }
+    if (pthread_sigmask(SIG_SETMASK, &sigOldMask, NULL) != 0) {
+      Log::Error("Failed to reset signal mask: %s", strerror(errno));
+    }
 
     Log::Info("exit deamon");
     exit(EXIT_SUCCESS);
