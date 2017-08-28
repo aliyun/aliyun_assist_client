@@ -124,10 +124,10 @@ bool HttpRequest::download_file(const std::string& url,
                  curl_easy_strerror(res));
     }
 
-    fclose(fp);
     /* always cleanup */
     curl_easy_cleanup(curl);
   }
+  fclose(fp);
   return res == CURLE_OK;
 }
 

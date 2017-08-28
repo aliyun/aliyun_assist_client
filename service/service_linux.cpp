@@ -177,39 +177,6 @@ void* UpdaterThreadFunc(void *arg) {
 	}
 } 
 
-int IsServiceRunning(void) {
-	int fd;
-	char pIDStr[16]	;
-	
-	fd = open(LOCKFILE, O_RDWR|O_CREAT, LOCKMODE);
-	if(fd < 0){
-			Log::Error("Failed to open %s: %s",LOCKFILE, strerror(errno));
-			return -1;
-	}
-	
-	struct flock fl;
-	fl.l_type = F_WRLCK; // Ð´ÎÄ¼þËø¶¨
-	fl.l_start = 0;
-	fl.l_whence = SEEK_SET;
-	fl.l_len = 0;
-	int ret = fcntl(fd, F_SETLK, &fl);
-	if (ret < 0)
-	{
-		if (errno == EACCES || errno == EAGAIN)
-		{
-			Log::Error("Failed to lock %s: %s", LOCKFILE, strerror(errno));
-			close(fd);
-			return -1;
-		}
-	}
-	
-	ftruncate(fd,0);
-	sprintf(pIDStr,"%ld",(long)getpid());
-	write(fd,pIDStr,strlen(pIDStr) + 1);
-	return 0;
-}
-
-
 /*Create the Deamon Service*/
 int BecomeDeamon()
 {

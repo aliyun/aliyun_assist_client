@@ -69,8 +69,10 @@ void Task::ReportOutput() {
   Json::Value jsonRoot;
   Json::Value jsonOutput;
   Encoder encoder;
-  jsonOutput["taskInstanceOutput"] = encoder.B64Encode(
+  char* pencodedata = encoder.B64Encode(
       (const unsigned char *)task_output_.c_str(), task_output_.size());
+  jsonOutput["taskInstanceOutput"] = pencodedata;
+  free(pencodedata);
   jsonRoot["taskID"] = task_info_.task_id;
   jsonOutput["errNo"] = (int)err_code_;
   jsonRoot["taskStatus"] = status_;
