@@ -104,9 +104,7 @@ void Gshell::reopen_fd_to_null(int fd)
 
     dup2(nullfd, fd);
 
-    if (nullfd != fd) {
-        close(nullfd);
-    }
+    close(nullfd);
 }
 
 bool  Gshell::ga_wait_child(pid_t pid, int *status) {
