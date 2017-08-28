@@ -63,7 +63,7 @@ static void* shell_cmd_check_thread(void *arg) {
     struct xs_handle *xsh;
     char **res;
     char* token = "0";
-    int num;
+    unsigned int num;
 
     Log::Info("check thread start");
 
@@ -98,7 +98,7 @@ static void* shell_cmd_read_thread(void *arg) {
     struct xs_handle *xsh;
     char **res;
     char* token = "0";
-    int num;
+    unsigned int num;
     char* buf;
     unsigned int len;
     unsigned int cmdlen;
@@ -128,7 +128,7 @@ static void* shell_cmd_read_thread(void *arg) {
         if((res = xs_read_watch(watch_xsh, &num)) == NULL)
             continue;
 
-        buf = xs_read(xsh, XBT_NULL, XS_PATH_CMDSTDIN, &len);
+        buf = (char*)xs_read(xsh, XBT_NULL, XS_PATH_CMDSTDIN, &len);
 
         if (buf == NULL) {
             free(res);
