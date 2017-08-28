@@ -15,8 +15,11 @@ namespace task_engine {
 Task::Task(TaskInfo info) :sub_process_(task_info_.working_dir,
     atoi(task_info_.time_out.c_str())) {
   task_info_ = info;
+  err_code_ = 0;
 #if defined(_WIN32)
   process_id = nullptr;
+#else
+  process_id = 0;
 #endif
   is_period_ = !task_info_.cronat.empty();
   Log::Info("taskid:%s command_id:%s content:%s params:%s", \

@@ -52,23 +52,27 @@ bool UpdateProcess::test_parse_response_string(std::string response) {
 bool UpdateProcess::parse_response_string(std::string response) {
   Json::Value jsonRoot;
   Json::Reader reader;
-  if (!reader.parse(response, jsonRoot)) {
-    Log::Error("invalid json format");
-    return false;
-  }
+  try {
+    if (!reader.parse(response, jsonRoot)) {
+      Log::Error("invalid json format");
+      return false;
+    }
 
-  update_info_.need_update = jsonRoot["need_update"].asInt();
-  if (update_info_.need_update == 0) {
-    Log::Info("not need update");
-    return false;
-  }
-  update_info_.flag = jsonRoot["flag"].asInt();
+    update_info_.need_update = jsonRoot["need_update"].asInt();
+    if (update_info_.need_update == 0) {
+      Log::Info("not need update");
+      return false;
+    }
+    update_info_.flag = jsonRoot["flag"].asInt();
 
-  Json::Value url_info = jsonRoot["update_info"];
-  update_info_.download_url = url_info["url"].asString();
-  update_info_.md5 = url_info["md5"].asString();
-  update_info_.file_name = url_info["file_name"].asString();
-  Log::Info("url:%s", update_info_.download_url.c_str());
+    Json::Value url_info = jsonRoot["update_info"];
+    update_info_.download_url = url_info["url"].asString();
+    update_info_.md5 = url_info["md5"].asString();
+    update_info_.file_name = url_info["file_name"].asString();
+    Log::Info("url:%s", update_info_.download_url.c_str());
+  } catch(...) {
+    Log::Error("update check json is invalid");
+  }
   return true;
 }
 

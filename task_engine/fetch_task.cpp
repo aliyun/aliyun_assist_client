@@ -18,32 +18,36 @@ void parse_task_info(std::string response,
   Json::Value jsonRoot;
   Json::Value jsonValue;
   Json::Reader reader;
-  if (!reader.parse(response, jsonRoot)) {
-    Log::Error("invalid json format");
-    return;
-  }
-
-  if (jsonRoot.isArray()) {
-    for (unsigned int i = 0; i < jsonRoot.size(); i++) {
-      task_engine::TaskInfo info;
-      if(jsonRoot[i]["taskInstanceID"].isString())
-        info.instance_id = jsonRoot[i]["taskInstanceID"].asString();
-      jsonValue = jsonRoot[i]["taskItem"];
-      if (jsonValue.empty())
-        return;
-      info.command_id = jsonValue["type"].asString();
-      info.task_id = jsonValue["taskID"].asString();
-      std::string content = jsonValue["commandContent"].asString();
-      Encoder encode;
-      if (!content.empty()) {
-        info.content = reinterpret_cast<char *>(encode.B64Decode(
-            content.c_str(), content.size()));
-      }
-      info.working_dir = jsonValue["workingDirectory"].asString();
-      info.cronat = jsonValue["cron"].asString();
-      info.time_out = jsonValue["timeOut"].asString();
-      task_info.push_back(info);
+  try {
+    if (!reader.parse(response, jsonRoot)) {
+      Log::Error("invalid json format");
+      return;
     }
+
+    if (jsonRoot.isArray()) {
+      for (unsigned int i = 0; i < jsonRoot.size(); i++) {
+        task_engine::TaskInfo info;
+        if (jsonRoot[i]["taskInstanceID"].isString())
+          info.instance_id = jsonRoot[i]["taskInstanceID"].asString();
+        jsonValue = jsonRoot[i]["taskItem"];
+        if (jsonValue.empty())
+          return;
+        info.command_id = jsonValue["type"].asString();
+        info.task_id = jsonValue["taskID"].asString();
+        std::string content = jsonValue["commandContent"].asString();
+        Encoder encode;
+        if (!content.empty()) {
+          info.content = reinterpret_cast<char *>(encode.B64Decode(
+            content.c_str(), content.size()));
+        }
+        info.working_dir = jsonValue["workingDirectory"].asString();
+        info.cronat = jsonValue["cron"].asString();
+        info.time_out = jsonValue["timeOut"].asString();
+        task_info.push_back(info);
+      }
+    }
+  } catch(...) {
+    Log::Error("fetch task json is invalid");
   }
 }
 }  // namespace

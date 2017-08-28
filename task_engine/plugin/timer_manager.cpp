@@ -14,6 +14,7 @@
 
 namespace task_engine {
 TimerManager::TimerManager() {
+  m_worker = nullptr;
   m_stop = true;
 }
 
