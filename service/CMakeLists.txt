@@ -41,7 +41,7 @@ endif()
 if(WIN32)
 	add_executable(aliyun_assist_service ${DIR_SRCS} service_win.cpp gshell_win.cpp ./windows/xs_shell.cc ./windows/xs.cc ../VersionResource.rc)
 else(UNIX)
-    add_executable(aliyun-service ${DIR_SRCS} service_linux.cpp gshell_linux.cpp ./linux/xs_shell.c ./linux/xs.c ../VersionResource.rc)
+    add_executable(aliyun-service ${DIR_SRCS} service_linux.cpp gshell_linux.cpp ./linux/xs_shell.cc ./linux/xs.c ../VersionResource.rc)
 endif()
 
 if(WIN32)
