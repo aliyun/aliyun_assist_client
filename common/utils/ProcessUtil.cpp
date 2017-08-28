@@ -157,6 +157,8 @@ PLATFORM_PID ProcessUtils::runAsyncUnix(const std::string& executable,
     if (execvp(executable.c_str(), argv) == -1) {
       Log::Error("error start child");
     }
+    exit(0);
   }
+  return child;
 }
 #endif

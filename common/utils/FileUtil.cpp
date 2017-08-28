@@ -184,9 +184,13 @@ void FileUtils::copyFile(const char* src, const char* dest) {
     Log::Error("copy file failed");
   }
   struct stat fileInfo;
-  stat(src, &fileInfo);
+  if(!stat(src, &fileInfo)) {
+    Log::Error("stat file failed");
+  }
 
-  chmod(dest, fileInfo.st_mode);
+  if(!chmod(dest, fileInfo.st_mode)) {
+    Log::Error("chmod failed");
+  }
 #else
   if (!CopyFileA(src, dest, FALSE)) {
     Log::Error("copy file failed");
