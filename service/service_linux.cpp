@@ -175,6 +175,7 @@ void* UpdaterThreadFunc(void *arg) {
 	if(timer_delete(timerID)== -1) {
 		syslog(LOG_ERR,"Failed to delete updater timer: %s",strerror(errno));  	
 	}
+  return (void*)0;
 } 
 
 /*Create the Deamon Service*/
@@ -316,6 +317,7 @@ int InitService()
 
   pthread_join(pXenCmdExecThread, NULL);
   pthread_join(pXenCmdReadThread, NULL);
+  return 0;
 }
 
 using optparse::OptionParser;

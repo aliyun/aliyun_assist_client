@@ -100,7 +100,6 @@ bool HttpRequest::download_file(const std::string& url,
   CURLcode res = CURLE_OK;
   FILE * fp = fopen(file_path.c_str(), "wb");
   if (fp == nullptr) {
-    fclose(fp);
     return false;
   }
   curl = curl_easy_init();
