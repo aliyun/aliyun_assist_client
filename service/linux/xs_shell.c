@@ -33,7 +33,7 @@ bool write_xenstore(struct xs_handle *h, xs_transaction_t t, const char *path, c
     }
 
     Log::Info("xs_write: [%s] [%.*s] [%d]", path, str_len, writebuf, str_len);
-    xs_write(h, t, path, writebuf, str_len);
+    return xs_write(h, t, path, writebuf, str_len);
 }
 
 void exec_cmd(struct xs_handle *xsh, XENKICKER kicker) {
