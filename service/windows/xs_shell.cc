@@ -1,8 +1,8 @@
 // Copyright (c) 2017-2018 Alibaba Group Holding Limited
 
 #include "./xs_shell.h"
-#include "./log_util.h"
 #include "./xs.h"
+#include "utils/Log.h"
 
 HANDLE gMutexStdin;
 HANDLE gEvent;
@@ -31,7 +31,7 @@ void WriteToXenstore(HANDLE handle,
     str_len = bufLen;
   }
 
-  log2local("xs_write: [%s] [%.*s] [%d]\n", path, str_len, writeBuf, str_len);
+  Log::Info("xs_write: [%s] [%.*s] [%d]", path, str_len, writeBuf, str_len);
   xb_write(handle, path, writeBuf, str_len);
   return;
 }
@@ -66,7 +66,7 @@ void ExecCmd(HANDLE handle, XENKICKER kicker) {
   char* pCmdline = NULL;
 
   /*check*/
-  log2local("cmdBuf = %s\n", cmdBuf);
+  Log::Info("cmdBuf = %s", cmdBuf);
 
   if (strlen(cmdBuf) <= LENGTH_TIMESTAMP) {
     WriteToXenstore(handle, XS_PATH_CMDSTDOUT, ERR_CMD_IS_EMPTY,
@@ -94,7 +94,7 @@ unsigned __stdcall CmdExecThreadProc(void* pArguments) {
   th_param *pargs;
   pargs = reinterpret_cast<th_param*>(pArguments);
 
-  log2local("ExecThreadProc Start\n");
+  Log::Info("ExecThreadProc Start");
 
   if ((path = get_xen_interface_path()) == NULL)
     return 0;
@@ -105,9 +105,9 @@ unsigned __stdcall CmdExecThreadProc(void* pArguments) {
   while (!(*pargs->terminatingService)) {
     WaitForSingleObject(gEvent, INFINITE);
 
-    log2local("Exec Start\n");
+    Log::Info("Exec Start");
     ExecCmd(handle, pargs->kicker);
-    log2local("Exec Done\n");
+    Log::Info("Exec Done");
 
     ResetEvent(gEvent);
 
@@ -126,7 +126,7 @@ unsigned __stdcall CmdCheckThreadProc(void* pArguments) {
   char *pargs;
   pargs = reinterpret_cast<char*>(pArguments);
 
-  log2local("CheckThreadProc Start\n");
+  Log::Info("CheckThreadProc Start");
 
   if ((path = get_xen_interface_path()) == NULL)
     return 0;
@@ -145,7 +145,7 @@ unsigned __stdcall CmdCheckThreadProc(void* pArguments) {
         strlen(STATE_ENABLE), NULL);
   }
 
-  log2local("CheckThreadProc End\n");
+  Log::Info("CheckThreadProc End");
   return 0;
 }
 
@@ -160,7 +160,7 @@ unsigned __stdcall CmdReadThreadProc(void* pArguments) {
   unsigned threadID;
 
   terminatingService = reinterpret_cast<BOOL*>(pArguments);
-  log2local("ReadThreadProc Start\n");
+  Log::Info("ReadThreadProc Start");
 
   if ((path = get_xen_interface_path()) == NULL)
     return 0;
@@ -184,7 +184,7 @@ unsigned __stdcall CmdReadThreadProc(void* pArguments) {
     if (buf == NULL)
       continue;
 
-    log2local("new event: %s\n", buf);
+    Log::Info("new event: %s", buf);
 
     if (!memcmp(buf, SHELL_CMD_TERM_PROCESS, strlen(SHELL_CMD_TERM_PROCESS))) {
       TerminateSubProcess();
@@ -216,7 +216,7 @@ unsigned __stdcall CmdReadThreadProc(void* pArguments) {
     free(buf);
   }
 
-  log2local("ReadThreadProc End\n");
+  Log::Info("ReadThreadProc End");
   return 0;
 }
 
@@ -229,7 +229,7 @@ int XSShellStart(th_param* param,
   LUID seDebug;
   TOKEN_PRIVILEGES tkp;
 
-  log2local("gshell start\n");
+  Log::Info("gshell start");
 
   /*upgrade privilege for kill subprocess*/
   OpenProcessToken(GetCurrentProcess(),
@@ -250,16 +250,16 @@ int XSShellStart(th_param* param,
   hCmdExecThread = (HANDLE)_beginthreadex(NULL, 0, &CmdExecThreadProc,
       param, 0, &threadID);
   if (hCmdExecThread == NULL) {
-    log2local("ERROR: CmdExecThreadProc create fail\n");
+    Log::Error("CmdExecThreadProc create fail: %d", GetLastError());
     return 0;
   }
   hCmdReadThread = (HANDLE)_beginthreadex(NULL, 0, &CmdReadThreadProc,
       param->terminatingService, 0, &threadID);
   if (hCmdReadThread == NULL) {
-    log2local("ERROR: CmdReadThreadProc create fail\n");
+    Log::Error("CmdReadThreadProc create fail: %d", GetLastError());
     return 0;
   }
 
-  log2local("Threads created\n");
+  Log::Info("Threads created");
   return 1;
 }

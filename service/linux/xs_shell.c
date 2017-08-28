@@ -8,8 +8,8 @@
 #include <errno.h>
 
 #include <xs.h>
-#include <log_util.h>
 #include <xs_shell.h>
+#include "utils/Log.h"
 
 pthread_mutex_t  gmutex_stdin = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t   gcond_stdin  = PTHREAD_COND_INITIALIZER;
@@ -32,7 +32,7 @@ bool write_xenstore(struct xs_handle *h, xs_transaction_t t, const char *path, c
         str_len = len;
     }
 
-    log2local("xs_write: [%s] [%.*s] [%d]\n", path, str_len, writebuf, str_len);
+    Log::Info("xs_write: [%s] [%.*s] [%d]", path, str_len, writebuf, str_len);
     xs_write(h, t, path, writebuf, str_len);
 }
 
@@ -40,7 +40,7 @@ void exec_cmd(struct xs_handle *xsh, XENKICKER kicker) {
     char *ptimestamp = EMPTY_TIMESTAMP;
 
     //check
-    log2local("cmdbuf = %s\n", cmdbuf);
+    Log::Info("cmdbuf = %s", cmdbuf);
 
     if (strlen(cmdbuf) <= LENGTH_TIMESTAMP) {
         write_xenstore(xsh, XBT_NULL, XS_PATH_CMDSTDOUT, ERR_CMD_IS_EMPTY, strlen(ERR_CMD_IS_EMPTY), ptimestamp);
@@ -65,16 +65,16 @@ static void* shell_cmd_check_thread(void *arg) {
     char* token = "0";
     int num;
 
-    log2local("check thread start\n");
+    Log::Info("check thread start");
 
     if((watch_xsh = xs_domain_open()) == NULL) {
-        log2local("Connect to xenbus failed\n");
+        Log::Error("Connect to xenbus failed: %s", strerror(errno));
         return;
     }
     xs_watch(watch_xsh, XS_PATH_CMDSTATEIN, token);
 
     if((xsh = xs_domain_open()) == NULL) {
-        log2local("Connect to xenbus failed\n");
+        Log::Error("Connect to xenbus failed: %s", strerror(errno));
         return;
     }
     write_xenstore(xsh, XBT_NULL, XS_PATH_CMDSTATEOUT, STATE_ENABLE, strlen(STATE_ENABLE), NULL);
@@ -88,7 +88,7 @@ static void* shell_cmd_check_thread(void *arg) {
         free(res);
     }
 
-    log2local("check thread end\n");
+    Log::Info("check thread end");
     return;
 }
 
@@ -104,23 +104,23 @@ static void* shell_cmd_read_thread(void *arg) {
     unsigned int cmdlen;
     int ret;
 
-    log2local("read thread start\n");
+    Log::Info("read thread start");
 
     bool* bTerminated = (bool*)arg;
     
     if((watch_xsh = xs_domain_open()) == NULL) {
-        log2local("Connect to xenbus failed\n");
+        Log::Error("Connect to xenbus failed: %s", strerror(errno));
         return;
     }
     xs_watch(watch_xsh, XS_PATH_CMDSTDIN, token);
 
     if((ret = pthread_create(&tshell_cmd_check, NULL, shell_cmd_check_thread, NULL)) != 0) {
-        log2local("ERROR: shell_cmd_check_thread create fail\n");
+        Log::Error("shell_cmd_check_thread create failed: %s", strerror(errno));
         return;
     }
 
     if((xsh = xs_domain_open()) == NULL) {
-        log2local("Connect to xenbus failed\n");
+        Log::Error("Connect to xenbus failed: %s", strerror(errno));
         return;
     }
 
@@ -135,7 +135,7 @@ static void* shell_cmd_read_thread(void *arg) {
             continue;
         }
 
-        log2local("new event: %s\n", buf);
+        Log::Info("new event: %s", buf);
 
         if(memcmp(buf, SHELL_CMD_TERM_PROCESS, strlen(SHELL_CMD_TERM_PROCESS)) == 0) {
             if(g_childpid)
@@ -164,18 +164,18 @@ cont:
         free(res);
     }
 
-    log2local("read thread end\n");
+    Log::Info("read thread end");
     return;
 }
 
 static void* shell_cmd_exec_thread(void *arg) {
     struct xs_handle *xsh;     
 
-    log2local("exec thread start\n");
+    Log::Info("exec thread start");
     th_param *pargs;
     pargs = (th_param*)arg;
     if((xsh = xs_domain_open()) == NULL) {
-        log2local("Connect to xenbus failed\n");
+        Log::Error("Connect to xenbus failed: %s", strerror(errno));
         return;
     }
 
@@ -186,16 +186,16 @@ static void* shell_cmd_exec_thread(void *arg) {
             pthread_cond_wait(&gcond_stdin, &gmutex_stdin);
         pthread_mutex_unlock(&gmutex_stdin);
 
-        log2local("exec start\n");
+        Log::Info("exec start");
         exec_cmd(xsh, pargs->kicker);
-        log2local("exec end\n");
+        Log::Info("exec end");
 
         pthread_mutex_lock(&gmutex_stdin);
         gcmd_status = CMD_STATUS_STOPPED;
         pthread_mutex_unlock(&gmutex_stdin);
     }
 
-    log2local("exec thread end\n");
+    Log::Info("exec thread end");
     return;
 }
 
@@ -203,23 +203,18 @@ int XSShellStart(th_param* param,
     pthread_t* pCmdExecThread,
     pthread_t* pCmdReadThread) {
 
-    if(log_init() == -1) {
-        printf("log init failed, errno %d \n", errno);
-     	return -1;
-    }
-
-    log2local("gshell start\n");
+    Log::Info("gshell start");
 
     if(pthread_create(pCmdExecThread, NULL, shell_cmd_exec_thread, param) != 0) {
-        log2local("ERROR: shell_cmd_exec_thread create fail\n");
+        Log::Error("shell_cmd_exec_thread create failed: %s", strerror(errno));
         return 0;
     }
     if(pthread_create(pCmdReadThread, NULL, shell_cmd_read_thread, param->bTerminated) != 0) {
-        log2local("ERROR: shell_cmd_read_thread create fail\n");
+        Log::Error("shell_cmd_read_thread create failed: %s", strerror(errno));
         return 0;
     }  
 
-    log2local("Threads created\n");
+    Log::Info("Threads created");
     return 1;
 }
 

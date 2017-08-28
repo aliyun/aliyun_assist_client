@@ -18,7 +18,7 @@
 */
 
 #include "./xs.h"
-#include "./log_util.h"
+#include "utils/Log.h"
 
 char * get_xen_interface_path() {
   HDEVINFO handle;
@@ -30,19 +30,19 @@ char * get_xen_interface_path() {
   handle = SetupDiGetClassDevsA(&GUID_XENBUS_IFACE, 0,
       NULL, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
   if (handle == INVALID_HANDLE_VALUE) {
-    log2local("SetupDiGetClassDevs failed\n"); 
+    Log::Error("SetupDiGetClassDevs failed: %d", GetLastError());
     return NULL;
   }
   sdid.cbSize = sizeof(sdid);
   if (!SetupDiEnumDeviceInterfaces(handle, NULL, &GUID_XENBUS_IFACE, 0, &sdid)) {
-    log2local("SetupDiEnumDeviceInterfaces failed\n");
+    Log::Error("SetupDiEnumDeviceInterfaces failed: %d", GetLastError());
     return NULL;
   }
   SetupDiGetDeviceInterfaceDetailA(handle, &sdid, NULL, 0, &buf_len, NULL);
   sdidd = (SP_DEVICE_INTERFACE_DETAIL_DATA_A*)malloc(buf_len);
   sdidd->cbSize = sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA_A);
   if (!SetupDiGetDeviceInterfaceDetailA(handle, &sdid, sdidd, buf_len, NULL, NULL)) {
-    log2local("SetupDiGetDeviceInterfaceDetail failed\n"); 
+    Log::Error("SetupDiGetDeviceInterfaceDetail failed: %d", GetLastError());
     return NULL;
   }
   
@@ -60,7 +60,7 @@ int xb_add_watch(HANDLE handle, char *path) {
   DWORD bytes_read;
   char *token = "0";
 
-  log2local("add_watch start\n");
+  Log::Debug("add_watch start");
   msg = (struct xsd_sockmsg *)buf;
   msg->type = XS_WATCH;
   msg->req_id = 0;
@@ -70,18 +70,18 @@ int xb_add_watch(HANDLE handle, char *path) {
   StringCbCopyA(buf + sizeof(*msg) + strlen(path) + 1, XS_MAX_BUFFER - sizeof(*msg) - strlen(path) - 1, token);
 
   if (!WriteFile(handle, buf, sizeof(*msg) + msg->len, &bytes_written, NULL)) {
-    log2local("write failed\n");
+    Log::Error("WriteFile failed: %d", GetLastError());
     return 0;
   }
   if (!ReadFile(handle, buf, XS_MAX_BUFFER, &bytes_read, NULL)) {
-    log2local("read failed\n");
+    Log::Error("ReadFile failed: %d", GetLastError());
     return 0;
   }
-  log2local("bytes_read = %d\n", bytes_read);
-  log2local("msg->len = %d\n", msg->len);
+  Log::Debug("bytes_read = %d", bytes_read);
+  Log::Debug("msg->len = %d", msg->len);
   buf[sizeof(*msg) + msg->len] = 0;
-  log2local("msg text = %s\n", buf + sizeof(*msg));
-  log2local("add_watch succ end\n");
+  Log::Debug("msg text = %s", buf + sizeof(*msg));
+  Log::Debug("add_watch succ end");
 
   return 1;
 }
@@ -91,18 +91,17 @@ int xb_wait_event(HANDLE handle) {
   struct xsd_sockmsg *msg;
   DWORD bytes_read;
 
-  log2local("wait_event start\n");
+  Log::Debug("wait_event start");
   msg = (struct xsd_sockmsg *)buf;
   if (!ReadFile(handle, buf, XS_MAX_BUFFER, &bytes_read, NULL)) {
-    printf("read failed: %d\n", GetLastError());
-    log2local("read failed\n");
+    Log::Error("ReadFile failed: %d", GetLastError());
     return 0;
   }
-  log2local("bytes_read = %d\n", bytes_read);
-  log2local("msg->len = %d\n", msg->len);
+  Log::Debug("bytes_read = %d", bytes_read);
+  Log::Debug("msg->len = %d", msg->len);
   buf[sizeof(*msg) + msg->len] = 0;
-  log2local("msg text = %s\n", buf + sizeof(*msg));
-  log2local("wait_event succ end\n");
+  Log::Debug("msg text = %s", buf + sizeof(*msg));
+  Log::Debug("wait_event succ end");
   return 1;
 }
 
@@ -113,7 +112,7 @@ int xb_write(HANDLE handle, char *path, char* info, size_t infoLen) {
   DWORD bytes_read;
   size_t totalLen = sizeof(*msg);
 
-  log2local("write start, info : %.*s\n", infoLen, info);
+  Log::Debug("write start, info : %.*s", infoLen, info);
   msg = (struct xsd_sockmsg *)buf;
   msg->type = XS_WRITE;
   msg->req_id = 0;
@@ -128,22 +127,22 @@ int xb_write(HANDLE handle, char *path, char* info, size_t infoLen) {
   msg->len = (ULONG)(totalLen - sizeof(*msg));
 
   if (!WriteFile(handle, buf, sizeof(*msg) + msg->len, &bytes_written, NULL)) {
-    log2local("write failed\n");
+    Log::Error("WriteFile failed: %d", GetLastError());
     return 0;
   }
   if (!ReadFile(handle, buf, XS_MAX_BUFFER, &bytes_read, NULL)) {
-    log2local("read failed\n");
+    Log::Error("ReadFile failed: %d", GetLastError());
     return 0;
   }
 
-  log2local("bytes_read = %d\n", bytes_read);
-  log2local("msg->len = %d\n", msg->len);
+  Log::Debug("bytes_read = %d", bytes_read);
+  Log::Debug("msg->len = %d", msg->len);
   buf[sizeof(*msg) + msg->len] = 0;
-  log2local("msg text = %s\n", buf + sizeof(*msg));
+  Log::Debug("msg text = %s", buf + sizeof(*msg));
   msg = (struct xsd_sockmsg *)buf;
   if (msg->type == XS_ERROR)
     return 0;
-  log2local("write succ end\n");
+  Log::Debug("write succ end");
 
   return 1;
 }
@@ -155,7 +154,7 @@ char * xb_read(HANDLE handle, char *path) {
   DWORD bytes_written;
   DWORD bytes_read;
 
-  log2local("read start\n");
+  Log::Debug("read start");
   msg = (struct xsd_sockmsg *)buf;
   msg->type = XS_READ;
   msg->req_id = 0;
@@ -164,20 +163,20 @@ char * xb_read(HANDLE handle, char *path) {
   StringCbCopyA(buf + sizeof(*msg), XS_MAX_BUFFER - sizeof(*msg), path);
 
   if (!WriteFile(handle, buf, sizeof(*msg) + msg->len, &bytes_written, NULL)) {
-    log2local("write failed\n");
+    Log::Error("WriteFile failed: %d", GetLastError());
     return NULL;
   }
 
   if (!ReadFile(handle, buf, XS_MAX_BUFFER, &bytes_read, NULL)) {
-    log2local("read failed\n");
+    Log::Error("WriteFile failed: %d", GetLastError());
     return NULL;
   }
-  log2local("bytes_read = %d\n", bytes_read);
-  log2local("msg->len = %d\n", msg->len);
+  Log::Debug("bytes_read = %d", bytes_read);
+  Log::Debug("msg->len = %d", msg->len);
   buf[sizeof(*msg) + msg->len] = 0;
-  log2local("msg text = %s\n", buf + sizeof(*msg));
+  Log::Debug("msg text = %s", buf + sizeof(*msg));
   ret = (char*)malloc(strlen(buf + sizeof(*msg)) + 1);
   StringCbCopyA(ret, XS_MAX_BUFFER - sizeof(*msg), buf + sizeof(*msg));
-  log2local("read succ end\n");
+  Log::Debug("read succ end");
   return ret;
 }
