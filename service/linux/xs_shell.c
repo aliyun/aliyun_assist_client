@@ -69,13 +69,13 @@ static void* shell_cmd_check_thread(void *arg) {
 
     if((watch_xsh = xs_domain_open()) == NULL) {
         Log::Error("Connect to xenbus failed: %s", strerror(errno));
-        return;
+        return (void*)-1;
     }
     xs_watch(watch_xsh, XS_PATH_CMDSTATEIN, token);
 
     if((xsh = xs_domain_open()) == NULL) {
         Log::Error("Connect to xenbus failed: %s", strerror(errno));
-        return;
+        return (void*)-1;
     }
     write_xenstore(xsh, XBT_NULL, XS_PATH_CMDSTATEOUT, STATE_ENABLE, strlen(STATE_ENABLE), NULL);
 
@@ -89,7 +89,7 @@ static void* shell_cmd_check_thread(void *arg) {
     }
 
     Log::Info("check thread end");
-    return;
+    return (void*)0;
 }
 
 static void* shell_cmd_read_thread(void *arg) {
@@ -110,18 +110,18 @@ static void* shell_cmd_read_thread(void *arg) {
     
     if((watch_xsh = xs_domain_open()) == NULL) {
         Log::Error("Connect to xenbus failed: %s", strerror(errno));
-        return;
+        return (void*)-1;
     }
     xs_watch(watch_xsh, XS_PATH_CMDSTDIN, token);
 
     if((ret = pthread_create(&tshell_cmd_check, NULL, shell_cmd_check_thread, NULL)) != 0) {
         Log::Error("shell_cmd_check_thread create failed: %s", strerror(errno));
-        return;
+        return (void*)-1;
     }
 
     if((xsh = xs_domain_open()) == NULL) {
         Log::Error("Connect to xenbus failed: %s", strerror(errno));
-        return;
+        return (void*)-1;
     }
 
     while(!(*bTerminated)) {
@@ -165,7 +165,7 @@ cont:
     }
 
     Log::Info("read thread end");
-    return;
+    return (void*)0;
 }
 
 static void* shell_cmd_exec_thread(void *arg) {
@@ -176,7 +176,7 @@ static void* shell_cmd_exec_thread(void *arg) {
     pargs = (th_param*)arg;
     if((xsh = xs_domain_open()) == NULL) {
         Log::Error("Connect to xenbus failed: %s", strerror(errno));
-        return;
+        return (void*)-1;
     }
 
     while(!(*pargs->bTerminated)) {
@@ -196,7 +196,7 @@ static void* shell_cmd_exec_thread(void *arg) {
     }
 
     Log::Info("exec thread end");
-    return;
+    return (void*)0;
 }
 
 int XSShellStart(th_param* param,
