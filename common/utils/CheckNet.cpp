@@ -107,9 +107,13 @@ bool HostChooser::FileRead(string file, string &content) {
     return false;
   }
 
-  char *pBuf;
+  char *pBuf = nullptr;
   fseek(fp, 0, SEEK_END);
-  unsigned int len = ftell(fp); //获取文件长度
+  long len = ftell(fp); //获取文件长度
+  if(len < 0) {
+    fclose(fp);
+    return false;
+  }
   pBuf = new char[len + 1];
   memset(pBuf, 0, sizeof(char) * (len+1));
 
