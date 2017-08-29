@@ -32,14 +32,18 @@ UpdateProcess::UpdateProcess(Appcast update_info) {
 
 std::string UpdateProcess::get_request_string() {
   Json::Value jsonRoot;
+  try {
 #ifdef _WIN32
-  jsonRoot["os"] = "windows";
+    jsonRoot["os"] = "windows";
 #else
-  jsonRoot["os"] = "linux";
+    jsonRoot["os"] = "linux";
 #endif
-  jsonRoot["os_version"] = OsVersion::GetVersion();
-  jsonRoot["app_id"] = "aliyun assistant";
-  jsonRoot["app_version"] = FILE_VERSION_RESOURCE_STR;
+    jsonRoot["os_version"] = OsVersion::GetVersion();
+    jsonRoot["app_id"] = "aliyun assistant";
+    jsonRoot["app_version"] = FILE_VERSION_RESOURCE_STR;
+  } catch (...) {
+    Log::Error("get_request_string failed");
+  }
   return jsonRoot.toStyledString();
 }
 
