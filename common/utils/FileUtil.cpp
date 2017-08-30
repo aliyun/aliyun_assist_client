@@ -1,4 +1,3 @@
-// Copyright (c) 2017-2018 Alibaba Group Holding Limited.
 #include "FileUtil.h"
 
 #include "utils/Log.h"
