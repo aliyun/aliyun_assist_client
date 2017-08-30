@@ -156,7 +156,7 @@ int PackageManager::CompareVersions(const string& verA, const string& verB) {
 }
 
 void PackageManager::List(const std::string& package_name) {
-  Log::Info("Enter list, package_name: %s", package_name);
+  Log::Info("Enter list, package_name: %s", package_name.c_str());
   vector<PackageInfo> package_infos = GetPackageInfo(package_name);
 
   if (package_infos.empty()) {
@@ -182,7 +182,7 @@ void PackageManager::List(const std::string& package_name) {
 }
 
 void PackageManager::Local(const std::string& package_name) {
-  Log::Info("Enter Local, package_name: %s", package_name);
+  Log::Info("Enter Local, package_name: %s", package_name.c_str());
   vector<PackageInfo> package_infos =
       db_manager->GetPackageInfos(package_name, false);
 
@@ -191,7 +191,7 @@ void PackageManager::Local(const std::string& package_name) {
       Log::Info("There no package in the local");
       printf("There no package in the local\n");
     } else {
-      Log::Info("There no package named %s in the local", package_name);
+      Log::Info("There no package named %s in the local", package_name.c_str());
       printf("There no package named %s in the local\n", package_name.c_str());
     }
   } else {
@@ -208,7 +208,7 @@ void PackageManager::Local(const std::string& package_name) {
 }
 
 void PackageManager::Latest(const std::string& package_name) {
-  Log::Info("Enter Latest, package_name: %s", package_name);
+  Log::Info("Enter Latest, package_name: %s", package_name.c_str());
   // query the package in the local
   vector<PackageInfo> package_infos =
       db_manager->GetPackageInfos(package_name, false);
@@ -252,7 +252,7 @@ void PackageManager::Install(const std::string& package_name,
     const std::string& package_version,
     const std::string& arch) {
   Log::Info("Enter Install, package_name: %s, package_version: %s,arch: %s",
-      package_name, package_version, arch);
+      package_name.c_str(), package_version.c_str(), arch.c_str());
 
   // If the package_version is empty, fuzzy query the package_name
   if (package_version.empty()) {
@@ -272,7 +272,7 @@ void PackageManager::Install(const std::string& package_name,
     // ask user to input the package_id
     printf("Please input the package_id you want to install.\n");
     char package_id[100];
-    scanf_s("%s", package_id, 99);
+    scanf("%s", package_id);
     for (size_t i = 0; i < package_infos.size(); ++i) {
       if (package_infos[i].package_id == package_id) {
         CheckInstall(package_infos[i]);
@@ -292,24 +292,24 @@ void PackageManager::Install(const std::string& package_name,
 }
 
 void PackageManager::Uninstall(const std::string& package_name) {
-  Log::Info("Enter Uninstall, package_name: %s", package_name);
+  Log::Info("Enter Uninstall, package_name: %s", package_name.c_str());
   vector<PackageInfo> package_infos =
       db_manager->GetPackageInfos(package_name, true);
   if (!package_infos.empty()) {
     UninstallAction(package_infos[0]);
   } else {
-    Log::Info("Uninstall failed, no package named %s", package_name);
+    Log::Info("Uninstall failed, no package named %s", package_name.c_str());
     printf("There is no such package.\n");
     return;
   }
 }
 
 void PackageManager::Update(const std::string& package_name) {
-  Log::Info("Enter Update, package_name: %s", package_name);
+  Log::Info("Enter Update, package_name: %s", package_name.c_str());
   vector<PackageInfo> package_infos =
       db_manager->GetPackageInfos(package_name, true);
   if (package_infos.empty()) {
-    Log::Info("There no package named %s in the local", package_name);
+    Log::Info("There no package named %s in the local", package_name.c_str());
     printf("There is no such package on this machine.\n");
     return;
   }
@@ -330,7 +330,7 @@ void PackageManager::Update(const std::string& package_name) {
 
   if (index == -1) {
     Log::Info("The package is latest. There is no need to update, %s",
-        package_name);
+        package_name.c_str());
     printf("The package is latest. There is no need to update.\n");
     return;
   }
@@ -351,7 +351,7 @@ void PackageManager::CheckInstall(const PackageInfo& package_info) {
           package_infos[i].publisher.c_str(),
           package_infos[i].install_date.c_str());
       Log::Info("This package is already exist, %s.",
-          package_infos[i].display_name);
+          package_infos[i].display_name.c_str());
       printf("This package is already exist.\n");
     }
 
@@ -448,7 +448,7 @@ vector<PackageInfo> PackageManager::GetPackageInfo(
   if (ret) {
     package_infos = parse_response_string(response);
   } else {
-    Log::Error("http request failed, url: %s, response:%s", url, response);
+    Log::Error("http request failed, url: %s, response:%s", url.c_str(), response.c_str());
   }
 
   return package_infos;
@@ -501,7 +501,7 @@ bool PackageManager::Download(const std::string& url,
   if (ret) {
     return true;
   } else {
-    Log::Error("Download failed, url: %s", url);
+    Log::Error("Download failed, url: %s", url.c_str());
     return false;
   }
 }
@@ -516,7 +516,7 @@ bool PackageManager::CheckMd5(const std::string& path,
     return true;
   } else {
     Log::Error("UnZip failed, path: %s, file_md5: %s, md5_string: %s",
-      path, file_md5, md5_string);
+      path.c_str(), file_md5.c_str(), md5_string.c_str());
     return false;
   }
 }
@@ -527,7 +527,7 @@ bool PackageManager::UnZip(const std::string& file_name,
   if (ret == 0) {
     return true;
   } else {
-    Log::Error("UnZip failed, file name: %s", file_name);
+    Log::Error("UnZip failed, file name: %s", file_name.c_str());
     return false;
   }
 }

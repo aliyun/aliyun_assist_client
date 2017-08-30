@@ -43,9 +43,7 @@ endif()
 add_subdirectory(third_party)
 add_subdirectory(common)
 add_subdirectory(update)
-if(WIN32)
 add_subdirectory(package_installer)
-endif()
 add_subdirectory(service)
 
 
