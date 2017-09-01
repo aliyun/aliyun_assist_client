@@ -47,7 +47,7 @@ Section "MainSection" SEC01
   SetOutPath "$INSTDIR"
   SetOverwrite ifnewer
   File "output\aliyun_assist_update.exe"
-  File "output\alyun_installer.exe"
+  File "output\aliyun_installer.exe"
   File "output\aliyun_assist_service.exe"
   File "output\install.bat"
   SetOutPath "$INSTDIR\config"
