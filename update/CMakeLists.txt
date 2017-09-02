@@ -1,12 +1,10 @@
-﻿CMAKE_MINIMUM_REQUIRED(VERSION 3.1)
+﻿#CMAKE_MINIMUM_REQUIRED(VERSION 3.1)
 # CMake 最低版本号要求
 PROJECT (aliyun-assist) 
 
 INCLUDE_DIRECTORIES(${CMAKE_CURRENT_BINARY_DIR})
 INCLUDE_DIRECTORIES(../third_party)
 INCLUDE_DIRECTORIES(../common)
-INCLUDE_DIRECTORIES(../third_party/libcurl/include)
-link_directories(../third_party/libcurl/lib)
 INCLUDE_DIRECTORIES(../third_party/libcurl/include)
 link_directories(../third_party/libcurl/lib)
 link_directories(../common)
