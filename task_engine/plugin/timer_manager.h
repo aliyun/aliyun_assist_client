@@ -12,6 +12,10 @@
 #include <functional>
 #include "utils/singleton.h"
 
+#if !defined(_WIN32)
+#include <pthread.h>
+#endif
+
 namespace task_engine {
 
 struct TimerObject;
@@ -52,7 +56,12 @@ class TimerManager {
   std::mutex          m_mutex;
   bool                m_stop;
   TimerQueue          m_queue;
+#if defined(_WIN32)
   std::condition_variable  m_cv;
+#else
+  pthread_cond_t cond;
+  pthread_mutex_t     mutex;
+#endif
   std::set<TimerObject*>   m_deleted;
   std::thread*             m_worker;
 };

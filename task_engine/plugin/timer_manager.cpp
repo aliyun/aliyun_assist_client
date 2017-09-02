@@ -12,10 +12,21 @@
 #include "utils/MutexLocker.h"
 #include "ccronexpr/ccronexpr.h"
 
+#if !defined(_WIN32)
+#include <sys/time.h>
+#include <unistd.h>
+#else
+#include "windows.h"
+#endif
+
 namespace task_engine {
 TimerManager::TimerManager() {
   m_worker = nullptr;
   m_stop = true;
+#if !defined(_WIN32)
+  pthread_mutex_init(&mutex, NULL);
+  pthread_cond_init(&cond, NULL);
+#endif
 }
 
 bool  TimerManager::Start() {
@@ -23,6 +34,11 @@ bool  TimerManager::Start() {
     while (m_stop) {
       WaitCondition();
       NotifyTimer();
+#if defined(_WIN32)
+      Sleep(1000);
+#else
+      sleep(1);
+#endif
     }
   });
   return true;
@@ -64,8 +80,11 @@ void* TimerManager::CreateTimer(TimerNotifier notifier,
   AutoMutexLocker(&m_mutex) {
     m_queue.push(obj);
   }
-
+#if defined(_WIN32)
   m_cv.notify_one();
+#else
+  pthread_cond_signal(&cond);
+#endif
   return obj;
 }
 
@@ -113,10 +132,24 @@ void TimerManager::WaitCondition() {
   if(minus <= 0) {
     return;
   };
-
+#if defined(_WIN32)
   std::mutex dumy;
   std::unique_lock<std::mutex> lock(dumy);
   m_cv.wait_for(lock, std::chrono::seconds(minus));
+#else
+  pthread_mutex_lock(&mutex);
+
+  struct timespec   ts;
+  struct timeval    tp;
+
+  gettimeofday(&tp, NULL);
+  ts.tv_sec = tp.tv_sec;
+  ts.tv_nsec = tp.tv_usec * 1000;
+  ts.tv_sec += minus;
+
+  pthread_cond_timedwait(&cond, &mutex, &ts);
+  pthread_mutex_unlock(&mutex);
+#endif
   return;
 }
 
