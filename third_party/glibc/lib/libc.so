@@ -1,0 +1,5 @@
+/* GNU ld script
+   Use the shared library, but some functions are only in
+   the static library, so try that secondarily.  */
+OUTPUT_FORMAT(elf32-i386)
+GROUP ( /home/changfeng/Videos/2.19/lib/libc.so.6 /home/changfeng/Videos/2.19/lib/libc_nonshared.a  AS_NEEDED ( /home/changfeng/Videos/2.19/lib/ld-linux.so.2 ) )
