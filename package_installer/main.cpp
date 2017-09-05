@@ -6,9 +6,9 @@
 #include "utils/SubProcess.h"
 #include "utils/Log.h"
 #include "utils/AssistPath.h"
-
 #include "utils/FileUtil.h"
 #include "utils/CheckNet.h"
+#include "../VersionInfo.h"
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -17,10 +17,13 @@
 
 using optparse::OptionParser;
 
-#define   EXE_VERSION  "1.0.0.1"
-
 OptionParser& initParser() {
   static OptionParser parser = OptionParser().description("");
+
+  parser.add_option("-v", "--version")
+    .dest("version")
+    .action("store_true")
+    .help("show version and exit");
 
   parser.add_option("-l", "--list")
       .dest("list")
@@ -56,7 +59,7 @@ OptionParser& initParser() {
       .dest("package")
       .action("store");
 
-  parser.add_option("-v", "--version")
+  parser.add_option("-e", "--package_version")
       .dest("package_version")
       .action("store");
 
@@ -101,6 +104,11 @@ int main(int argc, char *argv[]) {
   if (!found) {
     Log::Error("could not find a match region host");
     return -1;
+  }
+
+  if (options.is_set("version")) {
+    printf("%s", FILE_VERSION_RESOURCE_STR);
+    return 0;
   }
 
   if (options.is_set("list")) {

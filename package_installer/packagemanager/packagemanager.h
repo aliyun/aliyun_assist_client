@@ -34,12 +34,18 @@ class PackageManager {
   std::vector<PackageInfo> GetPackageInfo(const std::string& package_name,
       const std::string& package_version = "",
       const std::string& arch = "");
-  std::string get_request_string(const std::string& package_name,
+  std::string GetRequestString(const std::string& package_name,
       const std::string& package_version);
-  std::vector<PackageInfo> parse_response_string(std::string response);
+  std::vector<PackageInfo> ParseResponseString(std::string response);
   bool Download(const std::string& url, const std::string& path);
   bool CheckMd5(const std::string& path, const std::string& md5_string);
   bool UnZip(const std::string& file_name, const std::string& dir);
+#ifdef _WIN32
+  int ExecuteCmd(char* cmd, std::string& out);
+#else
+  int ExecuteCmd(char* cmd, char* buf, int len);
+#endif
+  int ComputeFileMD5(const std::string& file_path, std::string& md5_str);
   DBManager* db_manager;
 };
 

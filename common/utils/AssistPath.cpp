@@ -54,7 +54,14 @@ bool AssistPath::GetDefaultUserDataDirectory(std::string& path) {
   char buffer[MAX_PATH + 1];
   if (SHGetFolderPathA(0, CSIDL_LOCAL_APPDATA, 0 /* hToken */, SHGFP_TYPE_CURRENT, buffer) == S_OK) {
     path = buffer;
-    path += '\\' + organizationName + '\\' + appName;
+    path += '\\' + organizationName;
+    if (!FileUtils::fileExists(path.c_str())) {
+      FileUtils::mkdir(path.c_str());
+    }
+    path += '\\' + appName;
+    if (!FileUtils::fileExists(path.c_str())) {
+      FileUtils::mkdir(path.c_str());
+    }
     return true;
   } else {
     return false;
@@ -64,7 +71,18 @@ bool AssistPath::GetDefaultUserDataDirectory(std::string& path) {
   if (xdgDataHome.empty()) {
     xdgDataHome = "/home/.local/share";
   }
-  xdgDataHome += "/data/" + organizationName + '/' + appName;
+  xdgDataHome += "/data/";
+  if (!FileUtils::fileExists(xdgDataHome.c_str())) {
+    FileUtils::mkdir(xdgDataHome.c_str());
+  }
+  xdgDataHome += organizationName +'/';
+  if (!FileUtils::fileExists(xdgDataHome.c_str())) {
+    FileUtils::mkdir(xdgDataHome.c_str());
+  }
+  xdgDataHome += appName;
+  if (!FileUtils::fileExists(path.c_str())) {
+    FileUtils::mkdir(path.c_str());
+  }
   path = xdgDataHome;
   return true;
 #endif

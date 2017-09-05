@@ -4,6 +4,10 @@
 #include <string>
 #include <vector>
 #include <algorithm>
+#ifdef _WIN32
+#include <windows.h>
+#else
+#endif
 #include "./packageinfo.h"
 #include "utils/AssistPath.h"
 #include "utils/OsVersion.h"
@@ -161,12 +165,12 @@ void PackageManager::List(const std::string& package_name) {
 
   if (package_infos.empty()) {
     if (package_name.empty()) {
-      Log::Error("There no package in the software store");
-      printf("There no package in the software store\n");
+      Log::Error("There is no package in the software store");
+      printf("There is no package in the software store\n");
     } else {
-      Log::Info("There no package named %s in the software store",
+      Log::Info("There is no package named %s in the software store",
           package_name.c_str());
-      printf("There no package named %s in the software store\n",
+      printf("There is no package named %s in the software store\n",
           package_name.c_str());
     }
   } else {
@@ -188,11 +192,11 @@ void PackageManager::Local(const std::string& package_name) {
 
   if (!package_infos.empty()) {
     if (package_name.empty()) {
-      Log::Info("There no package in the local");
-      printf("There no package in the local\n");
+      Log::Info("There is no package in the local");
+      printf("There is no package in the local\n");
     } else {
-      Log::Info("There no package named %s in the local", package_name.c_str());
-      printf("There no package named %s in the local\n", package_name.c_str());
+      Log::Info("There is no package named %s in the local", package_name.c_str());
+      printf("There is no package named %s in the local\n", package_name.c_str());
     }
   } else {
     printf("name\tversion\tpublisher\tinstall data\n");
@@ -309,7 +313,7 @@ void PackageManager::Update(const std::string& package_name) {
   vector<PackageInfo> package_infos =
       db_manager->GetPackageInfos(package_name, true);
   if (package_infos.empty()) {
-    Log::Info("There no package named %s in the local", package_name.c_str());
+    Log::Info("There is no package named %s in the local", package_name.c_str());
     printf("There is no such package on this machine.\n");
     return;
   }
@@ -368,6 +372,7 @@ void PackageManager::InstallAction(const PackageInfo& package_info) {
   std::string file_path = userdata_path;
   std::string file_name = package_info.url.substr(
       package_info.url.find_last_of('/') + 1);
+  file_path += FileUtils::separator();
   file_path.append(file_name);
   bool download_ret = Download(package_info.url, file_path);
   if (!download_ret) {
@@ -387,18 +392,53 @@ void PackageManager::InstallAction(const PackageInfo& package_info) {
   }
 
   std::string install_dir = userdata_path;
+#ifdef _WIN32
+  install_dir.append("\\");
   install_dir.append(file_name.substr(0, file_name.find_last_of('.')));
   std::string install_file = install_dir;
+  std::string cmd = "";
   install_file.append("\\");
   install_file.append("install.bat");
-  std::string cmd = install_file + " " + install_dir;
+  cmd = install_file + " " + install_dir;
+#else
+  install_dir.append("/");
+  install_dir.append(file_name.substr(0, file_name.find_last_of('.')));
+  std::string install_file = install_dir;
+  install_file.append("/");
+  install_file.append("install.sh");
+  cmd = install_file + " " + install_dir;
+#endif
 
-  if (system(cmd.c_str()) == 0) {
+#ifdef _WIN32
+  std::string out;
+  char srcipt_path[1024] = { 0 };
+  strcpy(srcipt_path, cmd.c_str());
+  int code = ExecuteCmd(srcipt_path, out);
+  if (code == 0 && (out.find("success") != string::npos)) {
     vector<PackageInfo> package_infos;
     package_infos.push_back(package_info);
     db_manager->ReplaceInto(package_infos);
     remove(file_path.c_str());
+    printf("%s", out.c_str());
+  } else {
+    Log::Info("Installation failed, %s.",out);
+    printf("Installation failed\n%s.\n", out);
   }
+#else
+  char srcipt_path[1024] = { 0 };
+  strcpy(srcipt_path, cmd.c_str());
+  int code = ExecuteCmd(srcipt_path, out, 1024);
+  if (code == 0) {
+    vector<PackageInfo> package_infos;
+    package_infos.push_back(package_info);
+    db_manager->ReplaceInto(package_infos);
+    remove(file_path.c_str());
+    printf("%s", out);
+  } else {
+    Log::Info("Installation failed, %s.", out);
+    printf("Installation failed\n%s.\n", out);
+  }
+#endif
 }
 
 void PackageManager::UninstallAction(const PackageInfo& package_info) {
@@ -407,16 +447,41 @@ void PackageManager::UninstallAction(const PackageInfo& package_info) {
   path.GetDefaultUserDataDirectory(userdata_path);
   std::string file_name = package_info.url.substr(
       package_info.url.find_last_of('/') + 1);
-  std::string uninstall_dir = userdata_path;
+  std::string uninstall_dir = userdata_path + FileUtils::separator();
   uninstall_dir.append(file_name.substr(0, file_name.find_last_of('.')));
   std::string uninstall_file = uninstall_dir;
-  uninstall_file.append("\\");
-  uninstall_file.append("uninstall.bat");
-  std::string cmd = uninstall_file;
+  std::string cmd = uninstall_dir + FileUtils::separator();
+#ifdef _WIN32
+  cmd.append("uninstall.bat");
+#else
+  cmd.append("uninstall.sh");
+#endif
 
-  if (system(cmd.c_str()) == 0) {
+#ifdef _WIN32
+  std::string out;
+  char srcipt_path[1024] = { 0 };
+  strcpy(srcipt_path, cmd.c_str());
+  int code = ExecuteCmd(srcipt_path, out);
+  if (code == 0 && (out.find("success") != string::npos)) {
     db_manager->Delete(package_info.package_id);
+    printf("%s", out.c_str());
+  } else {
+    Log::Info("Uninstallation failed, %s.", out);
+    printf("Uninstallation failed\n%s.\n", out);
   }
+#else
+  char srcipt_path[1024] = { 0 };
+  strcpy(srcipt_path, cmd.c_str());
+  int code = ExecuteCmd(srcipt_path, out, 1024);
+  if (code == 0 && (out.find("success") == 0)) {
+    db_manager->Delete(package_info.package_id);
+    printf("%s", out);
+  }
+  else {
+    Log::Info("Uninstallation failed, %s.", out);
+    printf("Uninstallation failed\n%s.\n", out);
+  }
+#endif
 }
 
 vector<PackageInfo> PackageManager::GetPackageInfo(
@@ -426,6 +491,8 @@ vector<PackageInfo> PackageManager::GetPackageInfo(
   std::string response;
   std::string url = "http://" + HostChooser::m_HostSelect +
     "/luban/api/v1/repo/query_software?";
+  /*std::string url = "http://100.81.152.153:6666";
+  url += "/luban/api/v1/repo/query_software?";*/
   if (!package_name.empty()) {
     url = url + "package_name=" + (package_name.empty() ? "*" : package_name);
     if (!package_version.empty()) {
@@ -445,8 +512,13 @@ vector<PackageInfo> PackageManager::GetPackageInfo(
 
   vector<PackageInfo> package_infos;
   bool ret = HttpRequest::http_request_post(url, "", response);
+  /*ret = true;
+  response = "[{\"packageId\":\"1\",\"name\":\"python3\",\
+      \"url\":\"http://30.27.84.30:5656/python-3.6.1.zip\",\
+      \"md5\":\"39192e116dce49bbd05efeced7924bae\",\"version\":\"3.6.1\",\
+      \"publisher\":\"Python Software Foundation\",\"arch\":\"x86\"}]";*/
   if (ret) {
-    package_infos = parse_response_string(response);
+    package_infos = ParseResponseString(response);
   } else {
     Log::Error("http request failed, url: %s, response:%s", url.c_str(), response.c_str());
   }
@@ -454,7 +526,7 @@ vector<PackageInfo> PackageManager::GetPackageInfo(
   return package_infos;
 }
 
-std::string PackageManager::get_request_string(
+std::string PackageManager::GetRequestString(
     const std::string& package_name,
     const std::string& package_version) {
   Json::Value jsonRoot;
@@ -468,7 +540,7 @@ std::string PackageManager::get_request_string(
   return jsonRoot.toStyledString();
 }
 
-vector<PackageInfo> PackageManager::parse_response_string(
+vector<PackageInfo> PackageManager::ParseResponseString(
     std::string response) {
   Json::Value jsonRoot;
   Json::Reader reader;
@@ -481,13 +553,22 @@ vector<PackageInfo> PackageManager::parse_response_string(
 
   for (size_t i = 0; i < jsonRoot.size(); ++i) {
     PackageInfo package_info;
-    package_info.package_id = jsonRoot[i]["packageId"].asString();
-    package_info.url = jsonRoot[i]["url"].asString();
+    if (jsonRoot[i]["packageId"].isString())
+      package_info.package_id = jsonRoot[i]["packageId"].asString();
+    if (jsonRoot[i]["url"].isString())
+      package_info.url = jsonRoot[i]["url"].asString();
+      if (jsonRoot[i]["md5"].isString())
     package_info.MD5 = jsonRoot[i]["md5"].asString();
+      if (jsonRoot[i]["name"].isString())
     package_info.display_name = jsonRoot[i]["name"].asString();
+      if (jsonRoot[i]["version"].isString())
     package_info.display_version = jsonRoot[i]["version"].asString();
+      if (jsonRoot[i]["publisher"].isString())
     package_info.publisher = jsonRoot[i]["publisher"].asString();
+      if (jsonRoot[i]["arch"].isString())
     package_info.arch = jsonRoot[i]["arch"].asString();
+    std::transform(package_info.MD5.begin(), package_info.MD5.end(),
+        package_info.MD5.begin(), ::tolower);
     package_infos.push_back(package_info);
   }
 
@@ -496,7 +577,6 @@ vector<PackageInfo> PackageManager::parse_response_string(
 
 bool PackageManager::Download(const std::string& url,
     const std::string& path) {
-  return HttpRequest::download_file(url, path);
   bool ret = HttpRequest::download_file(url, path);
   if (ret) {
     return true;
@@ -508,15 +588,27 @@ bool PackageManager::Download(const std::string& url,
 
 bool PackageManager::CheckMd5(const std::string& path,
     const std::string& md5_string) {
+  std::string md5_str = md5_string;
+  std::transform(md5_str.begin(), md5_str.end(),
+      md5_str.begin(), ::tolower);
   std::string content;
   FileUtils::ReadFileToString(path, content);
   md5 md5_service(content);
-  std::string file_md5 = md5_service.Md5();
-  if (md5_string.compare(file_md5) == 0) {
+  std::string file_md5;
+  int code = ComputeFileMD5(path, file_md5);
+  if (code == -1)
+  {
+    Log::Error("ComputeFileMD5 failed");
+    return false;
+  }
+
+  std::transform(file_md5.begin(), file_md5.end(),
+    file_md5.begin(), ::tolower);
+  if (md5_str.compare(file_md5) == 0) {
     return true;
   } else {
-    Log::Error("UnZip failed, path: %s, file_md5: %s, md5_string: %s",
-      path.c_str(), file_md5.c_str(), md5_string.c_str());
+    Log::Error("CheckMd5 failed, path: %s, file_md5: %s, md5_str: %s",
+      path.c_str(), file_md5.c_str(), md5_str.c_str());
     return false;
   }
 }
@@ -530,5 +622,154 @@ bool PackageManager::UnZip(const std::string& file_name,
     Log::Error("UnZip failed, file name: %s", file_name.c_str());
     return false;
   }
+}
+
+#ifdef _WIN32
+int PackageManager::ExecuteCmd(char* cmd, std::string& out) {
+
+  DWORD exitCode = -1;
+  SECURITY_ATTRIBUTES sattr = { 0 };
+
+  sattr.nLength = sizeof(sattr);
+  sattr.bInheritHandle = TRUE;
+
+  HANDLE hChildOutR;
+  HANDLE hChildOutW;
+  if (!CreatePipe(&hChildOutR, &hChildOutW, &sattr, 0)) {
+    exitCode = GetLastError();
+    Log::Error("CreatePipe failed, url: %d", exitCode);
+    return exitCode;
+  }
+
+  SetHandleInformation(hChildOutR, HANDLE_FLAG_INHERIT, 0);
+
+  STARTUPINFOA si = { 0 };
+  PROCESS_INFORMATION pi = { 0 };
+
+  si.cb = sizeof(si);
+  si.hStdOutput = hChildOutW;
+  si.hStdError = hChildOutW;
+  si.dwFlags |= STARTF_USESTDHANDLES;
+
+  BOOL ret = FALSE;
+  ret = CreateProcessA(NULL, cmd, 0, 0, TRUE, 0, 0, 0, &si, &pi);
+
+  if (!ret) {
+    exitCode = GetLastError();
+    Log::Error("CreateProcessA failed, url: %d", exitCode);
+    return exitCode;
+  }
+
+  DWORD dw = WaitForSingleObject(pi.hProcess, 60 * 60 * 1000);
+  DWORD len = 0;
+  CHAR  output[0x1000] = { 0 };
+  switch (dw)
+  {
+  case WAIT_OBJECT_0:
+    GetExitCodeProcess(pi.hProcess, &exitCode);
+    PeekNamedPipe(hChildOutR, output, sizeof(output), 0, &len, 0);
+    out = output;
+    break;
+
+  case WAIT_TIMEOUT:
+    Log::Error("wait timeout: %d", GetLastError());
+    exitCode = GetLastError();
+    TerminateProcess(pi.hProcess, 1);
+
+  case WAIT_FAILED:
+    Log::Error("wait failed: %d", GetLastError());
+    exitCode = GetLastError();
+  }
+
+  CloseHandle(hChildOutR);
+  CloseHandle(hChildOutW);
+  CloseHandle(pi.hProcess);
+  CloseHandle(pi.hThread);
+
+  return exitCode;
+}
+#else
+int PackageManager::ExecuteCmd(char* cmd, char* out, int len)
+{
+  int   fd[2]; pid_t pid;
+  int   n, count;
+  memset(buf, 0, len);
+
+  if (pipe(fd) < 0)
+    return -1;
+  if ((pid = fork()) < 0)
+    return -1;
+  else if (pid > 0)     /* parent process */
+  {
+    close(fd[1]);     /* close write end */
+    count = 0;
+    while ((n = read(fd[0], buf + count, len)) > 0 && count > len)
+      count += n;
+    close(fd[0]);
+    if (waitpid(pid, NULL, 0) > 0)
+      return -1;
+  }
+  else    /* child process */
+  {
+    close(fd[0]);     /* close read end */
+    if (fd[1] != STDOUT_FILENO)
+    {
+      if (dup2(fd[1], STDOUT_FILENO) != STDOUT_FILENO)
+      {
+        return -1;
+      }
+      close(fd[1]);
+    }
+    if (execl("/bin/sh", "sh", cmd, (char*)0) == -1)
+      return -1;
+  }
+  return 0;
+}
+#endif
+
+//int Compute_file_md5(const char *file_path, char *md5_str)
+int PackageManager::ComputeFileMD5(const std::string& file_path,
+    std::string& md5_str) {
+  md5 md5_service;
+
+  FILE* file = fopen(file_path.c_str(), "rb");
+  if (!file) {
+    Log::Error("fopen failed, file_path: %s", file_path.c_str());
+    return -1;
+  }
+
+  const size_t kBufferSize = 1 << 14;
+  char* buf = new char[kBufferSize];
+  size_t len;
+  size_t size = 0;
+
+  fseek(file, 0, SEEK_END);
+  long totle_len = ftell(file);
+  if (totle_len < 0) {
+    fclose(file);
+    Log::Error("ftell failed, file_path: %s", file_path.c_str());
+    return -1;
+  }
+
+  fseek(file, 0, SEEK_SET);
+  while ((len = fread(buf, sizeof(char), kBufferSize, file)) > 0) {
+    md5_service.update(buf, len);
+    size += len;
+  }
+
+  if (totle_len != size) {
+    fclose(file);
+    Log::Error("fread failed, totle_len: %d, read_size: %d",
+        totle_len, size);
+    return -1;
+  }
+
+  delete[] buf;
+  fclose(file);
+
+  md5_service.finalize();
+  md5_str = md5_service.hexdigest();
+
+  return 0;
 }
 }  // namespace alyun_assist_installer
