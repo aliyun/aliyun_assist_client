@@ -7,6 +7,8 @@
 #ifdef _WIN32
 #include <windows.h>
 #else
+#include <unistd.h>
+#include <sys/wait.h>
 #endif
 #include "./packageinfo.h"
 #include "utils/AssistPath.h"
@@ -392,11 +394,11 @@ void PackageManager::InstallAction(const PackageInfo& package_info) {
   }
 
   std::string install_dir = userdata_path;
+  std::string cmd = "";
 #ifdef _WIN32
   install_dir.append("\\");
   install_dir.append(file_name.substr(0, file_name.find_last_of('.')));
   std::string install_file = install_dir;
-  std::string cmd = "";
   install_file.append("\\");
   install_file.append("install.bat");
   cmd = install_file + " " + install_dir;
@@ -426,17 +428,18 @@ void PackageManager::InstallAction(const PackageInfo& package_info) {
   }
 #else
   char srcipt_path[1024] = { 0 };
+  char buf[10240] = { 0 };
   strcpy(srcipt_path, cmd.c_str());
-  int code = ExecuteCmd(srcipt_path, out, 1024);
+  int code = ExecuteCmd(srcipt_path, buf, 10240);
   if (code == 0) {
     vector<PackageInfo> package_infos;
     package_infos.push_back(package_info);
     db_manager->ReplaceInto(package_infos);
     remove(file_path.c_str());
-    printf("%s", out);
+    printf("%s", buf);
   } else {
-    Log::Info("Installation failed, %s.", out);
-    printf("Installation failed\n%s.\n", out);
+    Log::Info("Installation failed, %s.", buf);
+    printf("Installation failed\n%s.\n", buf);
   }
 #endif
 }
@@ -471,15 +474,16 @@ void PackageManager::UninstallAction(const PackageInfo& package_info) {
   }
 #else
   char srcipt_path[1024] = { 0 };
+  char buf[10240] = { 0 };
   strcpy(srcipt_path, cmd.c_str());
-  int code = ExecuteCmd(srcipt_path, out, 1024);
-  if (code == 0 && (out.find("success") == 0)) {
+  int code = ExecuteCmd(srcipt_path, buf, 10240);
+  if (code == 0) {
     db_manager->Delete(package_info.package_id);
-    printf("%s", out);
+    printf("%s", buf);
   }
   else {
-    Log::Info("Uninstallation failed, %s.", out);
-    printf("Uninstallation failed\n%s.\n", out);
+    Log::Info("Uninstallation failed, %s.", buf);
+    printf("Uninstallation failed\n%s.\n", buf);
   }
 #endif
 }
@@ -689,7 +693,7 @@ int PackageManager::ExecuteCmd(char* cmd, std::string& out) {
   return exitCode;
 }
 #else
-int PackageManager::ExecuteCmd(char* cmd, char* out, int len)
+int PackageManager::ExecuteCmd(char* cmd, char* buf, int len)
 {
   int   fd[2]; pid_t pid;
   int   n, count;
