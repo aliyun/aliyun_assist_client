@@ -425,7 +425,7 @@ void PackageManager::InstallAction(const PackageInfo& package_info) {
   char srcipt_path[1024] = { 0 };
   strcpy(srcipt_path, cmd.c_str());
   int code = ExecuteCmd(srcipt_path, out);
-  if (code == 0 && (out.find("Installation success.") != string::npos)) {
+  if (code == 0 && (out.find("Installation success") != string::npos)) {
     vector<PackageInfo> package_infos;
     package_infos.push_back(package_info);
     db_manager->ReplaceInto(package_infos);
@@ -441,7 +441,7 @@ void PackageManager::InstallAction(const PackageInfo& package_info) {
   strcpy(srcipt_path, cmd.c_str());
   int code = ExecuteCmd(srcipt_path, buf, 10240);
   std::string out = buf;
-  if (code == 0 && (out.find("Installation success.") != string::npos)) {
+  if (code == 0 && (out.find("Installation success") != string::npos)) {
     vector<PackageInfo> package_infos;
     package_infos.push_back(package_info);
     db_manager->ReplaceInto(package_infos);
@@ -478,12 +478,12 @@ void PackageManager::UninstallAction(const PackageInfo& package_info) {
   char srcipt_path[1024] = { 0 };
   strcpy(srcipt_path, cmd.c_str());
   int code = ExecuteCmd(srcipt_path, out);
-  if (code == 0 && (out.find("Uninstallation success.") != string::npos)) {
+  if (code == 0 && (out.find("Uninstallation success") != string::npos)) {
     db_manager->Delete(package_info.package_id);
     printf("%s", out.c_str());
   } else {
     Log::Info("Uninstallation failed, %s.", out);
-    printf("Uninstallation failed\n%s.\n", out);
+    printf("Uninstallation failed.\n%s\n", out);
   }
 #else
   char srcipt_path[1024] = { 0 };
@@ -491,13 +491,13 @@ void PackageManager::UninstallAction(const PackageInfo& package_info) {
   strcpy(srcipt_path, cmd.c_str());
   int code = ExecuteCmd(srcipt_path, buf, 10240);
   std::string out = buf;
-  if (code == 0 && (out.find("Uninstallation success.") != string::npos)) {
+  if (code == 0 && (out.find("Uninstallation success") != string::npos)) {
     db_manager->Delete(package_info.package_id);
     printf("%s", buf);
   }
   else {
     Log::Info("Uninstallation failed, %s.", buf);
-    printf("Uninstallation failed\n%s.\n", buf);
+    printf("Uninstallation failed.\n%s\n", buf);
   }
 #endif
 }
