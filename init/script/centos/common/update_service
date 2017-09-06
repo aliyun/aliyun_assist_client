@@ -74,7 +74,7 @@ fi
 [ -e "$des_dir/var/lock/agentwatch" ] && rm -f "$des_dir/var/lock/agentwatch"
 
 chmod 777 $des_dir/aliyun-bin/add-agent-watch 1>/dev/null 2>&1
-chroot $des_dir "add-agent-watch" 1>/dev/null 2>&1
+. "$des_dir/aliyun-bin/add-agent-watch"
 
 ret=$?
 rm -rf $des_dir/aliyun-bin 1>/dev/null 2>&1
