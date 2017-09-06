@@ -5,6 +5,8 @@
 #include <vector>
 #include "./packageinfo.h"
 #include "./utils/Log.h"
+#include "./utils/AssistPath.h"
+#include "./utils/FileUtil.h"
 
 namespace alyun_assist_installer {
 DBManager::DBManager() {
@@ -158,9 +160,13 @@ std::vector<PackageInfo> DBManager::GetPackageInfos(
 void DBManager::Open() {
   char *zErrMsg = 0;
   int  rc;
+  AssistPath path_service("");
+  std::string root_path = path_service.GetCurrDir();
+  root_path += FileUtils::separator();
+  root_path += "packageinfo.db";
 
   /* Open database */
-  rc = sqlite3_open("packageinfo.db", &db);
+  rc = sqlite3_open(root_path.c_str(), &db);
   if (rc) {
     Log::Error("Can't open database: %s\n", sqlite3_errmsg(db));
     exit(0);
