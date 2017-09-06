@@ -36,10 +36,9 @@ endif()
 
 file(INSTALL ${CMAKE_CURRENT_SOURCE_DIR}/config/host.conf DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/output/config)
 
+if(UNIX)
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/init DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/output)
-#if(UNIX)
-
-#endif
+endif
 
 if(WIN32)
 file(INSTALL ${CMAKE_CURRENT_SOURCE_DIR}/tools/build/install.bat DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/output)
