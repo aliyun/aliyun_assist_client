@@ -12,7 +12,7 @@ issue=""
 . "$script_dir/script/common/identify_issue_version"
 echo "issue:$issue"
 
-if [ ! -e $script_dir/script/$issue/common/update_service]; then
+if [ ! -e $script_dir/script/$issue/common/update_service ]; then
     echo "3131:failed to find update script."
     #exit 1
 else

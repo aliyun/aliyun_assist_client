@@ -79,7 +79,6 @@ chroot $des_dir "add-agent-watch" 1>/dev/null 2>&1
 ret=$?
 rm -rf $des_dir/aliyun-bin 1>/dev/null 2>&1
 if [ $ret -ne 0 ]; then
-    glogger -o "[`now`] 3223:failed to add $agentwatch service (err:$ret)." -t $default_time 1>/dev/null 2>&1
     echo "3223:failed to add $agentwatch service."
     return 1
 fi
