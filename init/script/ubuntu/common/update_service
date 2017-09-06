@@ -17,8 +17,6 @@ else
     exit 1
 fi
 
-
-assist_version=$(cat $src_dir/data/aliyun-service/version)
 rm -f $des_dir/usr/sbin/aliyun-service
 # 1. check and copy files
 file_list="
