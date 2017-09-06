@@ -4,7 +4,9 @@ des_dir=""
 script_dir=$(dirname "$0")
 script_dir="$script_dir/."
 src_dir=script_dir
+assist_version=$1
 echo "script_dir:$script_dir"
+echo "assist_version:$assist_version"
 
 issue=""
 . "$script_dir/script/common/identify_issue_version"
