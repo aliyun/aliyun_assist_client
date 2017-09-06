@@ -17,6 +17,7 @@ Description: Provide functions to get file path
 #include <sys/stat.h>
 #endif // _WIN32
 
+#include <string.h>
 #include "FileUtil.h"
 #include "AssistPath.h"
 
@@ -67,21 +68,18 @@ bool AssistPath::GetDefaultUserDataDirectory(std::string& path) {
     return false;
   }
 #else
-  std::string xdgDataHome = getenv("XDG_DATA_HOME");
-  if (xdgDataHome.empty()) {
-    xdgDataHome = "/home/.local/share";
+  std::string xdgDataHome = "";
+  char *home;
+  home = getenv("XDG_DATA_HOME");
+  if((NULL == home) || (0 == strlen(home))) {
+      xdgDataHome = "/home/.local/share";
+  } else {
+      xdgDataHome = home;
   }
-  xdgDataHome += "/data/";
+
+  xdgDataHome += "/data/" + organizationName +'/' + appName;
   if (!FileUtils::fileExists(xdgDataHome.c_str())) {
-    FileUtils::mkdir(xdgDataHome.c_str());
-  }
-  xdgDataHome += organizationName +'/';
-  if (!FileUtils::fileExists(xdgDataHome.c_str())) {
-    FileUtils::mkdir(xdgDataHome.c_str());
-  }
-  xdgDataHome += appName;
-  if (!FileUtils::fileExists(path.c_str())) {
-    FileUtils::mkdir(path.c_str());
+    FileUtils::mkpath(xdgDataHome.c_str());
   }
   path = xdgDataHome;
   return true;

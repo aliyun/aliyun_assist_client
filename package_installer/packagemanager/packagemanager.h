@@ -43,7 +43,7 @@ class PackageManager {
 #ifdef _WIN32
   int ExecuteCmd(char* cmd, std::string& out);
 #else
-  int ExecuteCmd(char* cmd, char* buf, int len);
+  int ExecuteCmd(char* cmd, char* buff, int size);
 #endif
   int ComputeFileMD5(const std::string& file_path, std::string& md5_str);
   DBManager* db_manager;

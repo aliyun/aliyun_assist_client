@@ -368,31 +368,38 @@ void PackageManager::CheckInstall(const PackageInfo& package_info) {
 }
 
 void PackageManager::InstallAction(const PackageInfo& package_info) {
+  Log::Info("Enter InstallAction");
   AssistPath path("");
-  std::string userdata_path;
+  std::string userdata_path = "";
   path.GetDefaultUserDataDirectory(userdata_path);
+  Log::Info("userdata_path, %s", userdata_path.c_str());
   std::string file_path = userdata_path;
   std::string file_name = package_info.url.substr(
       package_info.url.find_last_of('/') + 1);
   file_path += FileUtils::separator();
   file_path.append(file_name);
+  Log::Info("Call Download, %s", package_info.url.c_str());
+  printf("Downloading...\n");
   bool download_ret = Download(package_info.url, file_path);
   if (!download_ret) {
     printf("Download this package failed, please try again later.\n");
     return;
   }
 
+  printf("Check MD5\n");
   if (!CheckMd5(file_path, package_info.MD5)) {
     printf("Check file md5 failed.\n");
     return;
   }
 
+  printf("Unzip\n");
   bool unzip_ret = UnZip(file_path, userdata_path);
   if (!unzip_ret) {
     printf("Unzip this package failed, please try again later.\n");
     return;
   }
 
+  printf("Installing...\n");
   std::string install_dir = userdata_path;
   std::string cmd = "";
 #ifdef _WIN32
@@ -408,7 +415,9 @@ void PackageManager::InstallAction(const PackageInfo& package_info) {
   std::string install_file = install_dir;
   install_file.append("/");
   install_file.append("install.sh");
-  cmd = install_file + " " + install_dir;
+  cmd = "chmod 744 " + install_file; 
+  system(cmd.c_str());
+  cmd = install_file;
 #endif
 
 #ifdef _WIN32
@@ -416,7 +425,7 @@ void PackageManager::InstallAction(const PackageInfo& package_info) {
   char srcipt_path[1024] = { 0 };
   strcpy(srcipt_path, cmd.c_str());
   int code = ExecuteCmd(srcipt_path, out);
-  if (code == 0 && (out.find("success") != string::npos)) {
+  if (code == 0 && (out.find("Installation success.") != string::npos)) {
     vector<PackageInfo> package_infos;
     package_infos.push_back(package_info);
     db_manager->ReplaceInto(package_infos);
@@ -424,14 +433,15 @@ void PackageManager::InstallAction(const PackageInfo& package_info) {
     printf("%s", out.c_str());
   } else {
     Log::Info("Installation failed, %s.",out);
-    printf("Installation failed\n%s.\n", out);
+    printf("Installation failed.\n%s\n", out);
   }
 #else
   char srcipt_path[1024] = { 0 };
   char buf[10240] = { 0 };
   strcpy(srcipt_path, cmd.c_str());
   int code = ExecuteCmd(srcipt_path, buf, 10240);
-  if (code == 0) {
+  std::string out = buf;
+  if (code == 0 && (out.find("Installation success.") != string::npos)) {
     vector<PackageInfo> package_infos;
     package_infos.push_back(package_info);
     db_manager->ReplaceInto(package_infos);
@@ -439,7 +449,7 @@ void PackageManager::InstallAction(const PackageInfo& package_info) {
     printf("%s", buf);
   } else {
     Log::Info("Installation failed, %s.", buf);
-    printf("Installation failed\n%s.\n", buf);
+    printf("Installation failed.\n%s\n", buf);
   }
 #endif
 }
@@ -458,14 +468,17 @@ void PackageManager::UninstallAction(const PackageInfo& package_info) {
   cmd.append("uninstall.bat");
 #else
   cmd.append("uninstall.sh");
+  std::string chmod_cmd = "chmod 744 " + cmd; 
+  system(chmod_cmd.c_str());
 #endif
 
+  printf("Uninstalling...\n");
 #ifdef _WIN32
   std::string out;
   char srcipt_path[1024] = { 0 };
   strcpy(srcipt_path, cmd.c_str());
   int code = ExecuteCmd(srcipt_path, out);
-  if (code == 0 && (out.find("success") != string::npos)) {
+  if (code == 0 && (out.find("Uninstallation success.") != string::npos)) {
     db_manager->Delete(package_info.package_id);
     printf("%s", out.c_str());
   } else {
@@ -477,7 +490,8 @@ void PackageManager::UninstallAction(const PackageInfo& package_info) {
   char buf[10240] = { 0 };
   strcpy(srcipt_path, cmd.c_str());
   int code = ExecuteCmd(srcipt_path, buf, 10240);
-  if (code == 0) {
+  std::string out = buf;
+  if (code == 0 && (out.find("Uninstallation success.") != string::npos)) {
     db_manager->Delete(package_info.package_id);
     printf("%s", buf);
   }
@@ -581,6 +595,7 @@ vector<PackageInfo> PackageManager::ParseResponseString(
 
 bool PackageManager::Download(const std::string& url,
     const std::string& path) {
+  Log::Info("Enter Download, %s", url.c_str());
   bool ret = HttpRequest::download_file(url, path);
   if (ret) {
     return true;
@@ -693,45 +708,43 @@ int PackageManager::ExecuteCmd(char* cmd, std::string& out) {
   return exitCode;
 }
 #else
-int PackageManager::ExecuteCmd(char* cmd, char* buf, int len)
+int PackageManager::ExecuteCmd(char* cmd, char* buff, int size)
 {
-  int   fd[2]; pid_t pid;
-  int   n, count;
-  memset(buf, 0, len);
-
-  if (pipe(fd) < 0)
-    return -1;
-  if ((pid = fork()) < 0)
-    return -1;
-  else if (pid > 0)     /* parent process */
+  char temp[256];
+  FILE* fp = NULL;
+  int offset = 0;
+  int len;
+   
+  fp = popen(cmd, "r");
+  if(fp == NULL)
   {
-    close(fd[1]);     /* close write end */
-    count = 0;
-    while ((n = read(fd[0], buf + count, len)) > 0 && count > len)
-      count += n;
-    close(fd[0]);
-    if (waitpid(pid, NULL, 0) > 0)
-      return -1;
+    return -1;
   }
-  else    /* child process */
+ 
+  while(fgets(temp, sizeof(temp), fp) != NULL)
   {
-    close(fd[0]);     /* close read end */
-    if (fd[1] != STDOUT_FILENO)
+    len = strlen(temp);
+    if(offset + len < size)
     {
-      if (dup2(fd[1], STDOUT_FILENO) != STDOUT_FILENO)
-      {
-        return -1;
-      }
-      close(fd[1]);
+      strcpy(buff+offset, temp);
+      offset += len;
     }
-    if (execl("/bin/sh", "sh", cmd, (char*)0) == -1)
-      return -1;
+    else
+    {
+      buff[offset] = 0;
+      break;
+    }
   }
+   
+  if(fp != NULL)
+  {
+    pclose(fp);
+  }
+ 
   return 0;
 }
 #endif
 
-//int Compute_file_md5(const char *file_path, char *md5_str)
 int PackageManager::ComputeFileMD5(const std::string& file_path,
     std::string& md5_str) {
   md5 md5_service;
