@@ -32,11 +32,6 @@ void Task::Run() {
 
 void Task::Cancel() {
   Log::Info("cancel the task:%s", task_info_.task_id.c_str());
-#if defined(_WIN32)
-  if (sub_process_.get_id())
-    ::TerminateProcess(sub_process_.get_id(), -1);
-#else
-#endif
   ReportStatus("stopped");
 }
 
