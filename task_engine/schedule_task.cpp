@@ -47,6 +47,7 @@ TaskSchedule::TaskSchedule() {
 void TaskSchedule::TestFetch(std::string info) {
   std::vector<TaskInfo> tasks;
   task_engine::TaskFetch task_fetch;
+  Encoder encoder;
   char* pencodedata = encoder.B64Encode(
       (const unsigned char *)info.c_str(), info.size());
   task_fetch.TestFetchTasks(pencodedata, tasks);
