@@ -48,9 +48,8 @@ void TaskSchedule::TestFetch(std::string info) {
   std::vector<TaskInfo> tasks;
   task_engine::TaskFetch task_fetch;
   Encoder encoder;
-  char* pencodedata = encoder.B64Decode(
-      (const unsigned char *)info.c_str(), info.size());
-  task_fetch.TestFetchTasks(pencodedata, tasks);
+  std::string encodedata = reinterpret_cast<char *>(encoder.B64Decode(info.c_str(), info.size()));
+  task_fetch.TestFetchTasks(encodedata, tasks);
 
   for (size_t i = 0; i < tasks.size(); i++) {
     Schedule(tasks[i]);
