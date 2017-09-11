@@ -12,6 +12,7 @@
 #include "./fetch_task.h"
 #include "utils/singleton.h"
 #include "utils/Log.h"
+#include "utils/Encode.h"
 #include "plugin/timer_manager.h"
 
 namespace task_engine {
@@ -20,6 +21,7 @@ void Execute(void* context) {
   Task* task = reinterpret_cast<Task*>(context);
   if(!task) {
     Log::Error("task is nullptr");
+    return;
   }
   task->Run();
   Log::Info("task after running");
@@ -40,6 +42,21 @@ void period_task_callback(void * context) {
 
 TaskSchedule::TaskSchedule() {
 }
+
+#if defined(TEST_MODE)
+void TaskSchedule::TestFetch(std::string info) {
+  std::vector<TaskInfo> tasks;
+  task_engine::TaskFetch task_fetch;
+  Encoder encoder;
+  char* pencodedata = encoder.B64Encode(
+      (const unsigned char *)info.c_str(), info.size());
+  task_fetch.TestFetchTasks(pencodedata, tasks);
+
+  for (size_t i = 0; i < tasks.size(); i++) {
+    Schedule(tasks[i]);
+  }
+}
+#endif
 
 void TaskSchedule::FetchPeriodTask() {
   std::vector<TaskInfo> tasks;

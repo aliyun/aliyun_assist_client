@@ -22,13 +22,19 @@ Task* TaskFactory::CreateTask(TaskInfo info) {
   if (!info.command_id.compare("InstallPackage")) {
     task = new InsatllPackageTask(info);
   } else if (!info.command_id.compare("RunPowserShellScript")) {
+#if defined(_WIN32)
     task = new RunPowserShellTask(info);
+#endif
   } else if (!info.command_id.compare("RunBatScript")) {
+#if defined(_WIN32)
     task = new RunBatTask(info);
+#endif
   } else if (!info.command_id.compare("UpdateAgent")) {
     task = new UpdateAliyunAgentTask(info);
   } else if (!info.command_id.compare("RunShellScript")) {
+#if !defined(_WIN32)
    task = new RunShellScriptTask(info);
+#endif
  }
   if (task) {
     std::lock_guard<std::mutex> lck(mtx);
