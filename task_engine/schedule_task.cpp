@@ -12,6 +12,7 @@
 #include "./fetch_task.h"
 #include "utils/singleton.h"
 #include "utils/Log.h"
+#include "utils/Encode.h"
 #include "plugin/timer_manager.h"
 
 namespace task_engine {
@@ -46,7 +47,9 @@ TaskSchedule::TaskSchedule() {
 void TaskSchedule::TestFetch(std::string info) {
   std::vector<TaskInfo> tasks;
   task_engine::TaskFetch task_fetch;
-  task_fetch.TestFetchTasks(info, tasks);
+  char* pencodedata = encoder.B64Encode(
+      (const unsigned char *)info.c_str(), info.size());
+  task_fetch.TestFetchTasks(pencodedata, tasks);
 
   for (size_t i = 0; i < tasks.size(); i++) {
     Schedule(tasks[i]);
