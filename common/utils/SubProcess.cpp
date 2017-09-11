@@ -166,13 +166,13 @@ bool SubProcess::IsExecutorExist(string guid) {
 
 #ifndef _WIN32
 bool SubProcess::ExecuteCMD_LINUX(char* cmd, const char* cwd, bool isWait, string& out, long &exitCode) {
-  char tmp_buf[1024];
+  char tmp_buf[1024] = {0};
   char result[1024 * 10] = {0};
   FILE *ptr;
   if ((ptr = popen(cmd, "r")) != NULL) {
     while (fgets(tmp_buf, 1024, ptr) != NULL) {
       strcat(result, tmp_buf);
-      if (strlen(result)>1024*10) break;
+      if (strlen(result)>1024*8) break;
     }
     Log::Info("result:%s", result);
     out = result;
