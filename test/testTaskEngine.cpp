@@ -26,7 +26,7 @@ void init_log() {
   log_path += "aliyun_assist_test.log";
   Log::Initialise(log_path);
 }
-
+#if defined(_WIN32)
 TEST(TestTaskEgine, AddRemoveTask) {
   task_engine::TaskInfo info;
   info.command_id = "RunBatScript";
@@ -56,7 +56,7 @@ TEST(TestTaskEgine, FetchTask) {
   EXPECT_EQ(0, value.compare(task_info[0].instance_id));
 }
 
-#if defined(_WIN32)
+
 TEST(TestTaskEgine, RunBatScript) {
   init_log();
   Log::Info("begin test");
