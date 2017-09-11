@@ -14,6 +14,9 @@ class TaskSchedule {
   TaskSchedule();
   void Cancel(TaskInfo task_info);
   void Fetch();
+#if defined(TEST_MODE)
+  void TestFetch(std::string info);
+#endif
   void FetchPeriodTask();
   Task* Schedule(TaskInfo task_info);
  private:

@@ -42,6 +42,18 @@ void period_task_callback(void * context) {
 TaskSchedule::TaskSchedule() {
 }
 
+#if defined(TEST_MODE)
+void TaskSchedule::TestFetch(std::string info) {
+  std::vector<TaskInfo> tasks;
+  task_engine::TaskFetch task_fetch;
+  task_fetch.TestFetchTasks(info, tasks);
+
+  for (size_t i = 0; i < tasks.size(); i++) {
+    Schedule(tasks[i]);
+  }
+}
+#endif
+
 void TaskSchedule::FetchPeriodTask() {
   std::vector<TaskInfo> tasks;
   task_engine::TaskFetch task_fetch;
