@@ -20,6 +20,7 @@ void Execute(void* context) {
   Task* task = reinterpret_cast<Task*>(context);
   if(!task) {
     Log::Error("task is nullptr");
+    return;
   }
   task->Run();
   Log::Info("task after running");
