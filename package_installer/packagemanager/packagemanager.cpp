@@ -268,6 +268,7 @@ void PackageManager::InstallAction(const PackageInfo& package_info) {
   file_path += FileUtils::separator();
   file_path.append(file_name);
   Log::Info("Call Download, %s", package_info.url.c_str());
+#if !defined(TEST_MODE)
   printf("Downloading...\n");
   bool download_ret = Download(package_info.url, file_path);
   if (!download_ret) {
@@ -287,6 +288,7 @@ void PackageManager::InstallAction(const PackageInfo& package_info) {
     printf("Unzip this package failed, please try again later.\n");
     return;
   }
+#endif
 
   printf("Installing...\n");
   std::string install_dir = userdata_path;
