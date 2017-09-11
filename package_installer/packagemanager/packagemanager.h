@@ -13,7 +13,6 @@ class PackageManager {
  public:
   PackageManager();
   virtual ~PackageManager();
-  static int CompareVersions(const std::string& a, const std::string& b);
   void List(const std::string& package_name);
   void Local(const std::string& package_name);
   void Latest(const std::string& package_name);

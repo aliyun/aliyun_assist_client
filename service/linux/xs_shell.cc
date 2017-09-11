@@ -68,7 +68,6 @@ static void* shell_cmd_check_thread(void *arg) {
     Log::Info("check thread start");
 
     if((watch_xsh = xs_domain_open()) == NULL) {
-        Log::Error("Connect to xenbus failed: %s", strerror(errno));
         return (void*)-1;
     }
     xs_watch(watch_xsh, XS_PATH_CMDSTATEIN, token);
@@ -109,7 +108,6 @@ static void* shell_cmd_read_thread(void *arg) {
     bool* bTerminated = (bool*)arg;
     
     if((watch_xsh = xs_domain_open()) == NULL) {
-        Log::Error("Connect to xenbus failed: %s", strerror(errno));
         return (void*)-1;
     }
     xs_watch(watch_xsh, XS_PATH_CMDSTDIN, token);
@@ -175,7 +173,6 @@ static void* shell_cmd_exec_thread(void *arg) {
     th_param *pargs;
     pargs = (th_param*)arg;
     if((xsh = xs_domain_open()) == NULL) {
-        Log::Error("Connect to xenbus failed: %s", strerror(errno));
         return (void*)-1;
     }
 

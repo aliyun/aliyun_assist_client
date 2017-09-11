@@ -18,147 +18,18 @@
 #include "utils/http_request.h"
 #include "utils/Log.h"
 #include "utils/FileUtil.h"
+#include "utils/VersionComparator.h"
 #include "jsoncpp/json.h"
 #include "zip/zip.h"
 #include "md5/md5.h"
 
 namespace alyun_assist_installer {
-namespace {
-// String characters classification. Valid components of version numbers
-// are numbers, period or string fragments ("beta" etc.).
-enum CharType {
-  Type_Number,
-  Type_Period,
-  Type_String
-};
-
-CharType ClassifyChar(char c) {
-  if (c == '.')
-    return Type_Period;
-  else if (c >= '0' && c <= '9')
-    return Type_Number;
-  else
-    return Type_String;
-}
-
-// Split version string into individual components. A component is continuous
-// run of characters with the same classification. For example, "1.20rc3" would
-// be split into ["1",".","20","rc","3"].
-vector<string> SplitVersionString(const string& version) {
-  vector<string> list;
-
-  if (version.empty())
-    return list;  // nothing to do here
-
-  string s;
-  const size_t len = version.length();
-
-  s = version[0];
-  CharType prevType = ClassifyChar(version[0]);
-
-  for (size_t i = 1; i < len; i++) {
-    const char c = version[i];
-    const CharType newType = ClassifyChar(c);
-
-    if (prevType != newType || prevType == Type_Period) {
-      // We reached a new segment. Period gets special treatment,
-      // because "." always delimiters components in version strings
-      // (and so ".." means there's empty component value).
-      list.push_back(s);
-      s = c;
-    } else {
-      // Add character to current segment and continue.
-      s += c;
-    }
-
-    prevType = newType;
-  }
-
-  // Don't forget to add the last part:
-  list.push_back(s);
-
-  return list;
-}
-
-}  // anonymous namespace
-
 PackageManager::PackageManager() {
   db_manager = new DBManager();
 }
 
 PackageManager::~PackageManager() {
   delete db_manager;
-}
-
-int PackageManager::CompareVersions(const string& verA, const string& verB) {
-  const vector<string> partsA = SplitVersionString(verA);
-  const vector<string> partsB = SplitVersionString(verB);
-
-  // Compare common length of both version strings.
-  const size_t n = min(partsA.size(), partsB.size());
-  for (size_t i = 0; i < n; i++) {
-    const string& a = partsA[i];
-    const string& b = partsB[i];
-
-    const CharType typeA = ClassifyChar(a[0]);
-    const CharType typeB = ClassifyChar(b[0]);
-
-    if (typeA == typeB) {
-      if (typeA == Type_String) {
-        int result = a.compare(b);
-        if (result != 0)
-          return result;
-      } else if (typeA == Type_Number) {
-        const int intA = atoi(a.c_str());
-        const int intB = atoi(b.c_str());
-        if (intA > intB)
-          return 1;
-        else if (intA < intB)
-          return -1;
-      }
-    } else {  // components of different types
-      if (typeA != Type_String && typeB == Type_String) {
-        // 1.2.0 > 1.2rc1
-        return 1;
-      } else if (typeA == Type_String && typeB != Type_String) {
-        // 1.2rc1 < 1.2.0
-        return -1;
-      } else {
-        // One is a number and the other is a period. The period
-        // is invalid.
-        return (typeA == Type_Number) ? 1 : -1;
-      }
-    }
-  }
-
-  // The versions are equal up to the point where they both still have
-  // parts. Lets check to see if one is larger than the other.
-  if (partsA.size() == partsB.size())
-    return 0;  // the two strings are identical
-
-              // Lets get the next part of the larger version string
-              // Note that 'n' already holds the index of the part we want.
-
-  int shorterResult, longerResult;
-  CharType missingPartType;  // ('missing' as in "missing in shorter version")
-
-  if (partsA.size() > partsB.size()) {
-    missingPartType = ClassifyChar(partsA[n][0]);
-    shorterResult = -1;
-    longerResult = 1;
-  } else {
-    missingPartType = ClassifyChar(partsB[n][0]);
-    shorterResult = 1;
-    longerResult = -1;
-  }
-
-  if (missingPartType == Type_String) {
-    // 1.5 > 1.5b3
-    return shorterResult;
-  } else {
-    // 1.5.1 > 1.5
-    return longerResult;
-  }
 }
 
 void PackageManager::List(const std::string& package_name) {
@@ -197,8 +68,10 @@ void PackageManager::Local(const std::string& package_name) {
       Log::Info("There is no package in the local");
       printf("There is no package in the local\n");
     } else {
-      Log::Info("There is no package named %s in the local", package_name.c_str());
-      printf("There is no package named %s in the local\n", package_name.c_str());
+      Log::Info("There is no package named %s in the local",
+          package_name.c_str());
+      printf("There is no package named %s in the local\n",
+          package_name.c_str());
     }
   } else {
     printf("name\tversion\tpublisher\tinstall data\n");
@@ -228,7 +101,7 @@ void PackageManager::Latest(const std::string& package_name) {
       if ((package_infos[i].display_name == packages[j].display_name) &&
           (package_infos[i].arch == packages[j].arch)) {
         // compare the version of the local package and remote package
-        if (CompareVersions(packages[j].display_version,
+        if (VersionComparator::CompareVersions(packages[j].display_version,
             package_infos[i].new_version) > 0) {
           package_infos[i].new_version = packages[j].display_version;
         }
@@ -276,13 +149,27 @@ void PackageManager::Install(const std::string& package_name,
 
     // If there are many packages whose name include package_name,
     // ask user to input the package_id
-    printf("Please input the package_id you want to install.\n");
-    char package_id[100];
-    scanf("%s", package_id);
-    for (size_t i = 0; i < package_infos.size(); ++i) {
-      if (package_infos[i].package_id == package_id) {
-        CheckInstall(package_infos[i]);
+    while (true) {
+      printf("Please input the package_id you want to install.\n");
+      char package_id[100];
+      scanf("%s", package_id);
+      int dest_package_index = -1;
+      printf("The package_id you input is %s.\n", package_id);
+      for (size_t i = 0; i < package_infos.size(); ++i) {
+        if (package_infos[i].package_id == package_id) {
+          dest_package_index = i;
+          break;
+        }
+      }
+
+      if (dest_package_index > -1 &&
+          dest_package_index < package_infos.size()) {
+        printf("The package you want to install is %s.\n",
+            package_infos[dest_package_index].display_name.c_str());
+        CheckInstall(package_infos[dest_package_index]);
         break;
+      } else {
+        printf("The package_id you input is not exist.\n");
       }
     }
   } else {
@@ -315,7 +202,8 @@ void PackageManager::Update(const std::string& package_name) {
   vector<PackageInfo> package_infos =
       db_manager->GetPackageInfos(package_name, true);
   if (package_infos.empty()) {
-    Log::Info("There is no package named %s in the local", package_name.c_str());
+    Log::Info("There is no package named %s in the local",
+        package_name.c_str());
     printf("There is no such package on this machine.\n");
     return;
   }
@@ -327,7 +215,8 @@ void PackageManager::Update(const std::string& package_name) {
     if ((package_infos[0].display_name == packages[i].display_name) &&
         (package_infos[0].arch == packages[i].arch)) {
       // compare the version of the local package and remote package
-      if (CompareVersions(packages[i].display_version, new_version) > 0) {
+      if (VersionComparator::CompareVersions(
+          packages[i].display_version, new_version) > 0) {
         new_version = packages[i].display_version;
         index = i;
       }
@@ -415,7 +304,7 @@ void PackageManager::InstallAction(const PackageInfo& package_info) {
   std::string install_file = install_dir;
   install_file.append("/");
   install_file.append("install.sh");
-  cmd = "chmod 744 " + install_file; 
+  cmd = "chmod 744 " + install_file;
   system(cmd.c_str());
   cmd = install_file;
 #endif
@@ -432,7 +321,7 @@ void PackageManager::InstallAction(const PackageInfo& package_info) {
     remove(file_path.c_str());
     printf("%s", out.c_str());
   } else {
-    Log::Info("Installation failed, %s.",out);
+    Log::Info("Installation failed, %s.", out);
     printf("Installation failed.\n%s\n", out);
   }
 #else
@@ -468,7 +357,7 @@ void PackageManager::UninstallAction(const PackageInfo& package_info) {
   cmd.append("uninstall.bat");
 #else
   cmd.append("uninstall.sh");
-  std::string chmod_cmd = "chmod 744 " + cmd; 
+  std::string chmod_cmd = "chmod 744 " + cmd;
   system(chmod_cmd.c_str());
 #endif
 
@@ -494,8 +383,7 @@ void PackageManager::UninstallAction(const PackageInfo& package_info) {
   if (code == 0 && (out.find("Uninstallation success") != string::npos)) {
     db_manager->Delete(package_info.package_id);
     printf("%s", buf);
-  }
-  else {
+  } else {
     Log::Info("Uninstallation failed, %s.", buf);
     printf("Uninstallation failed.\n%s\n", buf);
   }
@@ -538,7 +426,8 @@ vector<PackageInfo> PackageManager::GetPackageInfo(
   if (ret) {
     package_infos = ParseResponseString(response);
   } else {
-    Log::Error("http request failed, url: %s, response:%s", url.c_str(), response.c_str());
+    Log::Error("http request failed, url: %s, response:%s",
+        url.c_str(), response.c_str());
   }
 
   return package_infos;
@@ -575,16 +464,16 @@ vector<PackageInfo> PackageManager::ParseResponseString(
       package_info.package_id = jsonRoot[i]["packageId"].asString();
     if (jsonRoot[i]["url"].isString())
       package_info.url = jsonRoot[i]["url"].asString();
-      if (jsonRoot[i]["md5"].isString())
-    package_info.MD5 = jsonRoot[i]["md5"].asString();
-      if (jsonRoot[i]["name"].isString())
-    package_info.display_name = jsonRoot[i]["name"].asString();
-      if (jsonRoot[i]["version"].isString())
-    package_info.display_version = jsonRoot[i]["version"].asString();
-      if (jsonRoot[i]["publisher"].isString())
-    package_info.publisher = jsonRoot[i]["publisher"].asString();
-      if (jsonRoot[i]["arch"].isString())
-    package_info.arch = jsonRoot[i]["arch"].asString();
+    if (jsonRoot[i]["md5"].isString())
+      package_info.MD5 = jsonRoot[i]["md5"].asString();
+    if (jsonRoot[i]["name"].isString())
+      package_info.display_name = jsonRoot[i]["name"].asString();
+    if (jsonRoot[i]["version"].isString())
+      package_info.display_version = jsonRoot[i]["version"].asString();
+    if (jsonRoot[i]["publisher"].isString())
+      package_info.publisher = jsonRoot[i]["publisher"].asString();
+    if (jsonRoot[i]["arch"].isString())
+      package_info.arch = jsonRoot[i]["arch"].asString();
     std::transform(package_info.MD5.begin(), package_info.MD5.end(),
         package_info.MD5.begin(), ::tolower);
     package_infos.push_back(package_info);
@@ -615,8 +504,7 @@ bool PackageManager::CheckMd5(const std::string& path,
   md5 md5_service(content);
   std::string file_md5;
   int code = ComputeFileMD5(path, file_md5);
-  if (code == -1)
-  {
+  if (code == -1) {
     Log::Error("ComputeFileMD5 failed");
     return false;
   }
@@ -645,7 +533,6 @@ bool PackageManager::UnZip(const std::string& file_name,
 
 #ifdef _WIN32
 int PackageManager::ExecuteCmd(char* cmd, std::string& out) {
-
   DWORD exitCode = -1;
   SECURITY_ATTRIBUTES sattr = { 0 };
 
@@ -682,8 +569,7 @@ int PackageManager::ExecuteCmd(char* cmd, std::string& out) {
   DWORD dw = WaitForSingleObject(pi.hProcess, 60 * 60 * 1000);
   DWORD len = 0;
   CHAR  output[0x1000] = { 0 };
-  switch (dw)
-  {
+  switch (dw) {
   case WAIT_OBJECT_0:
     GetExitCodeProcess(pi.hProcess, &exitCode);
     PeekNamedPipe(hChildOutR, output, sizeof(output), 0, &len, 0);
@@ -708,39 +594,32 @@ int PackageManager::ExecuteCmd(char* cmd, std::string& out) {
   return exitCode;
 }
 #else
-int PackageManager::ExecuteCmd(char* cmd, char* buff, int size)
-{
+int PackageManager::ExecuteCmd(char* cmd, char* buff, int size) {
   char temp[256];
   FILE* fp = NULL;
   int offset = 0;
   int len;
-   
+
   fp = popen(cmd, "r");
-  if(fp == NULL)
-  {
+  if (fp == NULL) {
     return -1;
   }
- 
-  while(fgets(temp, sizeof(temp), fp) != NULL)
-  {
+
+  while (fgets(temp, sizeof(temp), fp) != NULL) {
     len = strlen(temp);
-    if(offset + len < size)
-    {
+    if (offset + len < size) {
       strcpy(buff+offset, temp);
       offset += len;
-    }
-    else
-    {
+    } else {
       buff[offset] = 0;
       break;
     }
   }
-   
-  if(fp != NULL)
-  {
+
+  if (fp != NULL) {
     pclose(fp);
   }
- 
+
   return 0;
 }
 #endif

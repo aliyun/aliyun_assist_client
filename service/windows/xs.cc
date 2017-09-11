@@ -30,7 +30,6 @@ char * get_xen_interface_path() {
   handle = SetupDiGetClassDevsA(&GUID_XENBUS_IFACE, 0,
       NULL, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
   if (handle == INVALID_HANDLE_VALUE) {
-    Log::Error("SetupDiGetClassDevs failed: %d", GetLastError());
     return NULL;
   }
   sdid.cbSize = sizeof(sdid);
