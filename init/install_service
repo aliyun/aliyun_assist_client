@@ -1,10 +1,8 @@
 #!/bin/bash
 
 des_dir=""
-script_dir=$(dirname "$0")
-script_dir="$script_dir/."
+script_dir="/usr/local/share/aliyun-assist/$assist_version/init"
 src_dir=$script_dir
-assist_version=$(cat $src_dir/version)
 echo "script_dir:$script_dir"
 echo "assist_version:$assist_version"
 

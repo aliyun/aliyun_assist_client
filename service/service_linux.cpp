@@ -363,6 +363,11 @@ int main(int argc, char *argv[]) {
   if (options.is_set("version")) {
     printf("%s", FILE_VERSION_RESOURCE_STR);
     return 0;
+  } else if (options.is_set("fetch_task")) {
+    Singleton<task_engine::TaskSchedule>::I().Fetch();
+    Singleton<task_engine::TaskSchedule>::I().FetchPeriodTask();
+    sleep(3600);
+    return 0;
   }
   curl_global_init(CURL_GLOBAL_ALL);
   HostChooser  host_choose;
@@ -370,48 +375,37 @@ int main(int argc, char *argv[]) {
   if (!found) {
     Log::Error("could not find a match region host");
   }
-  if (options.is_set("deamon")) {
-    Log::Info("in deamon mode");
-    struct sigaction sigActionUpdate;
-    sigset_t sigOldMask;
+  if (options.is_set("deamon") && !options.is_set("test-service")) {
+    BecomeDeamon();
+  }
+  Log::Info("in deamon mode");
+  struct sigaction sigActionUpdate;
+  sigset_t sigOldMask;
 
-    if (!options.is_set("test-service")) {
-    /*Ensure AliYunAssistService run in Singleton mode*/	
-      if(ProcessUtils::is_single_proc_inst_running("aliyun-service") == false) {
-        Log::Error("Failed to launch AliYunAssistService more than one instance");
-        exit(EXIT_SUCCESS);
-      }
-
-      /*Create the daemon service*/
-      BecomeDeamon();
-    }
-    /*Process SIGTERM and SIGUSR1 signals in a seperate signal processing thread and block them in all other threads */
-    sigemptyset(&sigMask);
-    sigaddset(&sigMask, SIGTERM);
-    sigaddset(&sigMask, SIGUSR1);
-    if (pthread_sigmask(SIG_BLOCK, &sigMask, &sigOldMask) != 0) {
-      Log::Error("Failed to set signal mask for AliYunAssistService: %s", strerror(errno));
-      exit(EXIT_FAILURE);
-    }
-
-    signal(SIGCHLD,SIG_IGN);
-    InitService();
-
-    if (pthread_sigmask(SIG_SETMASK, &sigOldMask, NULL) != 0) {
-      Log::Error("Failed to reset signal mask: %s", strerror(errno));
-    }
-
-    Log::Info("exit deamon");
+  if (ProcessUtils::is_single_proc_inst_running("aliyun-service") == false) {
+    Log::Error("Failed to launch AliYunAssistService more than one instance");
     exit(EXIT_SUCCESS);
-    return 0;
-  } else if (options.is_set("fetch_task")) {
-    Singleton<task_engine::TaskSchedule>::I().Fetch();
-    Singleton<task_engine::TaskSchedule>::I().FetchPeriodTask();
-    sleep(3600);
-    return 0;
   }
 
+  /*Process SIGTERM and SIGUSR1 signals in a seperate signal processing thread and block them in all other threads */
+  sigemptyset(&sigMask);
+  sigaddset(&sigMask, SIGTERM);
+  sigaddset(&sigMask, SIGUSR1);
+  if (pthread_sigmask(SIG_BLOCK, &sigMask, &sigOldMask) != 0) {
+    Log::Error("Failed to set signal mask for AliYunAssistService: %s", strerror(errno));
+    exit(EXIT_FAILURE);
+  }
+
+  signal(SIGCHLD,SIG_IGN);
+  InitService();
+
+  if (pthread_sigmask(SIG_SETMASK, &sigOldMask, NULL) != 0) {
+    Log::Error("Failed to reset signal mask: %s", strerror(errno));
+  }
+
+  Log::Info("exit deamon");
+
   curl_global_cleanup();
-  parser.print_help();
+
   return 0;
 }

@@ -1,0 +1,10 @@
+[Unit]
+Description=Aliyun Service Daemon
+
+[Service]
+Type=forking
+Restart=always
+ExecStart=/usr/sbin/aliyun-service -d
+
+[Install]
+WantedBy=multi-user.target

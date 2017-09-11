@@ -29,6 +29,7 @@ generate_product_version(ProductVersionFiles
     COMPANY_NAME Alibaba)
 endif()
 
+
 if(UNIX)
 	SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -m32")
 	SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -m32")
