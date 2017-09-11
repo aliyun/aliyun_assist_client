@@ -52,7 +52,7 @@ TEST(TestPackageManager, parse_response_string) {
       \"publisher\":\"Python Software Foundation\",\"arch\":\"x86\"}]";
   alyun_assist_installer::PackageManager package_mgr;
   vector<alyun_assist_installer::PackageInfo> package_infos =
-      package_mgr.parse_response_string(response);
+      package_mgr.ParseResponseString(response);
 
   EXPECT_EQ(package_infos.size() > 0, true);
   if (package_infos.size() > 0) {
@@ -73,7 +73,7 @@ TEST(TestPackageManager, InstallAction) {
       \"publisher\":\"Python Software Foundation\",\"arch\":\"x86\"}]";
   alyun_assist_installer::PackageManager package_mgr;
   vector<alyun_assist_installer::PackageInfo> package_infos =
-      package_mgr.parse_response_string(response);
+      package_mgr.ParseResponseString(response);
 
   EXPECT_EQ(package_infos.size() > 0, true);
   if (package_infos.size() > 0)
@@ -105,7 +105,7 @@ TEST(TestPackageManager, UninstallAction) {
       \"publisher\":\"Python Software Foundation\",\"arch\":\"x86\"}]";
   alyun_assist_installer::PackageManager package_mgr;
   vector<alyun_assist_installer::PackageInfo> package_infos =
-      package_mgr.parse_response_string(response);
+      package_mgr.ParseResponseString(response);
 
   EXPECT_EQ(package_infos.size() > 0, true);
   if (package_infos.size() > 0)
