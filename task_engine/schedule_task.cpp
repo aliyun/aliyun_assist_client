@@ -36,8 +36,12 @@ void Execute(void* context) {
 void period_task_callback(void * context) {
   Log::Info("begin to execute period task in time thread");
   Task* task = reinterpret_cast<Task*>(context);
+#if defined(_WIN32)
   std::thread t1(Execute, task);
   t1.detach();
+#else
+  new std::thread(Execute, task);
+#endif
 }
 
 TaskSchedule::TaskSchedule() {
@@ -99,8 +103,12 @@ Task* TaskSchedule::Schedule(TaskInfo task_info) {
           task_info.task_id, time_id));
     }
   } else {
+#if defined(_WIN32)
     std::thread t1(Execute, task);
     t1.detach();
+#else
+    new std::thread(Execute, task);
+#endif
   }
   return task;
 }
