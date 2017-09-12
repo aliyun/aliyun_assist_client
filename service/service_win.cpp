@@ -8,6 +8,7 @@
 #include <time.h>
 #include <powrprof.h>
 #include <string>
+#include <thread>
 
 #include "jsoncpp/json.h"
 #include "utils/CheckNet.h"
@@ -696,6 +697,21 @@ OptionParser& initParser() {
   return parser;
 }
 
+void try_connect_again(void) {
+  int index = 3;
+  while(true) {
+    Sleep(index*60*1000);
+    if(index < 100) {
+      index = index * 2;
+    }
+    AssistPath path_service("");
+    HostChooser  host_choose;
+    bool found = host_choose.Init(path_service.GetConfigPath());
+    if (found) {
+      break;
+    }
+  }
+}
 
 void main(int argc, char *argv[]) {
 #if defined(_WIN32)
@@ -720,6 +736,7 @@ void main(int argc, char *argv[]) {
   HostChooser  host_choose;
   bool found = host_choose.Init(path_service.GetConfigPath());
   if (!found) {
+    new std::thread(try_connect_again);
     Log::Error("could not find a match region host");
   }
   if (options.is_set("service")) {

@@ -4,6 +4,7 @@
 #include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <thread>
 #include <stdlib.h>
 #include <string.h>
 #include <syslog.h>
@@ -348,6 +349,21 @@ OptionParser& initParser() {
   return parser;
 }
 
+void try_connect_again(void) {
+  int index = 3;
+  while (true) {
+    sleep(index * 60);
+    if (index < 100) {
+      index = index * 2;
+    }
+    AssistPath path_service("");
+    HostChooser  host_choose;
+    bool found = host_choose.Init(path_service.GetConfigPath());
+    if (found) {
+      break;
+    }
+  }
+}
 
 int main(int argc, char *argv[]) {
   AssistPath path_service("");
@@ -374,6 +390,7 @@ int main(int argc, char *argv[]) {
   bool found = host_choose.Init(path_service.GetConfigPath());
   if (!found) {
     Log::Error("could not find a match region host");
+    new std::thread(try_connect_again);
   }
   if (options.is_set("deamon") && !options.is_set("test-service")) {
     BecomeDeamon();
