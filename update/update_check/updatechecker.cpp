@@ -16,6 +16,7 @@
 #include "utils/DirIterator.h"
 #include "utils/CheckNet.h"
 #include "utils/FileUtil.h"
+#include "utils/SubProcess.h"
 #include "utils/service_provide.h"
 #include "zip/zip.h"
 #include "jsoncpp/json.h"
@@ -163,10 +164,14 @@ bool UpdateProcess::InstallFilesRecursive(std::string src_dir,
           ProcessUtils::runSync(dst_file_path, "");
         }
 #else
-        char buf[1024] = { 0 };
-        sprintf(buf, "ln -sf %s /usr/sbin/aliyun-service", dst_file_path.c_str());
-        if (!name.compare("aliyun-service")) {
-          ProcessUtils::runSync(buf, "");
+        if (!name.compare("update_install")) {
+          Log::Info("install update script, path:%s", dst_file_path.c_str());
+          std::string content,output;
+          long err_code;
+          FileUtils::ReadFileToString(dst_file_path, content);
+          SubProcess sub_process;
+          sub_process.set_cmd(cmd);
+          sub_process.Execute(output, err_code);
         }
 #endif
 #endif
