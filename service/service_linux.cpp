@@ -399,11 +399,6 @@ int main(int argc, char *argv[]) {
   struct sigaction sigActionUpdate;
   sigset_t sigOldMask;
 
-  if (ProcessUtils::is_single_proc_inst_running("aliyun-service") == false) {
-    Log::Error("Failed to launch AliYunAssistService more than one instance");
-    exit(EXIT_SUCCESS);
-  }
-
   /*Process SIGTERM and SIGUSR1 signals in a seperate signal processing thread and block them in all other threads */
   sigemptyset(&sigMask);
   sigaddset(&sigMask, SIGTERM);
