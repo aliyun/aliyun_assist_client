@@ -169,7 +169,7 @@ bool UpdateProcess::InstallFilesRecursive(std::string src_dir,
           std::string content,output;
           long err_code;
           FileUtils::ReadFileToString(dst_file_path, content);
-          SubProcess sub_process;
+          SubProcess sub_process("", 3600);
           sub_process.set_cmd(cmd);
           sub_process.Execute(output, err_code);
         }
