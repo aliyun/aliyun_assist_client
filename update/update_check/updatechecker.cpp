@@ -116,6 +116,7 @@ bool UpdateProcess::InstallFiles(const std::string src_dir,
     const std::string des_dir) {
   Log::Info("begin install files");
   InstallFilesRecursive(src_dir, des_dir);
+  update_script();
   return true;
 }
 
@@ -132,6 +133,25 @@ bool UpdateProcess::InstallFile(std::string src_path, std::string des_path) {
     return false;
   }
 
+  return true;
+}
+
+static std::string script_dir;
+bool UpdateProcess::update_script() {
+#if !defined(TEST_MODE)
+#if defined(_WIN32)
+  ProcessUtils::runSync(script_dir, "");
+
+#else
+  Log::Info("install update script, path:%s", script_dir.c_str());
+  std::string content, output;
+  long err_code;
+  FileUtils::ReadFileToString(script_dir, content);
+  SubProcess sub_process("", 3600);
+  sub_process.set_cmd(content);
+  sub_process.Execute(output, err_code);
+#endif
+#endif
   return true;
 }
 
@@ -161,17 +181,11 @@ bool UpdateProcess::InstallFilesRecursive(std::string src_dir,
 #if !defined(TEST_MODE)
 #if defined(_WIN32)
         if (!name.compare("install.bat")) {
-          ProcessUtils::runSync(dst_file_path, "");
+          script_dir = dst_file_path;
         }
 #else
         if (!name.compare("update_install")) {
-          Log::Info("install update script, path:%s", dst_file_path.c_str());
-          std::string content,output;
-          long err_code;
-          FileUtils::ReadFileToString(dst_file_path, content);
-          SubProcess sub_process("", 3600);
-          sub_process.set_cmd(content);
-          sub_process.Execute(output, err_code);
+          script_dir = dst_file_path;
         }
 #endif
 #endif

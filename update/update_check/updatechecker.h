@@ -23,6 +23,7 @@ class UpdateProcess {
   Appcast GetUpdateInfo() { return update_info_; }
  private:
   std::string get_request_string();
+  bool update_script();
   bool parse_response_string(std::string response);
   bool InstallFilesRecursive(std::string src_dir, std::string dst_dir);
   bool InstallFile(std::string src_path, std::string des_path);
