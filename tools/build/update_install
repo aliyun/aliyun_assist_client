@@ -1,11 +1,11 @@
 #!/bin/bash
 
-assist_version=$(cat /usr/local/share/aliyun-assist/version)
-data_dir="/usr/local/share/aliyun-assist/$assist_version"
+script_dir=$(dirname "$0")
+script_dir="$script_dir/.."
 
-chmod a+x $data_dir/aliyun_assist_update
-chmod a+x $data_dir/aliyun_installer
-chmod a+x $data_dir/aliyun-service
+chmod a+x $script_dir/aliyun_assist_update
+chmod a+x $script_dir/aliyun_installer
+chmod a+x $script_dir/aliyun-service
 
-ln -sf /usr/local/share/aliyun-assist/$assist_version/aliyun-service $des_dir/usr/sbin/aliyun-service
+ln -sf $script_dir/aliyun-service /usr/sbin/aliyun-service
 
