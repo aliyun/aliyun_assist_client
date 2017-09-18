@@ -47,6 +47,7 @@ for pair in $file_list; do
 done
 
 ln -sf /usr/local/share/aliyun-assist/$assist_version/aliyun-service $des_dir/usr/sbin/aliyun-service
+ln -sf /usr/local/share/aliyun-assist/$assist_version/aliyun_installer $des_dir/usr/sbin/aliyun_installer
 
 # 2. add agentwatch service to boot on
 mkdir -p $des_dir/aliyun-bin 1>/dev/null 2>&1
