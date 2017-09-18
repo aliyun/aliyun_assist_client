@@ -22,5 +22,5 @@ else
     fi
 fi
 
-
+. "/etc/init.d/agentwatch reload"
 #echo "0:success"
