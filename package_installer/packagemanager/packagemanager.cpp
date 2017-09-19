@@ -396,30 +396,20 @@ vector<PackageInfo> PackageManager::GetPackageInfo(
     const std::string& package_name,
     const std::string& package_version,
     const std::string& arch) {
+  std::string json = GetRequestString(package_name, package_version, arch);
   std::string response;
+  vector<PackageInfo> package_infos;
+
+  if (HostChooser::m_HostSelect.empty()) {
+    return package_infos;
+  }
+
   std::string url = "http://" + HostChooser::m_HostSelect +
     "/luban/api/v1/repo/query_software?";
   /*std::string url = "http://100.81.152.153:6666";
   url += "/luban/api/v1/repo/query_software?";*/
-  if (!package_name.empty()) {
-    url = url + "package_name=" + (package_name.empty() ? "*" : package_name);
-    if (!package_version.empty()) {
-      url = url + "&" + "package_version=" + package_version;
-    }
 
-    if (!arch.empty()) {
-      url = url + "&" + "arch=" + arch;
-    }
-  }
-
-#ifdef _WIN32
-  url += "&os=windows";
-#else
-  url += "&os=linux";
-#endif
-
-  vector<PackageInfo> package_infos;
-  bool ret = HttpRequest::http_request_post(url, "", response);
+  bool ret = HttpRequest::http_request_post(url, json, response);
   /*ret = true;
   response = "[{\"packageId\":\"1\",\"name\":\"python3\",\
       \"url\":\"http://30.27.84.30:5656/python-3.6.1.zip\",\
@@ -437,15 +427,24 @@ vector<PackageInfo> PackageManager::GetPackageInfo(
 
 std::string PackageManager::GetRequestString(
     const std::string& package_name,
-    const std::string& package_version) {
+    const std::string& package_version,
+    const std::string& arch) {
   Json::Value jsonRoot;
+  if (!package_name.empty())
+    jsonRoot["package_name"] = package_name;
+
+  if (!package_version.empty())
+    jsonRoot["package_version"] = package_version;
+
+  if (!arch.empty())
+    jsonRoot["arch"] = arch;
+
 #ifdef _WIN32
   jsonRoot["os"] = "windows";
 #else
   jsonRoot["os"] = "linux";
 #endif
-  jsonRoot["package_name"] = package_name;
-  jsonRoot["package_version"] = package_version;
+
   return jsonRoot.toStyledString();
 }
 
@@ -457,6 +456,17 @@ vector<PackageInfo> PackageManager::ParseResponseString(
   vector<PackageInfo> package_infos;
   if (!reader.parse(response, jsonRoot)) {
     Log::Error("invalid json format");
+    return package_infos;
+  }
+
+  // handle the situation that error happened
+  // e.g. {"errCode":"RESULT_IS_NULL", "errMsg" : "Returned result is empty"}
+  if (jsonRoot["errCode"].isString()) {
+    std::string errCode = jsonRoot["errCode"].asString();
+    std::string errMsg = jsonRoot["errMsg"].asString();
+    Log::Error("ParseResponseString error, errCode:%s, errMsg:%s",
+        errCode.c_str(), errMsg.c_str());
+
     return package_infos;
   }
 

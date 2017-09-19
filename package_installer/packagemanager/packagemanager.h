@@ -34,7 +34,8 @@ class PackageManager {
       const std::string& package_version = "",
       const std::string& arch = "");
   std::string GetRequestString(const std::string& package_name,
-      const std::string& package_version);
+      const std::string& package_version,
+      const std::string& arch);
   std::vector<PackageInfo> ParseResponseString(std::string response);
   bool Download(const std::string& url, const std::string& path);
   bool CheckMd5(const std::string& path, const std::string& md5_string);
