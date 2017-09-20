@@ -11,12 +11,12 @@
 using namespace std;
 using namespace json11;
 
-bool HttpRequest::DetectHost(const std::string& host) {
+bool HttpRequest::DetectHost(std::string& host) {
   string resp;
-  string url = "http://" + host + "/luban/api/connection_detect";
+  string url = "http://100.100.100.200/latest/meta-data/region-id";
   Log::Info("Check IP :" + url);
-  bool status = http_request_post(url.c_str(), "", resp);
-  Log::Info("Check IP %d", status);
+  bool status = http_request_get(url.c_str(), host);
+  Log::Info("Check IP %d, host:%s", status, host.c_str());
   return status;
 }
 
@@ -45,8 +45,17 @@ static size_t WriteFileCallback(void *contents, size_t size, size_t nmemb, void 
 
 }
 
+bool HttpRequest::http_request_get(const std::string& url, std::string& response) {
+  return http_request(url, "", response, false);
+}
+
 bool HttpRequest::http_request_post(const std::string& url,
-                                    const std::string& post_content, std::string& response) {
+    const std::string& post_content, std::string& response) {
+  return http_request(url, post_content, response, true);
+}
+
+bool HttpRequest::http_request(const std::string& url,
+                                    const std::string& post_content, std::string& response, bool is_post) {
   CURL *curl;
   CURLcode res = CURLE_OK;
 
@@ -62,9 +71,11 @@ bool HttpRequest::http_request_post(const std::string& url,
 
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 3);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5);
-	curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
     /* Now specify the POST data */
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post_content.c_str());
+    if(is_post) {
+      curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post_content.c_str());
+    }
 
     struct curl_slist *headers = NULL;
     headers = curl_slist_append(headers, "Content-Type: application/json");
@@ -84,7 +95,7 @@ bool HttpRequest::http_request_post(const std::string& url,
     curl_slist_free_all(headers); /* free the header list */
     /* Check for errors */
     if(res != CURLE_OK)
-      Log::Error("curl_easy_perform() failed: %s\n",
+      Log::Error("%s curl_easy_perform() failed: %s\n", url.c_str(), 
                  curl_easy_strerror(res));
 
     response = chunk.memory;
