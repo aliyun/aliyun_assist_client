@@ -8,7 +8,8 @@ using namespace std;
 
 class HttpRequest {
  public:
-  static bool DetectHost(std::string& host);
+  static bool FindRegion(std::string& host);
+  static bool DetectHost(const std::string& host);
   static bool http_request_post(const std::string& url,
                                 const std::string& post_content, std::string& response);
   static bool http_request_get(const std::string& url, std::string& response);

@@ -35,9 +35,29 @@ string HostChooser::m_HostSelect;
 */
 bool HostChooser::Init(string path)  {
   std::string region;
-  if (HttpRequest::DetectHost(region)) {
-    m_HostSelect = "axt." + region + ".alibaba-inc.com";
-    Log::Info("host:%s", m_HostSelect.c_str());
+  if (HttpRequest::FindRegion(region)) {
+    std::string host = "axt." + region + ".alibaba-inc.com";
+    Log::Info("host:%s", host.c_str());
+    if(HttpRequest::DetectHost(host)) {
+      m_HostSelect = host;
+      return true;
+    }
+  }
+  string CfgFile = path + "/host.conf";
+  string select = path + "/host.select";
+
+  string host;
+  bool   status = FileRead(select, host);
+  if (status && host.length()) {
+    if (HttpRequest::DetectHost(host)) {
+      m_HostSelect = host;
+      return true;
+    }
+  }
+
+  if (FindServer(CfgFile, host)) {
+    FileWrite(select, host);
+    m_HostSelect = host;
     return true;
   }
   return false;

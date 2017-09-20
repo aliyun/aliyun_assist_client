@@ -11,12 +11,21 @@
 using namespace std;
 using namespace json11;
 
-bool HttpRequest::DetectHost(std::string& host) {
+bool HttpRequest::FindRegion(std::string& host) {
   string resp;
   string url = "http://100.100.100.200/latest/meta-data/region-id";
   Log::Info("Check IP :" + url);
   bool status = http_request_get(url.c_str(), host);
   Log::Info("Check IP %d, host:%s", status, host.c_str());
+  return status;
+}
+
+bool HttpRequest::DetectHost(const std::string& host) {
+  string resp;
+  string url = "http://" + host + "/luban/api/connection_detect";
+  Log::Info("Check IP :" + url);
+  bool status = http_request_post(url.c_str(), "", resp);
+  Log::Info("Check IP %d", status);
   return status;
 }
 
