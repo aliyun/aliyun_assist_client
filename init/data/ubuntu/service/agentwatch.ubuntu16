@@ -32,7 +32,6 @@ mount_xenfs() {
 
 do_start() {
 	do_status && return 0
-	[ $virt = 'xen' ] && mount_xenfs
 	$agent_cmd
 }
 
