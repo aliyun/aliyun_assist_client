@@ -22,7 +22,7 @@
 using optparse::OptionParser;
 
 OptionParser& initParser() {
-  static OptionParser parser = OptionParser().description("");
+    static OptionParser parser = OptionParser().description("Aliyun Assist Copyright (c) 2017-2018 Alibaba Group Holding Limited");
 
   parser.add_option("-v", "--version")
       .dest("version")
