@@ -107,7 +107,7 @@ int main(int argc, char *argv[]) {
   }
 
   if (options.is_set("version")) {
-    printf("%s", FILE_VERSION_RESOURCE_STR);
+    printf("%s\n", FILE_VERSION_RESOURCE_STR);
     return 0;
   }
 
