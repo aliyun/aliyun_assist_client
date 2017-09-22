@@ -456,27 +456,13 @@ vector<PackageInfo> PackageManager::ParseResponseString(
   Json::Reader reader;
 
   vector<PackageInfo> package_infos;
-  if (!reader.parse(response, jsonRoot)) {
-    Log::Error("invalid json format");
-    return package_infos;
-  }
-
-  // handle the situation that error happened
-  // e.g. {"errCode":"RESULT_IS_NULL", "errMsg" : "Returned result is empty"}
-  try {
-    if (jsonRoot["errCode"].isString()) {
-      std::string errCode = jsonRoot["errCode"].asString();
-      std::string errMsg = jsonRoot["errMsg"].asString();
-      Log::Error("ParseResponseString error, errCode:%s, errMsg:%s",
-        errCode.c_str(), errMsg.c_str());
-
-      return package_infos;
-    }
-  } catch (...) {
-  }
-
   try
   {
+    if (!reader.parse(response, jsonRoot)) {
+      Log::Error("invalid json format");
+      return package_infos;
+    }
+
     for (size_t i = 0; i < jsonRoot.size(); ++i) {
       PackageInfo package_info;
       if (jsonRoot[i]["packageId"].isString())
