@@ -461,34 +461,44 @@ vector<PackageInfo> PackageManager::ParseResponseString(
 
   // handle the situation that error happened
   // e.g. {"errCode":"RESULT_IS_NULL", "errMsg" : "Returned result is empty"}
-  if (jsonRoot["errCode"].isString()) {
-    std::string errCode = jsonRoot["errCode"].asString();
-    std::string errMsg = jsonRoot["errMsg"].asString();
-    Log::Error("ParseResponseString error, errCode:%s, errMsg:%s",
+  try {
+    if (jsonRoot.isMember("errCode")) {
+      std::string errCode = jsonRoot["errCode"].asString();
+      std::string errMsg = jsonRoot["errMsg"].asString();
+      Log::Error("ParseResponseString error, errCode:%s, errMsg:%s",
         errCode.c_str(), errMsg.c_str());
 
-    return package_infos;
+      return package_infos;
+    }
+  } catch (...) {
   }
 
-  for (size_t i = 0; i < jsonRoot.size(); ++i) {
-    PackageInfo package_info;
-    if (jsonRoot[i]["packageId"].isString())
-      package_info.package_id = jsonRoot[i]["packageId"].asString();
-    if (jsonRoot[i]["url"].isString())
-      package_info.url = jsonRoot[i]["url"].asString();
-    if (jsonRoot[i]["md5"].isString())
-      package_info.MD5 = jsonRoot[i]["md5"].asString();
-    if (jsonRoot[i]["name"].isString())
-      package_info.display_name = jsonRoot[i]["name"].asString();
-    if (jsonRoot[i]["version"].isString())
-      package_info.display_version = jsonRoot[i]["version"].asString();
-    if (jsonRoot[i]["publisher"].isString())
-      package_info.publisher = jsonRoot[i]["publisher"].asString();
-    if (jsonRoot[i]["arch"].isString())
-      package_info.arch = jsonRoot[i]["arch"].asString();
-    std::transform(package_info.MD5.begin(), package_info.MD5.end(),
+  try
+  {
+    for (size_t i = 0; i < jsonRoot.size(); ++i) {
+      PackageInfo package_info;
+      if (jsonRoot[i]["packageId"].isString())
+        package_info.package_id = jsonRoot[i]["packageId"].asString();
+      if (jsonRoot[i]["url"].isString())
+        package_info.url = jsonRoot[i]["url"].asString();
+      if (jsonRoot[i]["md5"].isString())
+        package_info.MD5 = jsonRoot[i]["md5"].asString();
+      if (jsonRoot[i]["name"].isString())
+        package_info.display_name = jsonRoot[i]["name"].asString();
+      if (jsonRoot[i]["version"].isString())
+        package_info.display_version = jsonRoot[i]["version"].asString();
+      if (jsonRoot[i]["publisher"].isString())
+        package_info.publisher = jsonRoot[i]["publisher"].asString();
+      if (jsonRoot[i]["arch"].isString())
+        package_info.arch = jsonRoot[i]["arch"].asString();
+      std::transform(package_info.MD5.begin(), package_info.MD5.end(),
         package_info.MD5.begin(), ::tolower);
-    package_infos.push_back(package_info);
+      package_infos.push_back(package_info);
+    }
+  }
+  catch (...) {
+    Log::Error("ParseResponseString failed, response:%s",
+        response.c_str());
   }
 
   return package_infos;
