@@ -38,12 +38,12 @@ void PackageManager::List(const std::string& package_name) {
 
   if (package_infos.empty()) {
     if (package_name.empty()) {
-      Log::Error("There is no package in the software store");
-      printf("There is no package in the software store\n");
+      Log::Error("There is no package in the software repository.");
+      printf("There is no package in the software repository.\n");
     } else {
-      Log::Info("There is no package named %s in the software store",
+      Log::Info("There is no package named %s in the software repository",
           package_name.c_str());
-      printf("There is no package named %s in the software store\n",
+      printf("There is no package named %s in the software repository\n",
           package_name.c_str());
     }
   } else {
