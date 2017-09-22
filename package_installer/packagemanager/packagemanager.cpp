@@ -415,6 +415,8 @@ vector<PackageInfo> PackageManager::GetPackageInfo(
       \"url\":\"http://30.27.84.30:5656/python-3.6.1.zip\",\
       \"md5\":\"39192e116dce49bbd05efeced7924bae\",\"version\":\"3.6.1\",\
       \"publisher\":\"Python Software Foundation\",\"arch\":\"x86\"}]";*/
+
+  Log::Info("response:%s", response.c_str());
   if (ret) {
     package_infos = ParseResponseString(response);
   } else {
