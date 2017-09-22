@@ -464,7 +464,7 @@ vector<PackageInfo> PackageManager::ParseResponseString(
   // handle the situation that error happened
   // e.g. {"errCode":"RESULT_IS_NULL", "errMsg" : "Returned result is empty"}
   try {
-    if (jsonRoot.isMember("errCode")) {
+    if (jsonRoot["errCode"].isString()) {
       std::string errCode = jsonRoot["errCode"].asString();
       std::string errMsg = jsonRoot["errMsg"].asString();
       Log::Error("ParseResponseString error, errCode:%s, errMsg:%s",
