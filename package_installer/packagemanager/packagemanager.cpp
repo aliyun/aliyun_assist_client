@@ -136,7 +136,13 @@ void PackageManager::Install(const std::string& package_name,
   // If the package_version is empty, fuzzy query the package_name
   if (package_version.empty()) {
     vector<PackageInfo> package_infos = GetPackageInfo(package_name);
-    if (!package_infos.empty()) {
+    if (package_infos.empty()) {
+      Log::Info("There is no package named %s in the software repository",
+        package_name.c_str());
+      printf("There is no package named %s in the software repository\n",
+        package_name.c_str());
+      return;
+    } else {
       printf("package_id\tname\tversion\tarch\tpublisher\n");
       for (size_t i = 0; i < package_infos.size(); ++i) {
         printf("%s\t%s\t%s\t%s\t%s\n", package_infos[i].package_id.c_str(),
