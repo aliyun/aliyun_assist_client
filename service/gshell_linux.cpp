@@ -13,6 +13,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <inttypes.h>
+#include "utils/Log.h"
 
 #define EXIT_SUCCESS    0
 #define EXIT_FAILURE    1
@@ -43,7 +44,7 @@ Gshell::~Gshell() {
 
 
 void  Gshell::Parse(string input, string& output) {
-
+    Log::Info("command:%s"input.c_str());
     string errinfo;
     auto json = json11::Json::parse(input, errinfo);
     if (errinfo != "") {
