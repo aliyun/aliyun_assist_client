@@ -25,6 +25,7 @@ Gshell::Gshell(KICKER kicker) {
     m_hFile = open("/dev/virtio-ports/org.qemu.guest_agent.0", 
         O_RDWR|O_NONBLOCK);
 
+    Log::Info("/dev/virtio-ports/org.qemu.guest_agent.0:%d", m_hFile);
     if ( m_hFile > 0 ) {
         return;
     }
@@ -32,6 +33,7 @@ Gshell::Gshell(KICKER kicker) {
     m_hFile = open("/dev/ttyS0", 
         O_RDWR | O_NONBLOCK | O_NOCTTY);
 
+    Log::Info("/dev/ttyS0:%d", m_hFile);
     return;
 };
 
