@@ -184,13 +184,7 @@ int BecomeDeamon()
 {
 	pid_t pid, sid;
 	int i = 0;
-	struct rlimit	fileDescriptorLimit;
 	struct sigaction sigActionMask;
-
-	/*Get the maximum limit of the file descriptors*/
-	if (getrlimit(RLIMIT_NOFILE, &fileDescriptorLimit) < 0) {
-		Log::Error("Failed to get file descriptor maximum limit: %s", strerror(errno));
-	}
 
 	/* Fork off the parent process and exit the parent process*/
 	pid = fork();
@@ -205,7 +199,7 @@ int BecomeDeamon()
 
   Log::Info("deamon running");
 	/*Set the default file access mask*/
-	umask(0);
+	umask(S_IRWXG | S_IRWXO);
 
 	/* Create a new SID for the child process */
 	sid = setsid();
@@ -220,26 +214,10 @@ int BecomeDeamon()
 		exit(EXIT_FAILURE);
 	}
 
-	/*close the file descriptors inheritting from parent process*/
-	/*if (fileDescriptorLimit.rlim_max == RLIM_INFINITY) {
-		fileDescriptorLimit.rlim_max = 1024;
-	}
-	for (i = 0; i < fileDescriptorLimit.rlim_max; i++) {
-		close(i);
-	}*/
-
 	/* Close out the standard file descriptors */
-	close(STDIN_FILENO);
-	close(STDOUT_FILENO);
-	close(STDERR_FILENO);
-
-	/*Cut off the connection with tty*/
-	sigActionMask.sa_handler = SIG_IGN;
-	sigemptyset(&sigActionMask.sa_mask);
-	sigActionMask.sa_flags = 0;
-	if (sigaction(SIGHUP, &sigActionMask, NULL) < 0) {
-		Log::Error("Failed to mask tty controls for AliYunAssistService: %s", strerror(errno));
-	}
+  reopen_fd_to_null(STDIN_FILENO);
+  reopen_fd_to_null(STDOUT_FILENO);
+  reopen_fd_to_null(STDERR_FILENO);
 
 	return 0;
 }
