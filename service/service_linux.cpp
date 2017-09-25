@@ -179,6 +179,19 @@ void* UpdaterThreadFunc(void *arg) {
   return (void*)0;
 } 
 
+static void reopen_fd_to_null(int fd)
+{
+  int nullfd;
+
+  nullfd = open("/dev/null", O_RDWR);
+  if (nullfd < 0) {
+    return;
+  }
+
+  dup2(nullfd, fd);
+
+  close(nullfd);
+}
 /*Create the Deamon Service*/
 int BecomeDeamon()
 {
