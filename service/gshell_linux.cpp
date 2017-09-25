@@ -29,7 +29,7 @@ Gshell::Gshell(KICKER kicker) {
     if ( m_hFile > 0 ) {
         return;
     }
-
+    Log::Error("Failed to open gshell: %s", strerror(errno));
     m_hFile = open("/dev/ttyS0", 
         O_RDWR | O_NONBLOCK | O_NOCTTY);
 
