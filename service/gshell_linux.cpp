@@ -44,7 +44,7 @@ Gshell::~Gshell() {
 
 
 void  Gshell::Parse(string input, string& output) {
-    Log::Info("command:%s"input.c_str());
+    Log::Info("command:%s", input.c_str());
     string errinfo;
     auto json = json11::Json::parse(input, errinfo);
     if (errinfo != "") {
