@@ -91,10 +91,6 @@ void  Gshell::Parse(string input, string& output) {
   if (json["execute"] == "guest-command") {
       return QmpGuestCommand(json["arguments"], output);
   }
-
-  if (json["execute"] == "guest-shutdown") {
-    return QmpGuestShutdown(json["arguments"], output);
-  }
 }
 
 // gshell check ready
@@ -162,49 +158,4 @@ bool Gshell::EnablePrivilege(const char *name, Error& errp) {
 
   CloseHandle(token);
   return true;
-}
-
-void  Gshell::QmpGuestShutdown(json11::Json arguments, string& output) {
-  Error err;
-  BOOL  bRebootAfterShutdown;
-
-  if ( arguments["mode"].is_null() ) {
-    err.SetDesc("powerdown|reboot");
-    output = err.Json().dump() + "\n";
-    return;
-  }
-
-  if (arguments["mode"].string_value() == "powerdown") {
-    bRebootAfterShutdown = false;
-  } else if (arguments["mode"].string_value() == "reboot") {
-    bRebootAfterShutdown = true;
-  } else {
-    err.SetDesc("powerdown|reboot");
-    output = err.Json().dump() + "\n";
-    return;
-  }
-
-  if ( !EnablePrivilege("SeShutdownPrivilege", err) ) {
-    output = err.Json().dump() + "\n";
-    return;
-  }
-
-  if (!InitiateSystemShutdownEx(NULL,
-      NULL,
-      0,
-      TRUE,
-      bRebootAfterShutdown,
-      SHTDN_REASON_FLAG_PLANNED |
-      SHTDN_REASON_MAJOR_OTHER |
-      SHTDN_REASON_MINOR_OTHER) ) {
-      err.SetDesc("InitiateSystemShutdownEx fail");
-  } else {
-    json11::Json   GuestCommandResult = json11::Json::object{
-        { "result", 8},
-        { "cmd_output", "execute command success"}
-    };
-    json11::Json resp = json11::Json::object{ { "return",
-        GuestCommandResult } };
-    output = resp.dump() + "\n";
-  }
 }
