@@ -8,6 +8,7 @@
 #include "utils/AssistPath.h"
 #include "utils/FileUtil.h"
 #include "utils/CheckNet.h"
+#include "utils/dump.h"
 #include "../VersionInfo.h"
 
 #ifdef _WIN32
@@ -84,6 +85,10 @@ bool process_singleton() {
 }
 
 int main(int argc, char *argv[]) {
+#if defined(_WIN32)
+  SetDllDirectory(TEXT(""));
+  DumpService::InitMinDump("aliyun installer");
+#endif
   AssistPath path_service("");
   std::string log_path = path_service.GetLogPath();
   log_path += FileUtils::separator();
