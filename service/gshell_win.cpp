@@ -51,7 +51,7 @@ bool  Gshell::Poll() {
       return false;
     }
 
-  char  buffer[0x1000];
+  char  buffer[0x1000] = {0};
   DWORD len = 0;
   BOOL  ret = FALSE;
 
