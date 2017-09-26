@@ -125,7 +125,7 @@ bool  Gshell::Poll() {
         return false;
     }
 
-    char  buffer[0x1000];
+    char  buffer[10*1024*1024] = {0};
     int  len = read(m_hFile, buffer, sizeof(buffer) - 1);
 
     if (len <= 0) {
