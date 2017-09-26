@@ -4,6 +4,7 @@
 
 #include <string>
 #include <windows.h>
+#include "utils/Log.h"
 
 Gshell::Gshell(KICKER kicker) {
   m_kicker = kicker;
@@ -17,6 +18,7 @@ Gshell::Gshell(KICKER kicker) {
       NULL);
 
   if ( m_hFile != INVALID_HANDLE_VALUE ) {
+    Log::Error("open org.qemu.guest_agent.0 failed:%d", GetLastError());
       return;
   }
 
