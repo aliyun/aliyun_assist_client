@@ -63,7 +63,7 @@ void PackageManager::Local(const std::string& package_name) {
   vector<PackageInfo> package_infos =
       db_manager->GetPackageInfos(package_name, false);
 
-  if (!package_infos.empty()) {
+  if (package_infos.empty()) {
     if (package_name.empty()) {
       Log::Info("There is no package in the local");
       printf("There is no package in the local\n");
@@ -74,7 +74,7 @@ void PackageManager::Local(const std::string& package_name) {
           package_name.c_str());
     }
   } else {
-    printf("name\tversion\tpublisher\tinstall data\n");
+    printf("package_id\tname\tversion\tarch\tpublisher\tinstall date\n");
     for (size_t i = 0; i < package_infos.size(); ++i) {
       printf("%s\t%s\t%s\t%s\t%s\t%s\n", package_infos[i].package_id.c_str(),
         package_infos[i].display_name.c_str(),
