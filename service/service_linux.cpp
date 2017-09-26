@@ -36,7 +36,7 @@
 #include "../VersionInfo.h"
 #include "./xs_shell.h"
 
-#define THREAD_SLEEP_TIME 5
+#define THREAD_SLEEP_TIME_SECONDS 5
 #define PROCESS_MAX_DURATION 60 * 60 * 1000
 #define UPDATER_TIMER_DURATION 3600
 #define UPDATER_TIMER_DUETIME 30
@@ -111,7 +111,7 @@ void* ConsumerThreadFunc(void*) {
       break;
     }
 
-    sleep(THREAD_SLEEP_TIME);
+    sleep(THREAD_SLEEP_TIME_SECONDS);
   }
 
   return 0;	
