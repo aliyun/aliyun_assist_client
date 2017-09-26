@@ -161,12 +161,17 @@ void DBManager::Open() {
   char *zErrMsg = 0;
   int  rc;
   AssistPath path_service("");
-  std::string root_path = path_service.GetCurrDir();
-  root_path += FileUtils::separator();
-  root_path += "packageinfo.db";
+  std::string userdata_path = "";
+  if (!path_service.GetDefaultUserDataDirectory(userdata_path)) {
+    Log::Error("Get user data dir failed");
+    return;
+  }
+
+  userdata_path += FileUtils::separator();
+  userdata_path += "packageinfo.db";
 
   /* Open database */
-  rc = sqlite3_open(root_path.c_str(), &db);
+  rc = sqlite3_open(userdata_path.c_str(), &db);
   if (rc) {
     Log::Error("Can't open database: %s\n", sqlite3_errmsg(db));
     exit(0);
