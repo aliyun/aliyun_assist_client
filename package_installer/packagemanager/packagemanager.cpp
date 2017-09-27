@@ -213,7 +213,8 @@ void PackageManager::Uninstall(const std::string& package_name) {
     UninstallAction(package_infos[0]);
   } else {
     Log::Info("Uninstall failed, no package named %s", package_name.c_str());
-    printf("There is no such package.\n");
+    printf("There is no package named %s in the local\n",
+        package_name.c_str());
     return;
   }
 }
@@ -225,7 +226,8 @@ void PackageManager::Update(const std::string& package_name) {
   if (package_infos.empty()) {
     Log::Info("There is no package named %s in the local",
         package_name.c_str());
-    printf("There is no such package on this machine.\n");
+    printf("There is no package named %s in the local\n",
+        package_name.c_str());
     return;
   }
 
