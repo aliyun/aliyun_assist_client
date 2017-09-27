@@ -236,9 +236,9 @@ void PackageManager::Update(const std::string& package_name) {
     return;
   }
 
-  Log::Info("The latest version of %s is %s.", package_name.c_str(),
+  Log::Info("The latest version of %s is %s", package_name.c_str(),
       packages[index].display_version.c_str());
-  printf("The latest version of %s is %s.\n", package_name.c_str(),
+  printf("The latest version of %s is %s\n", package_name.c_str(),
       packages[index].display_version.c_str());
   if (InstallAction(packages[index]))
     db_manager->Delete(package_infos[0].package_id);

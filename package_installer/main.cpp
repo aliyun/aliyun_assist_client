@@ -149,7 +149,7 @@ int main(int argc, char *argv[]) {
   }
 
   if (options.is_set("update")) {
-    std::string package_name = options.get("arch");
+    std::string package_name = options.get("update");
     package_mgr.Update(package_name);
     return 0;
   }
