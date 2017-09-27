@@ -92,6 +92,21 @@ void PackageManager::Latest(const std::string& package_name) {
   vector<PackageInfo> package_infos =
       db_manager->GetPackageInfos(package_name, false);
 
+  if (package_infos.empty()) {
+    if (package_name.empty()) {
+      Log::Info("There is no package in the local");
+      printf("There is no package in the local\n");
+    }
+    else {
+      Log::Info("There is no package named %s in the local",
+        package_name.c_str());
+      printf("There is no package named %s in the local\n",
+        package_name.c_str());
+    }
+
+    return;
+  }
+
   vector<PackageInfo> new_packages;
   for (size_t i = 0; i < package_infos.size(); ++i) {
     package_infos[i].new_version = package_infos[i].display_version;

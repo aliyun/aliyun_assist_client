@@ -90,8 +90,8 @@ std::vector<PackageInfo> DBManager::GetPackageInfos(
       sql = "SELECT * from package_infos where display_name=\"" +
           display_name + "\"";
     else
-      sql = "SELECT * from package_infos where display_name like \"" +
-          display_name + "\"";
+      sql = "SELECT * from package_infos where display_name like \"%" +
+          display_name + "%\"";
   }
 
   sqlite3_stmt * stmt = NULL;
