@@ -236,13 +236,13 @@ void PackageManager::Update(const std::string& package_name) {
     return;
   }
 
-  InstallAction(packages[index]);
-  db_manager->Delete(package_infos[0].package_id);
+  if (InstallAction(packages[index]))
+    db_manager->Delete(package_infos[0].package_id);
 }
 
 void PackageManager::CheckInstall(const PackageInfo& package_info) {
   vector<PackageInfo> package_infos =
-    db_manager->GetPackageInfosById(package_info.package_id);
+      db_manager->GetPackageInfosById(package_info.package_id);
 
   if (!package_infos.empty()) {
     printf("name\tversion\tpublisher\tinstall data\n");
@@ -262,7 +262,7 @@ void PackageManager::CheckInstall(const PackageInfo& package_info) {
   InstallAction(package_info);
 }
 
-void PackageManager::InstallAction(const PackageInfo& package_info) {
+bool PackageManager::InstallAction(const PackageInfo& package_info) {
   Log::Info("Enter InstallAction");
   AssistPath path("");
   std::string userdata_path = "";
@@ -279,20 +279,20 @@ void PackageManager::InstallAction(const PackageInfo& package_info) {
   bool download_ret = Download(package_info.url, file_path);
   if (!download_ret) {
     printf("Download this package failed, please try again later.\n");
-    return;
+    return false;
   }
 
   printf("Check MD5\n");
   if (!CheckMd5(file_path, package_info.MD5)) {
     printf("Check file md5 failed.\n");
-    return;
+    return false;
   }
 
   printf("Unzip\n");
   bool unzip_ret = UnZip(file_path, userdata_path);
   if (!unzip_ret) {
     printf("Unzip this package failed, please try again later.\n");
-    return;
+    return false;
   }
 #endif
 
@@ -328,9 +328,11 @@ void PackageManager::InstallAction(const PackageInfo& package_info) {
     db_manager->ReplaceInto(package_infos);
     remove(file_path.c_str());
     printf("%s", out.c_str());
+    return true;
   } else {
     Log::Info("Installation failed, %s.", out);
     printf("Installation failed.\n%s\n", out);
+    return false;
   }
 #else
   char srcipt_path[1024] = { 0 };
@@ -344,9 +346,11 @@ void PackageManager::InstallAction(const PackageInfo& package_info) {
     db_manager->ReplaceInto(package_infos);
     remove(file_path.c_str());
     printf("%s", buf);
+    return true;
   } else {
     Log::Info("Installation failed, %s.", buf);
     printf("Installation failed.\n%s\n", buf);
+    return false;
   }
 #endif
 }
@@ -462,8 +466,7 @@ vector<PackageInfo> PackageManager::ParseResponseString(
   Json::Reader reader;
 
   vector<PackageInfo> package_infos;
-  try
-  {
+  try {
     if (!reader.parse(response, jsonRoot)) {
       Log::Error("invalid json format");
       return package_infos;

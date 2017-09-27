@@ -28,7 +28,7 @@ class PackageManager {
  private:
 #endif
   void CheckInstall(const PackageInfo& package_info);
-  void InstallAction(const PackageInfo& package_info);
+  bool InstallAction(const PackageInfo& package_info);
   void UninstallAction(const PackageInfo& package_info);
   std::vector<PackageInfo> GetPackageInfo(const std::string& package_name,
       const std::string& package_version = "",
