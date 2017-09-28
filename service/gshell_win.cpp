@@ -18,10 +18,9 @@ Gshell::Gshell(KICKER kicker) {
       NULL);
 
   if ( m_hFile != INVALID_HANDLE_VALUE ) {
-    Log::Error("open org.qemu.guest_agent.0 failed:%d", GetLastError());
       return;
   }
-
+  Log::Error("open org.qemu.guest_agent.0 failed:%d", GetLastError());
   m_hFile = CreateFileA("\\\\.\\COM1",
       GENERIC_ALL,
       0,
