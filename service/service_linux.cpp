@@ -57,6 +57,14 @@ sigset_t sigMask;
 bool gTerminated = false;
 th_param param;
 
+void try_reconnect_net(void) {
+  if (HostChooser::m_HostSelect.empty()) {
+    AssistPath path_service("");
+    HostChooser  host_choose;
+    host_choose.Init(path_service.GetConfigPath());
+  }
+}
+
 bool LaunchProcessAndWaitForExit(char* path, char* name, char* commandLines, bool wait) {
   pid_t pid;
 
@@ -141,6 +149,7 @@ void*  SignalProcessingThreadFunc(void* arg)
 		case SIGUSR1:
       Singleton<task_engine::TaskSchedule>::I().Fetch();
       Log::Info("poll to fetch tasks");
+      try_reconnect_net();
       LaunchProcessAndWaitForExit((char*)update_path.c_str(), "aliyun-assist-update", "--check_update", false);
 			break;
 		default:
@@ -340,22 +349,6 @@ OptionParser& initParser() {
   return parser;
 }
 
-void try_connect_again(void) {
-  int index = 3;
-  while (true) {
-    sleep(index * 60);
-    if (index < 100) {
-      index = index * 2;
-    }
-    AssistPath path_service("");
-    HostChooser  host_choose;
-    bool found = host_choose.Init(path_service.GetConfigPath());
-    if (found) {
-      break;
-    }
-  }
-}
-
 int main(int argc, char *argv[]) {
   AssistPath path_service("");
   std::string log_path = path_service.GetLogPath();
@@ -376,16 +369,17 @@ int main(int argc, char *argv[]) {
     sleep(3600);
     return 0;
   }
+  if (options.is_set("deamon") && !options.is_set("test-service")) {
+    BecomeDeamon();
+  }
+
   curl_global_init(CURL_GLOBAL_ALL);
   HostChooser  host_choose;
   bool found = host_choose.Init(path_service.GetConfigPath());
   if (!found) {
     Log::Error("could not find a match region host");
-    new std::thread(try_connect_again);
   }
-  if (options.is_set("deamon") && !options.is_set("test-service")) {
-    BecomeDeamon();
-  }
+
   Log::Info("in deamon mode");
   struct sigaction sigActionUpdate;
   sigset_t sigOldMask;

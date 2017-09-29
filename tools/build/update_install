@@ -9,3 +9,5 @@ chmod a+x $data_dir/aliyun-service
 
 ln -sf /usr/local/share/aliyun-assist/$assist_version/aliyun-service /usr/sbin/aliyun-service
 
+/etc/init.d/agentwatch reload
+
