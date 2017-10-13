@@ -20,8 +20,19 @@ agent_name=''
 agent_cmd=''
 
 prepare_env() {
-  agent_name=$aliyun_service_name
+	[ -x $virt_what_cpuid_helper ] || exit 1
+	[ -x $aliyun_service_bin ] || exit 3
+	virt=''
+	cpuid=`$virt_what_cpuid_helper`
+	[ -z $cpuid ] && exit 4
+	if [ $cpuid = 'XenVMMXenVMM' ]; then
+		virt='xen'
+	elif [ $cpuid = 'KVMKVMKVM' ]; then
+		virt='kvm'	
+	fi
+    agent_name=$aliyun_service_name
 	agent_cmd="$aliyun_service_bin $aliyun_service_opts"
+	[ -z $virt ] && exit 5
 }
 
 mount_xenfs() {
@@ -32,10 +43,12 @@ mount_xenfs() {
 
 do_start() {
 	do_status && return 0
+	[ $virt = 'xen' ] && mount_xenfs
 	$agent_cmd
 }
 
 do_stop() {
+    stop_gshell
 	pid=$(do_status)
 	[ -z "$pid" ] && return 0
 	kill $pid

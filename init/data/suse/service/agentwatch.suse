@@ -60,7 +60,7 @@ start() {
     fi
 
     which
-    shut
+    stop
 
     if [ $RESTART1 -eq 1 ]; then
         if [ "$which" == "kvm" ];then

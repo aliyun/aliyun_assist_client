@@ -60,7 +60,7 @@ start() {
     fi
 
     which
-    shut
+    stop
 
     if [ $RESTART1 -eq 1 ]; then
         echo "start to restart new" 1>/dev/null 2>&1

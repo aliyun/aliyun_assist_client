@@ -58,7 +58,7 @@ start() {
     fi
 
     which 
-    shut
+    stop
 
     if [ "$which" == "kvm" ];then
 	    echo "7:2345:respawn:/usr/sbin/aliyun-service" >> /etc/inittab
@@ -68,7 +68,6 @@ start() {
             mount none -t xenfs /proc/xen
         fi
         $agent_cmd
-        [ $? -eq 0 ] && touch /var/lock/subsys/gshelld
     fi
 	touch /var/lock/$SNAME
     echo "finished" 1>/dev/null 2>&1

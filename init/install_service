@@ -11,7 +11,6 @@ issue=""
 echo "issue:$issue"
 
 
-
 if [ ! -e $script_dir/script/$issue/common/update_service ]; then
     echo "3131:failed to find update script."
     #exit 1

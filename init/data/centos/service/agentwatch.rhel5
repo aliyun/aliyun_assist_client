@@ -58,7 +58,7 @@ start() {
     fi
 
     which 
-    shut
+    stop
 
     if [ "$which" == "kvm" ];then
 	    echo "7:2345:respawn:/usr/sbin/aliyun-service" >> /etc/inittab
