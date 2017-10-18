@@ -7,7 +7,10 @@ chmod a+x $data_dir/aliyun_assist_update
 chmod a+x $data_dir/aliyun_installer
 chmod a+x $data_dir/aliyun-service
 
-ln -sf /usr/local/share/aliyun-assist/$assist_version/aliyun-service /usr/sbin/aliyun-service
+if [ -e /usr/sbin/aliyun-service ]; then
+  ln -sf /usr/local/share/aliyun-assist/$assist_version/aliyun-service /usr/sbin/aliyun-service
+  /etc/init.d/agentwatch reload
+fi
 
-/etc/init.d/agentwatch reload
+
 
