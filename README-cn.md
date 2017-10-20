@@ -93,12 +93,20 @@ b)选中目标实例执行命令：
 其中Timed表示是否周期性任务，通过设置--Frequency "0 */10 * * * *" 将该任务设置为每10分钟执行一次，其中上面的描述为cron表达式。
 执行成功后将为所有的目标实例返回一个统一的额invokeid，后续可使用该invokeid查询命令的执行情况
 
+cronat表达式使用:
+*       *      *    *   *      *
+second minute hour day month week
+
+0 */10 * * * *  每隔10分钟执行一次
+0 30 21 * * * 每晚的21:30执行一次
+0 10 1 * * 6,0 每周六、周日的1 : 10执行
+0 0,30 18-23 * * * 在每天18 : 00至23 : 00之间每隔30分钟执行
+
 c)查看执行结果：
   aliyuncli ecs DescribeInvocationResults --InstanceId your-vm-instance-id --InvokeId your-task-id
 其中DescribeInvocations可以查看该任务的执行状态：
   aliyuncli ecs DescribeInvocations --InstanceId your-vm-instance-id --InvokeId your-task-id
 	
-  openapi方式：
 
 ### Contributing
 

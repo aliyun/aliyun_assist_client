@@ -90,6 +90,16 @@ In CommandContent, 'ZWNobyAxMjM=' is 'echo 123' base64 decoded string,if linux�
 b)Invoke task：
   aliyuncli ecs InvokeCommand --InstanceIds  your-vm-instance-id1 instance-id2 --CommandId your-command-id --Timed false
 
+  Timed means period task，using --Frequency "0 */10 * * * *" set per 10 minutes run once。
+
+cronat expression:
+*       *      *    *   *      *
+second minute hour day month week
+
+0 */10 * * * *  every 10 minutes run 
+0 30 21 * * * every 21:30 run
+0 10 1 * * 6,0 run at 1:10 every Saturday and Sunday
+0 0,30 18-23 * * * run every 30 minutes between 18:00 and 23:00 every day
 
 c)Watch result：
   aliyuncli ecs DescribeInvocationResults --InstanceId your-vm-instance-id --InvokeId your-task-id
