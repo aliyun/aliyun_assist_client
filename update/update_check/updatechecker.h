@@ -21,6 +21,7 @@ class UpdateProcess {
   bool test_parse_response_string(std::string response);
 #endif
   Appcast GetUpdateInfo() { return update_info_; }
+  void SetUpdateInfo(Appcast update_info) { update_info_ = update_info; }
  private:
   std::string get_request_string();
   bool update_script();
