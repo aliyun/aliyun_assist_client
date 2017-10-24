@@ -12,6 +12,8 @@ if [ "$big" == "6" -o "$big" == "7" ]; then
     agentwatch="agentwatch.debian7"
 elif [[ "$big" == '8' ]]; then
     agentwatch="agentwatch.debian8"
+elif [[ "$big" == '9' ]]; then
+    agentwatch="agentwatch.debian9"
 else
     echo "xxx: wrong issue version: $big"
     exit 1
