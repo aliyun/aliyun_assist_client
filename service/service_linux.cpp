@@ -39,7 +39,7 @@
 #define THREAD_SLEEP_TIME_SECONDS 5
 #define PROCESS_MAX_DURATION 60 * 60 * 1000
 #define UPDATER_TIMER_DURATION 3600
-#define UPDATER_TIMER_DUETIME 30
+#define UPDATER_TIMER_DUETIME 15
 #define LOGFILE "AliyunAssistDebug.txt"
 #define UPDATERFILE "aliyun_assist_update.exe"
 #define UPDATERCMD "--check_update"
