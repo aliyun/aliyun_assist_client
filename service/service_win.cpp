@@ -35,7 +35,7 @@
 #define BUFSIZE MAX_PATH
 #define LOGFILE "aliyun_assist_service.log"
 #define UPDATER_TIMER_DURATION 60*60*1000
-#define UPDATER_TIMER_DUETIME 15*1000
+#define UPDATER_TIMER_DUETIME 30*1000
 #define ROLL_TIMER_DURATION 30*60*1000
 #define ROLL_TIMER_DUETIME 15*1000
 #define UPDATERFILE "aliyun_assist_update.exe"

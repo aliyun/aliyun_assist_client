@@ -55,6 +55,7 @@ static pthread_cond_t terminatedCond = PTHREAD_COND_INITIALIZER;
 volatile long gMessageCount = 0;
 sigset_t sigMask;
 bool gTerminated = false;
+static bool fetch_period_task_finished = false;
 th_param param;
 
 void try_reconnect_net(void) {
@@ -62,6 +63,13 @@ void try_reconnect_net(void) {
     AssistPath path_service("");
     HostChooser  host_choose;
     host_choose.Init(path_service.GetConfigPath());
+  }
+  if(!fetch_period_task_finished) {
+    if (!HostChooser::m_HostSelect.empty()) {
+      Singleton<task_engine::TaskSchedule>::I().FetchPeriodTask();
+      fetch_period_task_finished = true;
+    }
+
   }
 }
 
@@ -147,9 +155,9 @@ void*  SignalProcessingThreadFunc(void* arg)
 			pthread_exit(NULL);
 			break;
 		case SIGUSR1:
+      try_reconnect_net();
       Singleton<task_engine::TaskSchedule>::I().Fetch();
       Log::Info("poll to fetch tasks");
-      try_reconnect_net();
       LaunchProcessAndWaitForExit((char*)update_path.c_str(), "aliyun-assist-update", "--check_update", false);
 			break;
 		default:
@@ -248,8 +256,11 @@ int InitService()
 {
   Log::Info("InitService");
   Singleton<task_engine::TimerManager>::I().Start();
-  Singleton<task_engine::TaskSchedule>::I().Fetch();
-  Singleton<task_engine::TaskSchedule>::I().FetchPeriodTask();
+  if(!HostChooser::m_HostSelect.empty()) {
+    Singleton<task_engine::TaskSchedule>::I().Fetch();
+    Singleton<task_engine::TaskSchedule>::I().FetchPeriodTask();
+    fetch_period_task_finished = true;
+  }
 
 	int ret = 0;
 	pthread_t pUpdaterThread, pConsumerThread, pProducerThread, pSignalProcessingThread, pXenCmdExecThread, pXenCmdReadThread;
