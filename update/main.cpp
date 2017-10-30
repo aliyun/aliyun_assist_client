@@ -34,6 +34,10 @@ OptionParser& initParser() {
       .dest("check_update")
       .help("Check and update if necessary");
 
+  parser.add_option("-f", "--force_update")
+      .action("store_true")
+      .dest("force_update");
+
   parser.add_option("-u", "--url")
       .dest("url")
       .action("store");
@@ -96,7 +100,7 @@ int main(int argc, char *argv[]) {
     alyun_assist_update::UpdateProcess process(update_info);
     bool need_update = process.CheckUpdate();
     // In test mode, we use download url pass form command line.
-    if(options.is_set("url")) {
+    if(options.is_set("force_update")) {
       need_update = true;
       alyun_assist_update::Appcast cast;
       cast.need_update = 1;
