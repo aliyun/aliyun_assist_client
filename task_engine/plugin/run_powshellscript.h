@@ -7,9 +7,9 @@
 using std::string;
 
 namespace task_engine {
-class RunPowserShellTask : public Task {
+class RunPowerShellTask : public Task {
  public:
-  explicit RunPowserShellTask(TaskInfo info);
+  explicit RunPowerShellTask(TaskInfo info);
   void Run();
  private:
   bool BuildScript(string fileName, string content);

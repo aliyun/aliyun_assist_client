@@ -77,7 +77,7 @@ TEST(TestTaskEgine, RunBatScript) {
 
 TEST(TestTaskEgine, RunPowshellScript) {
   task_engine::TaskInfo info;
-  info.command_id = "RunPowserShellScript";
+  info.command_id = "RunPowerShellScript";
   info.task_id = "t-120bf664f8454a7cbb64b0841c87f475";
   info.content = "echo test";
   info.time_out = "3600";
@@ -93,7 +93,7 @@ TEST(TestTaskEgine, RunPowshellScript) {
 
 TEST(TestTaskEgine, RunPeriodTask) {
   task_engine::TaskInfo info;
-  info.command_id = "RunPowserShellScript";
+  info.command_id = "RunPowerShellScript";
   info.task_id = "t-120bf664f8454a7cbb64b0841c87f476";
   info.content = "echo test";
   info.time_out = "3600";

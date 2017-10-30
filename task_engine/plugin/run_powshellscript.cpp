@@ -10,10 +10,10 @@
 #include "utils/SubProcess.h"
 
 namespace task_engine {
-RunPowserShellTask::RunPowserShellTask(TaskInfo info) : Task(info) {
+RunPowerShellTask::RunPowerShellTask(TaskInfo info) : Task(info) {
 }
 
-bool RunPowserShellTask::BuildScript(string fileName, string content) {
+bool RunPowerShellTask::BuildScript(string fileName, string content) {
   FILE* fp = fopen(fileName.c_str(), "a+");
   if (!fp) {
     return false;
@@ -24,7 +24,7 @@ bool RunPowserShellTask::BuildScript(string fileName, string content) {
   return true;
 }
 
-void RunPowserShellTask::Run() {
+void RunPowerShellTask::Run() {
   AssistPath assistPath("../");
   string scriptPath = assistPath.GetWorkPath("script");
   string time = Time::GetLocalTime();

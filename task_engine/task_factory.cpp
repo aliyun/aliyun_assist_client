@@ -21,9 +21,9 @@ Task* TaskFactory::CreateTask(TaskInfo info) {
   Task* task = nullptr;
   if (!info.command_id.compare("InstallPackage")) {
     task = new InsatllPackageTask(info);
-  } else if (!info.command_id.compare("RunPowserShellScript")) {
+  } else if (!info.command_id.compare("RunPowerShellScript")) {
 #if defined(_WIN32)
-    task = new RunPowserShellTask(info);
+    task = new RunPowerShellTask(info);
 #endif
   } else if (!info.command_id.compare("RunBatScript")) {
 #if defined(_WIN32)
