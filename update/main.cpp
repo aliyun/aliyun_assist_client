@@ -85,18 +85,6 @@ int main(int argc, char *argv[]) {
       Log::Error("exit by another update process is running");
       return -1;
     }
-#if !defined(_WIN32)
-    std::string version_file = cur_dir + FileUtils::separator() + ".." + FileUtils::separator() + "version";
-    if(FileUtils::fileExists(version_file.c_str())) {
-      std::string cur_version(FILE_VERSION_RESOURCE_STR);
-      std::string content;
-      FileUtils::ReadFileToString(version_file, content);
-      if(content.compare(cur_version)) {
-        Log::Info("need reboot under linux system");
-        return -1;
-      }
-    }
-#endif
     curl_global_init(CURL_GLOBAL_ALL);
     HostChooser host_choose;
     bool found = host_choose.Init(path_service.GetConfigPath());
