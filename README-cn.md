@@ -106,7 +106,66 @@ c)查看执行结果：
   aliyuncli ecs DescribeInvocationResults --InstanceId your-vm-instance-id --InvokeId your-task-id
 其中DescribeInvocations可以查看该任务的执行状态：
   aliyuncli ecs DescribeInvocations --InstanceId your-vm-instance-id --InvokeId your-task-id
-	
+
+  openapi方式：
+
+from aliyunsdkecs.request.v20140526.CreateCommandRequest import CreateCommandRequest
+from aliyunsdkecs.request.v20140526.InvokeCommandRequest import InvokeCommandRequest
+from aliyunsdkecs.request.v20140526.DescribeInvocationResultsRequest import DescribeInvocationResultsRequest
+
+def create_command(command_content, type, name, description):
+    request = CreateCommandRequest()
+    request.set_CommandContent(command_content)
+    request.set_Type(type)
+    request.set_Name(name)
+    request.set_Description(description)
+    response = _send_request(request)
+    command_id = response.get('CommandId')
+    return command_id;
+
+def invoke_command(instance_id, command_id, timed):
+    request = InvokeCommandRequest()
+    request.set_Timed(timed)
+    InstanceIds = [instance_id]
+    request.set_InstanceIds(InstanceIds)
+    request.set_CommandId(command_id)
+    response = _send_request(request)
+    invoke_id = response.get('InvokeId')
+    return invoke_id;
+
+def check_task_result(instance_id, invoke_id, result):
+    detail = get_task_detail_by_id(instance_id, invoke_id, result)
+    index = 0
+    while detail is None and index < 30:
+        detail = get_task_detail_by_id(instance_id, invoke_id, result)
+        time.sleep(1)
+        index+=1
+    if detail is None:
+        return 'false'
+    else:
+        return 'true';
+
+def get_task_detail_by_id(instance_id, invoke_id, result):
+    logging.info("Check instance %s invoke_id is %s", instance_id, invoke_id)
+    request = DescribeInvocationResultsRequest()
+    request.set_InstanceId(instance_id)
+    request.set_InvokeId(invoke_id)
+    response = _send_request(request)
+    invoke_detail = None
+    if response is not None:
+        result_list = response.get('Invocation').get('ResultLists').get('ResultItem')
+        for item in result_list:
+            if item.get('Output') == result:
+                invoke_detail = item
+                break;
+        return invoke_detail;
+
+using： 
+  # ZWNobyAxMjM= is echo 123 base64 decode.except result is MTIzCg==(123)
+  shell_command_id = create_command('ZWNobyAxMjM=', 'RunShellScript', 'test', 'test')
+  invoke_id = invoke_command(instance_id, shell_command_id, 'false')
+  # MTIzCg== base64 decode is 123, if task run susccess
+  check_task_result(instance_id, invoke_id, 'MTIzCg==')
 
 ### Contributing
 
