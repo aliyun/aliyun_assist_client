@@ -119,6 +119,8 @@ string OsVersion::LinuxGetVersion() {
     return osname;
   }
 
+  osname += utsn.nodename;
+  osname += "_";
   osname += utsn.sysname;
   osname += "_";
   osname += utsn.version;
