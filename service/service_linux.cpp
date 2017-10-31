@@ -158,7 +158,16 @@ void*  SignalProcessingThreadFunc(void* arg)
       try_reconnect_net();
       Singleton<task_engine::TaskSchedule>::I().Fetch();
       Log::Info("poll to fetch tasks");
-      LaunchProcessAndWaitForExit((char*)update_path.c_str(), "aliyun-assist-update", "--check_update", false);
+      AssistPath path_service("");
+      std::string cur_dir = path_service.GetCurrDir();
+      std::string test_file = cur_dir + FileUtils::separator() + "force_update";
+      if (FileUtils::fileExists(test_file.c_str())) {
+        Log::Info("test update");
+        LaunchProcessAndWaitForExit((char*)update_path.c_str(), "aliyun-assist-update", "--check_update --force_update", false);
+      } else {
+        LaunchProcessAndWaitForExit((char*)update_path.c_str(), "aliyun-assist-update", "--check_update", false);
+      }
+      
 			break;
 		default:
 			break;
