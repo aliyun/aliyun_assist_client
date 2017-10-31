@@ -221,7 +221,7 @@ VOID CALLBACK  UpdaterTimerRoutine(PVOID lpParam, BOOLEAN TimerOrWaitFired) {
   std::string test_file = cur_dir + FileUtils::separator() + "force_update";
   if (FileUtils::fileExists(test_file.c_str())) {
     Log::Info("test update");
-    ret = LaunchProcessAndWaitForExit(UPDATERFILE, "--check_update --force_update");
+    ret = LaunchProcessAndWaitForExit(UPDATERFILE, " --check_update --force_update");
   } else {
     ret = LaunchProcessAndWaitForExit(UPDATERFILE, UPDATERCOMMANDLINE);
   }
