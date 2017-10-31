@@ -135,6 +135,9 @@ void* ConsumerThreadFunc(void*) {
 
 void auto_update() {
   AssistPath path_service("");
+  std::string update_path = path_service.GetCurrDir();
+  update_path += FileUtils::separator();
+  update_path += "aliyun_assist_update";
   std::string cur_dir = path_service.GetCurrDir();
   std::string test_file = cur_dir + FileUtils::separator() + "force_update";
   if (FileUtils::fileExists(test_file.c_str())) {
@@ -145,12 +148,7 @@ void auto_update() {
   }
 }
 
-void*  SignalProcessingThreadFunc(void* arg)
-{
-  AssistPath path_service("");
-  std::string update_path = path_service.GetCurrDir();
-  update_path += FileUtils::separator();
-  update_path += "aliyun_assist_update";
+void*  SignalProcessingThreadFunc(void* arg) {
 	int errCode, sigNo;
 
 	for (;;) {
