@@ -9,11 +9,8 @@ chmod a+x $data_dir/aliyun-service
 
 if [ -e /usr/sbin/aliyun-service ]; then
   ln -sf /usr/local/share/aliyun-assist/$assist_version/aliyun-service /usr/sbin/aliyun-service
-  /etc/init.d/agentwatch reload
 elif [ -e /opt/sbin/aliyun-service ]; then
   ln -sf /usr/local/share/aliyun-assist/$assist_version/aliyun-service /opt/sbin/aliyun-service
-  systemctl gshelld.service reload
-  systemctl aliyun.service reload
 fi
 
 
