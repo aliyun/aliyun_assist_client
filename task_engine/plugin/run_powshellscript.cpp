@@ -37,7 +37,7 @@ void RunPowerShellTask::Run() {
   SubProcess process(cmd);
   process.Execute(out, exitcode);
 
-  cmd = "powershell " + filename;
+  cmd = "powershell -file " + filename;
   sub_process_.set_cmd(cmd);
   sub_process_.Execute(task_output_, err_code_);
 }
