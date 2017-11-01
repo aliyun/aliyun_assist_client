@@ -33,10 +33,10 @@ Deb包地址：
     http://repository-iso.oss-cn-beijing.aliyuncs.com/download/aliyun_assist.deb
 		
 无独立IP，各个Region的下载方式:
-  http://axt.{region_name}.alibaba-inc.com:8080/assist/aliyun_assist.deb
-  http://axt.{region_name}.alibaba-inc.com:8080/assist/aliyun_assist.rpm
-  http://axt.{region_name}.alibaba-inc.com:8080/assist/aliyun_assist.exe
-如region是杭州，则下载地址对应于 http://axt.ch-hangzhou.alibaba-inc.com:8080/assist/aliyun_assist.deb
+  http://axt-repo.{region_name}.alibaba-inc.com:8080/assist/aliyun_assist.deb
+  http://axt-repo.{region_name}.alibaba-inc.com:8080/assist/aliyun_assist.rpm
+  http://axt-repo.{region_name}.alibaba-inc.com:8080/assist/aliyun_assist.exe
+如region是杭州，则下载地址对应于 http://axt-repo.ch-hangzhou.alibaba-inc.com:8080/assist/aliyun_assist.deb
 
 ### 文件结构:
 
@@ -86,7 +86,10 @@ a)创建命令：
   aliyuncli ecs CreateCommand --CommandContent ZWNobyAxMjM= --Type RunBatScript --Name test --Description test
 其中 CommandContent中的ZWNobyAxMjM=为将'echo 123'经base64后转化的编码,如果目标实例的操作系统类型是linux，type改为RunShellScript。
 创建成功后，将返回command-id信息
-
+Type包括：
+RunBatScript
+RunShellScript
+RunPowerShellScript
 
 b)选中目标实例执行命令：
   aliyuncli ecs InvokeCommand --InstanceIds  your-vm-instance-id1 instance-id2 --CommandId your-command-id --Timed false

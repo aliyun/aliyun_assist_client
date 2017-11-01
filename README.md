@@ -34,10 +34,10 @@ Deb package：
     http://repository-iso.oss-cn-beijing.aliyuncs.com/download/aliyun_assist.deb
 		
 If you can not connect intetnet, then download:
-  http://axt.{region_name}.alibaba-inc.com:8080/assist/aliyun_assist.deb
-  http://axt.{region_name}.alibaba-inc.com:8080/assist/aliyun_assist.rpm
-  http://axt.{region_name}.alibaba-inc.com:8080/assist/aliyun_assist.exe
-For example, if region is hangzhou，then you can use http://axt.ch-hangzhou.alibaba-inc.com:8080/assist/aliyun_assist.deb
+  http://axt-repo.{region_name}.alibaba-inc.com:8080/assist/aliyun_assist.deb
+  http://axt-repo.{region_name}.alibaba-inc.com:8080/assist/aliyun_assist.rpm
+  http://axt-repo.{region_name}.alibaba-inc.com:8080/assist/aliyun_assist.exe
+For example, if region is hangzhou，then you can use http://axt-repo.ch-hangzhou.alibaba-inc.com:8080/assist/aliyun_assist.deb
 
 ### File Structure:
 
@@ -86,6 +86,10 @@ a)Create command：
   aliyuncli ecs CreateCommand --CommandContent ZWNobyAxMjM= --Type RunBatScript --Name test --Description test
 In CommandContent, 'ZWNobyAxMjM=' is 'echo 123' base64 decoded string,if linux，type should be RunShellScript, return command-id
 
+Type include：
+RunBatScript
+RunShellScript
+RunPowerShellScript
 
 b)Invoke task：
   aliyuncli ecs InvokeCommand --InstanceIds  your-vm-instance-id1 instance-id2 --CommandId your-command-id --Timed false
