@@ -2,7 +2,12 @@ CMAKE_MINIMUM_REQUIRED(VERSION 3.1)
 # CMake 最低版本号要求
 PROJECT (assist) 
 
-set(CMAKE_BUILD_TYPE "Release")
+if(UNIX)
+    set(CMAKE_BUILD_TYPE "Release")
+    set(CMAKE_C_FLAGS ${CMAKE_C_FLAGS} "-s")
+    set(CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS} "-s")
+endif()
+
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/third_party/CMakeHelpers")
 
 include(generate_product_version)
