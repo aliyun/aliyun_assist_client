@@ -38,6 +38,9 @@ OptionParser& initParser() {
       .action("store_true")
       .dest("force_update");
 
+  parser.add_option("-u", "--url")
+      .dest("url")
+      .action("store");
   return parser;
 }
 
@@ -112,11 +115,8 @@ int main(int argc, char *argv[]) {
       need_update = true;
       alyun_assist_update::Appcast cast;
       cast.need_update = 1;
-#if defined(_WIN32)
-      cast.download_url = "http://repository-iso.oss-cn-beijing.aliyuncs.com/update/windows_update.zip";
-#else
-      cast.download_url = "http://repository-iso.oss-cn-beijing.aliyuncs.com/update/linux_update.zip";
-#endif
+      std::string url =  options.get("url");
+      cast.download_url = url;
       process.SetUpdateInfo(cast);
     }
     if (need_update) {

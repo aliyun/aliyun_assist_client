@@ -73,30 +73,6 @@ void try_reconnect_net(void) {
   }
 }
 
-bool TestUpdateProcess(char* path, char* name, char* commandLine1, char* commandLine2, bool wait) {
-  pid_t pid;
-
-  pid = fork();
-	if (pid < 0) {
-		Log::Error("Failed to fork AliYunAssistService task process: %s",strerror(errno));
-		return false;
-	} else if (pid == 0) {
-		if(execl(path, name, commandLine1, commandLine2, (char * )0) == -1) {
-			Log::Error("path:%s Failed to launch AliYunAssistService task process: %s", path, strerror(errno));
-		}
-		exit(0);
-	} else if (wait){
-		int stat;
-		pid_t newPID;
-		newPID = waitpid(pid, &stat, 0);
-		if (newPID != pid) {
-			return false;
-		}
-	}
-	
-	return true;
-}
-
 bool LaunchProcessAndWaitForExit(char* path, char* name, char* commandLines, bool wait) {
   pid_t pid;
 
@@ -164,12 +140,8 @@ void auto_update() {
   update_path += "aliyun_assist_update";
   std::string cur_dir = path_service.GetCurrDir();
   std::string test_file = cur_dir + FileUtils::separator() + "force_update";
-  if (FileUtils::fileExists(test_file.c_str())) {
-    Log::Info("test update");
-    TestUpdateProcess((char*)update_path.c_str(), "aliyun_assist_update", "--check_update", "--force_update", false);
-  } else {
-    LaunchProcessAndWaitForExit((char*)update_path.c_str(), "aliyun_assist_update", "--check_update", false);
-  }
+
+  LaunchProcessAndWaitForExit((char*)update_path.c_str(), "aliyun_assist_update", "--check_update", false);
 }
 
 void*  SignalProcessingThreadFunc(void* arg) {
