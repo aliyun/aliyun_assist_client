@@ -475,6 +475,7 @@ VOID ControlHandler(DWORD controlCode) {
       SuspendThread(xenCmdReadThread);
       SuspendThread(xenCmdExecThread);
       currentState = SERVICE_PAUSED;
+      SendStatusToSCM(currentState, NO_ERROR, 0, 0, 0);
     }
     break;
 
@@ -493,6 +494,7 @@ VOID ControlHandler(DWORD controlCode) {
       ResumeThread(xenCmdExecThread);
       ResumeThread(xenCmdReadThread);
       currentState = SERVICE_RUNNING;
+      SendStatusToSCM(currentState, NO_ERROR, 0, 0, 0);
     }
     break;
 
@@ -509,8 +511,6 @@ VOID ControlHandler(DWORD controlCode) {
   default:
     break;
   }
-
-  SendStatusToSCM(currentState, NO_ERROR, 0, 0, 0);
 }
 
 // Initializes the service by starting its threads
