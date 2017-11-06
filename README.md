@@ -1,12 +1,13 @@
 # Aliyun Assist
 
-Aliyun assist can help you automatically perform various tasks such as:
-operation ability, you can use the aliyun assist executive bat/powershell operation script on a running instance of Windows, and Shell script on instance of Linux.
+Aliyun assist can help you automatically perform tasks on your vms easy, for example: you can use the aliyun assist executive bat/powershell operation script on a running instance of Windows, and Shell script on Linux.
 
-Concept
+Basic Concept:
   Command：Specific operations that need to be executed in an instance, such as a specific shell script.
   Invocation：Select some target instances to execute a command.
-  Timed Invocation：When you create a task, you can specify the execution sequence / cycle of the task, which is the Timed Invocation.
+  Timed Invocation：When you create a task, you can specify the execution sequence/cycle of the task.
+
+For example, you can create a Command using aliyun openapi, and then dispatch some vms belong to you to run the Command, last you can check the task result.
 
 ###  Verify Requirements:
 
