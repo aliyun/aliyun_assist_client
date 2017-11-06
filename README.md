@@ -1,12 +1,13 @@
 # Aliyun Assist
 
-Aliyun assist can help you automatically perform various tasks such as:
-operation ability, you can use the aliyun assist executive bat/powershell operation script on a running instance of Windows, and Shell script on instance of Linux.
+Aliyun assist can help you automatically perform tasks on your vms easy, for example: you can use the aliyun assist executive bat/powershell operation script on a running instance of Windows, and Shell script on Linux.
 
-Concept
+Basic Concept:
   Command：Specific operations that need to be executed in an instance, such as a specific shell script.
   Invocation：Select some target instances to execute a command.
-  Timed Invocation：When you create a task, you can specify the execution sequence / cycle of the task, which is the Timed Invocation.
+  Timed Invocation：When you create a task, you can specify the execution sequence/cycle of the task.
+
+For example, you can create a Command using aliyun openapi, and then dispatch some vms belong to you to run the Command, last you can check the task result.
 
 ###  Verify Requirements:
 
@@ -104,6 +105,14 @@ second minute hour day month week
 0 30 21 * * * every 21:30 run
 0 10 1 * * 6,0 run at 1:10 every Saturday and Sunday
 0 0,30 18-23 * * * run every 30 minutes between 18:00 and 23:00 every day
+
+Some script examples：
+
+Forward the request of the local 80 port to the 8080 port，current IP 192.168.1.80
+iptables -t nat -A PREROUTING -d 192.168.1.80 -p tcp --dport 80 -j DNAT --to-destination 192.168.1.80:8080
+
+Delete files 5 days ago
+find /data -mtime +5 -type f -exec rm -rf{} \;
 
 c)Watch result：
   aliyuncli ecs DescribeInvocationResults --InstanceId your-vm-instance-id --InvokeId your-task-id
