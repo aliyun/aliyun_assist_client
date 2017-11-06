@@ -105,6 +105,14 @@ second minute hour day month week
 0 10 1 * * 6,0 每周六、周日的1 : 10执行
 0 0,30 18-23 * * * 在每天18 : 00至23 : 00之间每隔30分钟执行
 
+一些脚本示例：
+
+将本地80端口的请求转发到8080端口，当前主机IP为192.168.1.80
+iptables -t nat -A PREROUTING -d 192.168.1.80 -p tcp --dport 80 -j DNAT --to-destination 192.168.1.80:8080
+
+删除5天前的文件
+find /data -mtime +5 -type f -exec rm -rf{} \;
+
 c)查看执行结果：
   aliyuncli ecs DescribeInvocationResults --InstanceId your-vm-instance-id --InvokeId your-task-id
 其中DescribeInvocations可以查看该任务的执行状态：

@@ -105,6 +105,14 @@ second minute hour day month week
 0 10 1 * * 6,0 run at 1:10 every Saturday and Sunday
 0 0,30 18-23 * * * run every 30 minutes between 18:00 and 23:00 every day
 
+Some script examples：
+
+Forward the request of the local 80 port to the 8080 port，current IP 192.168.1.80
+iptables -t nat -A PREROUTING -d 192.168.1.80 -p tcp --dport 80 -j DNAT --to-destination 192.168.1.80:8080
+
+Delete files 5 days ago
+find /data -mtime +5 -type f -exec rm -rf{} \;
+
 c)Watch result：
   aliyuncli ecs DescribeInvocationResults --InstanceId your-vm-instance-id --InvokeId your-task-id
 DescribeInvocations can watch the task status：
