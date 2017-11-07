@@ -216,16 +216,8 @@ DWORD ServerSyncThreadFunc(LPDWORD param) {
 
 VOID CALLBACK  UpdaterTimerRoutine(PVOID lpParam, BOOLEAN TimerOrWaitFired) {
   BOOL ret = FALSE;
-  AssistPath path_service("");
-  std::string cur_dir = path_service.GetCurrDir();
-  std::string test_file = cur_dir + FileUtils::separator() + "force_update";
-  if (FileUtils::fileExists(test_file.c_str())) {
-    Log::Info("test update");
-    ret = LaunchProcessAndWaitForExit(UPDATERFILE, " --check_update --force_update");
-  } else {
-    ret = LaunchProcessAndWaitForExit(UPDATERFILE, UPDATERCOMMANDLINE);
-  }
 
+  ret = LaunchProcessAndWaitForExit(UPDATERFILE, UPDATERCOMMANDLINE);
 
   if (ret) {
     Log::Info("Aliyun assist updated successfully");
