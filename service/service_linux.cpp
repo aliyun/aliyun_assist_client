@@ -138,8 +138,6 @@ void auto_update() {
   std::string update_path = path_service.GetCurrDir();
   update_path += FileUtils::separator();
   update_path += "aliyun_assist_update";
-  std::string cur_dir = path_service.GetCurrDir();
-  std::string test_file = cur_dir + FileUtils::separator() + "force_update";
 
   LaunchProcessAndWaitForExit((char*)update_path.c_str(), "aliyun_assist_update", "--check_update", false);
 }
