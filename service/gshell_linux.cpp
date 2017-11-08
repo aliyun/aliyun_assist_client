@@ -60,6 +60,10 @@ void  Gshell::Parse(string input, string& output) {
     if (json["execute"] == "guest-command") {
         return QmpGuestCommand(json["arguments"], output);
     }
+
+    Error err;
+    err.SetDesc("not suport");
+    output = err.Json().dump() + "\n";
 };
 
 

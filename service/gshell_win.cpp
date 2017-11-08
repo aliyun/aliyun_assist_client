@@ -67,6 +67,7 @@ bool  Gshell::Poll() {
 
   string output;
   Parse(buffer, output);
+  Log::Info("[w]:%s\n", output.c_str());
   WriteFile(m_hFile, output.c_str(), output.length(), &len, 0);
 
 #ifdef _DEBUG
@@ -77,6 +78,7 @@ bool  Gshell::Poll() {
 }
 
 void  Gshell::Parse(string input, string& output) {
+	Log::Info("command:%s", input.c_str());
   string errinfo;
   auto json = json11::Json::parse(input, errinfo);
   if ( errinfo != "" ) {
@@ -90,6 +92,10 @@ void  Gshell::Parse(string input, string& output) {
   if (json["execute"] == "guest-command") {
       return QmpGuestCommand(json["arguments"], output);
   }
+
+  Error err;
+  err.SetDesc("not suport");
+  output = err.Json().dump() + "\n";
 }
 
 // gshell check ready
