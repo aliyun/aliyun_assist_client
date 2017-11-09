@@ -146,6 +146,8 @@ void*  SignalProcessingThreadFunc(void* arg) {
 	int errCode, sigNo;
 
 	for (;;) {
+    errCode = 0;
+    sigNo = 0;
 		errCode = sigwait(&sigMask, &sigNo);
 		if (errCode != 0) {
 			Log::Error("Failed to set updater timer interval: %s", strerror(errCode));
