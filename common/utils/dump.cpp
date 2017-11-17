@@ -128,12 +128,7 @@ void DisableSetUnhandledExceptionFilter() {
 }
 
 void DumpService::InitMinDump(std::string product_name) {
-  //注册异常处理函数
-  app_name = product_name;
-  SetUnhandledExceptionFilter(MyUnhandledExceptionFilter);
-
-  //使SetUnhandledExceptionFilter
-  DisableSetUnhandledExceptionFilter();
+  return;
 }
 #endif
 
