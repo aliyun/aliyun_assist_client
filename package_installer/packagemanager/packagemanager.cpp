@@ -96,8 +96,7 @@ void PackageManager::Latest(const std::string& package_name) {
     if (package_name.empty()) {
       Log::Info("There is no package in the local");
       printf("There is no package in the local\n");
-    }
-    else {
+    } else {
       Log::Info("There is no package named %s in the local",
         package_name.c_str());
       printf("There is no package named %s in the local\n",
@@ -158,6 +157,11 @@ void PackageManager::Install(const std::string& package_name,
         package_name.c_str());
       return;
     } else {
+      // If package_name matches completely, install the latest version
+      if (InstallLatestVersion(package_infos, package_name)) {
+        return;
+      }
+
       printf("package_id\tname\tversion\tarch\tpublisher\n");
       for (size_t i = 0; i < package_infos.size(); ++i) {
         printf("%s\t%s\t%s\t%s\t%s\n", package_infos[i].package_id.c_str(),
@@ -441,11 +445,11 @@ vector<PackageInfo> PackageManager::GetPackageInfo(
   url += "/luban/api/v1/repo/query_software?";*/
 
   bool ret = HttpRequest::http_request_post(url, json, response);
-  /*ret = true;
+  ret = true;
   response = "[{\"packageId\":\"1\",\"name\":\"python3\",\
       \"url\":\"http://30.27.84.30:5656/python-3.6.1.zip\",\
       \"md5\":\"39192e116dce49bbd05efeced7924bae\",\"version\":\"3.6.1\",\
-      \"publisher\":\"Python Software Foundation\",\"arch\":\"x86\"}]";*/
+      \"publisher\":\"Python Software Foundation\",\"arch\":\"x64\"}]";
 
   Log::Info("response:%s", response.c_str());
   if (ret) {
@@ -707,5 +711,50 @@ int PackageManager::ComputeFileMD5(const std::string& file_path,
   md5_str = md5_service.hexdigest();
 
   return 0;
+}
+
+bool PackageManager::InstallLatestVersion(
+    const std::vector<PackageInfo>& package_infos,
+    const std::string& package_name) {
+  const PackageInfo* package = GetLatestVersion(package_infos, package_name);
+  if (package)
+  {
+    printf("The latest version of %s in the software repository is %s\n",
+        package_name.c_str(), package->display_version.c_str());
+    InstallAction(*package);
+    return true;
+  } 
+  else {
+    return false;
+  }
+}
+
+
+const PackageInfo* PackageManager::GetLatestVersion(
+    const std::vector<PackageInfo>& package_infos,
+    const std::string& package_name) {
+  std::string arch = "x86";
+  if (OsVersion::Is64BitOS()) {
+    arch = "x64";
+  }
+
+  std::string latest_version = "";
+  int index = -1;
+  for (size_t i = 0; i < package_infos.size(); ++i) {
+    if ((package_infos[i].display_name == package_name) &&
+      (package_infos[i].arch == arch)) {
+      if (VersionComparator::CompareVersions(package_infos[i].display_version,
+          latest_version) > 0) {
+        latest_version = package_infos[i].display_version;
+        index = i;
+      }
+    }
+  }
+
+  if (index > -1) {
+    return &package_infos[index];
+  } else {
+    return NULL;
+  }
 }
 }  // namespace alyun_assist_installer
