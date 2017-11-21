@@ -9,8 +9,10 @@ chmod a+x $data_dir/aliyun-service
 
 if [ -e /usr/sbin/aliyun-service ]; then
   ln -sf /usr/local/share/aliyun-assist/$assist_version/aliyun-service /usr/sbin/aliyun-service
+  ln -sf /usr/local/share/aliyun-assist/$assist_version/aliyun_installer usr/sbin/aliyun_installer
 elif [ -e /opt/sbin/aliyun-service ]; then
-  ln -sf /usr/local/share/aliyun-assist/$assist_version/aliyun-service /opt/sbin/aliyun-service
+  ln -sf /opt/local/share/aliyun-assist/$assist_version/aliyun-service /opt/sbin/aliyun-service
+  ln -sf /opt/local/share/aliyun-assist/$assist_version/aliyun_installer /opt/sbin/aliyun_installer
 fi
 
 
