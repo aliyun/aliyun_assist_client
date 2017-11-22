@@ -15,5 +15,5 @@ elif [ -e /opt/sbin/aliyun-service ]; then
   ln -sf /opt/local/share/aliyun-assist/$assist_version/aliyun_installer /opt/sbin/aliyun_installer
 fi
 
-
+pkill aliyun-service
 
