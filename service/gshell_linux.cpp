@@ -102,7 +102,7 @@ void  Gshell::QmpGuestCommand(json11::Json  arguments, string& output) {
 };
 
 // Some old linux images,such as centos6,ubuntu12 exist compatibility issues for acpi shutdown.
-// So we use the GSHELL_NOT_SUPPORT_SHUTDOWN compile switch to support acpi shutdown still some time.
+// So use the GSHELL_NOT_SUPPORT_SHUTDOWN switch to let guest os shutdown normally.
 #if !defined(GSHELL_NOT_SUPPORT_SHUTDOWN)
 void Gshell::reopen_fd_to_null(int fd)
 {
