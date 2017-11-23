@@ -1,6 +1,6 @@
 阿里云助手
 
-阿里云助手是一种可以帮您自动执行各种运维任务的能力，如：您可以使用云助手对运行中的Windows实例执行bat/powershell运维脚本，对运行中的Linux实例执行Shell脚本。
+阿里云助手是一款支持远程执行运维任务的云服务产品，如：您可以使用云助手对运行中的Windows实例执行bat/powershell运维脚本，对运行中的Linux实例执行Shell脚本。
 
 ### 几个概念：
 
@@ -176,10 +176,10 @@ def get_task_detail_by_id(instance_id, invoke_id, result):
         return invoke_detail;  
 
 main函数:  
-  # ZWNobyAxMjM= is echo 123 base64 decode.except result is MTIzCg==(123)  
+  # "ZWNobyAxMjM=" is the Base64-encoded string of "echo 123" and "MTIzCg==" is the Base64-encoded string of "123")  
   shell_command_id = create_command('ZWNobyAxMjM=', 'RunShellScript', 'test', 'test')  
   invoke_id = invoke_command(instance_id, shell_command_id, 'false')  
-  # MTIzCg== base64 decode is 123, if task run susccess  
+  # Expected result shoule be "MTIzCg==" if the invocation runs susccessfully  
   check_task_result(instance_id, invoke_id, 'MTIzCg==')  
 
 ### Contributing

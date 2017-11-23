@@ -179,10 +179,10 @@ def get_task_detail_by_id(instance_id, invoke_id, result):
         return invoke_detail;  
 
 main function:  
-  # ZWNobyAxMjM= is echo 123 base64 decode.except result is MTIzCg==(123)  
+  # "ZWNobyAxMjM=" is the Base64-encoded string of "echo 123" and "MTIzCg==" is the Base64-encoded string of "123")  
   shell_command_id = create_command('ZWNobyAxMjM=', 'RunShellScript', 'test', 'test')  
   invoke_id = invoke_command(instance_id, shell_command_id, 'false')  
-  # MTIzCg== base64 decode is 123, if task run susccess  
+  # Expected result shoule be "MTIzCg==" if the invocation runs susccessfully  
   check_task_result(instance_id, invoke_id, 'MTIzCg==')  
 
 ### Contributing
