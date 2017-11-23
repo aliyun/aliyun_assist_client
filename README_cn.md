@@ -69,7 +69,7 @@ aliyuncli方式：
 首先安装aliyuncli和aliyun openapi sdk：
 -   1 pip install aliyuncli
 -   2 pip install aliyun-python-sdk-core
--   3 pip install aliyun-python-sdk-axt
+-   3 pip install aliyun-python-sdk-ecs
 	
 由于我们修改了aliyuncli对于数组的支持，下载我们的aliyuncli的aliyunOpenApiData.py文件去替换%python_install_path%\Lib\site-packages\aliyuncli\aliyunOpenApiData.py
 下载地址：http://repository-iso.oss-cn-beijing.aliyuncs.com/cli/aliyunOpenApiData.py

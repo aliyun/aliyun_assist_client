@@ -70,7 +70,7 @@ aliyuncli：
 Install aliyuncli and aliyun openapi sdk：
 -   1 pip install aliyuncli
 -   2 pip install aliyun-python-sdk-core
--   3 pip install aliyun-python-sdk-axt
+-   3 pip install aliyun-python-sdk-ecs
 
 We modify origin aliyun，please download aliyunOpenApiData.py to replace %python_install_path%\Lib\site-packages\aliyuncli\aliyunOpenApiData.py
 Download url：http://repository-iso.oss-cn-beijing.aliyuncs.com/cli/aliyunOpenApiData.py
