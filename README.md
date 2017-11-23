@@ -1,29 +1,31 @@
-# Aliyun Assist
+Aliyun Assist
 
-Aliyun assist can help you automatically perform tasks on your vms easy, for example: you can use the aliyun assist executive bat/powershell operation script on a running instance of Windows, and Shell script on Linux.
+Aliyun assist is a platform that makes your applications easier to deploy, for example, you can execute bat/powershell script on a running instance of Windows, and Shell script on Linux.
 
-Basic Concept:
-  Command：Specific operations that need to be executed in an instance, such as a specific shell script.
-  Invocation：Select some target instances to execute a command.
-  Timed Invocation：When you create a task, you can specify the execution sequence/cycle of the task.
+### Basic Concept:
+-   Command：Specific operations that need to be executed in instance, such as a specific shell script.
+-   Invocation：Select some target instances to execute a command.
+-   Timed Invocation：When you create a task, you can specify the cronat expression of the task.
 
-For example, you can create a Command using aliyun openapi, and then dispatch some vms belong to you to run the Command, last you can check the task result.
+For example, you can create a command using aliyun openapi, then select some virtual machines to execute the command, and last you can get the task result.
 
-###  Verify Requirements:
+### Verify Requirements:
 
-windows Server 2008/2012/2016
-Ubuntu   
-CentOS  
-Debian
-RedHat
-SUSE Linux Enterprise Server
-OpenSUSE
-Aliyun Linux
-FreeBSD
-CoreOS
+-   Windows Server 2008/2012/2016
+-   Ubuntu
+-   CentOS
+-   Debian
+-   RedHat
+-   SUSE Linux Enterprise Server
+-   OpenSUSE
+-   Aliyun Linux
+-   FreeBSD
+-   CoreOS
 
 ### Setup:
-If your vm has not install yet, please：
+
+If aliyun assist is not install yet, please downlaod first：
+
 Windows：
 run as administrator：
     http://repository-iso.oss-cn-beijing.aliyuncs.com/download/aliyun_agent_setup.exe
@@ -33,7 +35,7 @@ rpm package：
     http://repository-iso.oss-cn-beijing.aliyuncs.com/download/aliyun_assist.rpm
 Deb package：
     http://repository-iso.oss-cn-beijing.aliyuncs.com/download/aliyun_assist.deb
-		
+
 If you can not connect intetnet, then download:
   http://axt-repo.{region_name}.alibaba-inc.com:8080/assist/aliyun_assist.deb
   http://axt-repo.{region_name}.alibaba-inc.com:8080/assist/aliyun_assist.rpm
@@ -42,7 +44,7 @@ For example, if region is hangzhou，then you can use http://axt-repo.ch-hangzho
 
 ### File Structure:
 
-  /service  service framework
+../service  service framework
 ../task_engine assist task engine
 ../package_installer software install
 ../test unit test
@@ -51,32 +53,35 @@ For example, if region is hangzhou，then you can use http://axt-repo.ch-hangzho
 ../update assist update
 	
 ### How to compile
-    Windows：
-		1) cmake .
-		2) open .sln using vs
+
+Windows：
+    1) cmake .
+    2) open .sln using vs
 		
-    Linux：
-		1) cmake .
-		2) make
+Linux：
+    1) cmake .
+    2) make
 		
 
 ### How to use
-  aliyuncli：
+
+aliyuncli：
  
-  Install aliyuncli和aliyun openapi sdk：
-1 pip install aliyuncli
-2 pip install aliyun-python-sdk-core
-3 pip install aliyun-python-sdk-axt
-	
-Because we modify origin aliyun，please download aliyunOpenApiData.py to replace %python_install_path%\Lib\site-packages\aliyuncli\aliyunOpenApiData.py
-  Download url：http://repository-iso.oss-cn-beijing.aliyuncs.com/cli/aliyunOpenApiData.py
-  Under Linux system：
-  linux(ubuntu)
+Install aliyuncli and aliyun openapi sdk：
+-   1 pip install aliyuncli
+-   2 pip install aliyun-python-sdk-core
+-   3 pip install aliyun-python-sdk-axt
+
+We modify origin aliyun，please download aliyunOpenApiData.py to replace %python_install_path%\Lib\site-packages\aliyuncli\aliyunOpenApiData.py
+Download url：http://repository-iso.oss-cn-beijing.aliyuncs.com/cli/aliyunOpenApiData.py
+Linux system：
+linux(ubuntu)
     /usr/local/lib/python2.7/dist-packages   
-  linux(redhat)
+linux(redhat)
     /usr/lib/python2.7/site-packages
-	
-  Config key and region
+
+Config key and region
+
 $ aliyuncli configure
 Aliyun Access Key ID [None]: <Your aliyun access key id>
 Aliyun Access Key Secret [None]: <Your aliyun access key secret>
@@ -85,7 +90,7 @@ Default output format [None]:
 
 a)Create command：
   aliyuncli ecs CreateCommand --CommandContent ZWNobyAxMjM= --Type RunBatScript --Name test --Description test
-In CommandContent, 'ZWNobyAxMjM=' is 'echo 123' base64 decoded string,if linux，type should be RunShellScript, return command-id
+In CommandContent, 'ZWNobyAxMjM=' is 'echo 123' base64 decoded string, if linux，type should be RunShellScript
 
 Type include：
 RunBatScript
@@ -95,7 +100,7 @@ RunPowerShellScript
 b)Invoke task：
   aliyuncli ecs InvokeCommand --InstanceIds  your-vm-instance-id1 instance-id2 --CommandId your-command-id --Timed false
 
-  Timed means period task，using --Frequency "0 */10 * * * *" set per 10 minutes run once。
+--Timed means period task，passing --Frequency "0 */10 * * * *" set per 10 minutes run once。
 
 cronat expression:
 *       *      *    *   *      *
@@ -116,11 +121,11 @@ find /data -mtime +5 -type f -exec rm -rf{} \;
 
 c)Watch result：
   aliyuncli ecs DescribeInvocationResults --InstanceId your-vm-instance-id --InvokeId your-task-id
-DescribeInvocations can watch the task status：
+DescribeInvocations interface can watch the task status：
   aliyuncli ecs DescribeInvocations --InstanceId your-vm-instance-id --InvokeId your-task-id
 
 
-  openapi：
+Openapi：
 
 from aliyunsdkecs.request.v20140526.CreateCommandRequest import CreateCommandRequest
 from aliyunsdkecs.request.v20140526.InvokeCommandRequest import InvokeCommandRequest
@@ -173,7 +178,7 @@ def get_task_detail_by_id(instance_id, invoke_id, result):
                 break;
         return invoke_detail;
 
-using： 
+main function: 
   # ZWNobyAxMjM= is echo 123 base64 decode.except result is MTIzCg==(123)
   shell_command_id = create_command('ZWNobyAxMjM=', 'RunShellScript', 'test', 'test')
   invoke_id = invoke_command(instance_id, shell_command_id, 'false')

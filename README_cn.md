@@ -1,37 +1,40 @@
-# 阿里云助手
+阿里云助手
 
 阿里云助手是一种可以帮您自动执行各种运维任务的能力，如：您可以使用云助手对运行中的Windows实例执行bat/powershell运维脚本，对运行中的Linux实例执行Shell脚本。
 
-几个概念：
-命令(command)：需要在实例中执行的具体操作，如具体的shell脚本
-任务(Invocation)：选中某些目标实例来执行某个命令，即创建了一个任务(Invocation)
-定时任务(Timed Invocation)：在创建任务时，您可以指定任务的执行时序/周期，就是定时任务(Timed Invocation)；定时任务(Timed Invocation)的目的主要是周期性的执行某些维护操作
+### 几个概念：
+
+-   命令(command)：需要在实例中执行的具体操作，如具体的shell脚本
+-   任务(Invocation)：选中某些目标实例来执行某个命令，即创建了一个任务(Invocation)
+-   定时任务(Timed Invocation)：在创建任务时，您可以指定任务的执行时序/周期，就是定时任务(Timed Invocation)；定时任务(Timed Invocation)的目的主要是周期性的执行某些维护操作
 
 ### 系统要求:
 
-windows Server 2008/2012/2016
-Ubuntu   
-CentOS  
-Debian
-RedHat
-SUSE Linux Enterprise Server
-OpenSUSE
-Aliyun Linux
-FreeBSD
-CoreOS
+-   windows Server 2008/2012/2016
+-   Ubuntu
+-   CentOS
+-   Debian
+-   RedHat
+-   SUSE Linux Enterprise Server
+-   OpenSUSE
+-   Aliyun Linux
+-   FreeBSD
+-   CoreOS
 
 ### 安装方法:
+
 若您的实例中未安装云助手的客户端，请安装如下步骤进行安装：
 Windows实例：
 以管理员权限安装：
     http://repository-iso.oss-cn-beijing.aliyuncs.com/download/aliyun_agent_setup.exe
 
 Linux实例：
+
 rpm包地址：
     http://repository-iso.oss-cn-beijing.aliyuncs.com/download/aliyun_assist.rpm
 Deb包地址：
     http://repository-iso.oss-cn-beijing.aliyuncs.com/download/aliyun_assist.deb
-		
+
 无独立IP，各个Region的下载方式:
   http://axt-repo.{region_name}.alibaba-inc.com:8080/assist/aliyun_assist.deb
   http://axt-repo.{region_name}.alibaba-inc.com:8080/assist/aliyun_assist.rpm
@@ -40,7 +43,7 @@ Deb包地址：
 
 ### 文件结构:
 
-  /service  服务框架
+../service  服务框架
 ../task_engine 云助手任务引擎
 ../package_installer 云助手软件安装
 ../test  单元测试
@@ -49,33 +52,34 @@ Deb包地址：
 ../update 软件自升级
 	
 ### 如何编译
-    Windows：
-		1) cmake .
-		2) 用vs打开sln文件编译
-		
-    Linux：
-		1) cmake .
-		2) make
-		
+
+Windows：
+    1) cmake .
+    2) 用vs打开sln文件编译
+
+Linux：
+    1) cmake .
+    2) make
+
 
 ### 如何使用
 
-  aliyuncli方式：
+aliyuncli方式：
  
-  首先安装aliyuncli和aliyun openapi sdk：
-1 pip install aliyuncli
-2 pip install aliyun-python-sdk-core
-3 pip install aliyun-python-sdk-axt
+首先安装aliyuncli和aliyun openapi sdk：
+-   1 pip install aliyuncli
+-   2 pip install aliyun-python-sdk-core
+-   3 pip install aliyun-python-sdk-axt
 	
 由于我们修改了aliyuncli对于数组的支持，下载我们的aliyuncli的aliyunOpenApiData.py文件去替换%python_install_path%\Lib\site-packages\aliyuncli\aliyunOpenApiData.py
-  下载地址：http://repository-iso.oss-cn-beijing.aliyuncs.com/cli/aliyunOpenApiData.py
-  Linux参考：
+下载地址：http://repository-iso.oss-cn-beijing.aliyuncs.com/cli/aliyunOpenApiData.py
+Linux参考：
   linux(ubuntu)
     /usr/local/lib/python2.7/dist-packages   
   linux(redhat)
     /usr/lib/python2.7/site-packages
-	
-  配置用户key和region
+
+配置用户key和region
 $ aliyuncli configure
 Aliyun Access Key ID [None]: <Your aliyun access key id>
 Aliyun Access Key Secret [None]: <Your aliyun access key secret>
@@ -87,9 +91,9 @@ a)创建命令：
 其中 CommandContent中的ZWNobyAxMjM=为将'echo 123'经base64后转化的编码,如果目标实例的操作系统类型是linux，type改为RunShellScript。
 创建成功后，将返回command-id信息
 Type包括：
-RunBatScript
-RunShellScript
-RunPowerShellScript
+-   RunBatScript
+-   RunShellScript
+-   RunPowerShellScript
 
 b)选中目标实例执行命令：
   aliyuncli ecs InvokeCommand --InstanceIds  your-vm-instance-id1 instance-id2 --CommandId your-command-id --Timed false
@@ -118,7 +122,7 @@ c)查看执行结果：
 其中DescribeInvocations可以查看该任务的执行状态：
   aliyuncli ecs DescribeInvocations --InstanceId your-vm-instance-id --InvokeId your-task-id
 
-  openapi方式：
+openapi方式：
 
 from aliyunsdkecs.request.v20140526.CreateCommandRequest import CreateCommandRequest
 from aliyunsdkecs.request.v20140526.InvokeCommandRequest import InvokeCommandRequest
@@ -171,7 +175,7 @@ def get_task_detail_by_id(instance_id, invoke_id, result):
                 break;
         return invoke_detail;
 
-using： 
+main函数: 
   # ZWNobyAxMjM= is echo 123 base64 decode.except result is MTIzCg==(123)
   shell_command_id = create_command('ZWNobyAxMjM=', 'RunShellScript', 'test', 'test')
   invoke_id = invoke_command(instance_id, shell_command_id, 'false')
