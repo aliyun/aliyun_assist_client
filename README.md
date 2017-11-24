@@ -188,7 +188,3 @@ main function:
 ### Contributing
 
     Welcome use Github pull requests to commit.  
-
-## License
-
-    aliyun assist is licensed under the GPL V3 License.  

@@ -185,7 +185,3 @@ main函数:
 ### Contributing
 
     欢迎使用Github的pull requests机制给我们提交代码.  
-
-## License
-
-    阿里云助手 is licensed under the GPL V3 License.  
