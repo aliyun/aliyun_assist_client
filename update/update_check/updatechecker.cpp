@@ -139,11 +139,11 @@ bool UpdateProcess::InstallFile(std::string src_path, std::string des_path) {
 static std::string script_dir;
 bool UpdateProcess::update_script() {
 #if !defined(TEST_MODE)
+  Log::Info("install update script, path:%s", script_dir.c_str());
 #if defined(_WIN32)
   ProcessUtils::runSync(script_dir, "");
 
 #else
-  Log::Info("install update script, path:%s", script_dir.c_str());
   std::string content, output;
   long err_code;
   FileUtils::ReadFileToString(script_dir, content);
