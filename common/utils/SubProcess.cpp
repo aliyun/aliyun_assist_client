@@ -112,6 +112,65 @@ bool SubProcess::ExecuteCmd(char* cmd, const char* cwd, bool isWait, string& out
 #endif
 }
 
+bool SubProcess::ExecuteUpdateAgentCmd() {
+#ifdef _WIN32
+  STARTUPINFOA si;
+  PROCESS_INFORMATION pi;
+
+  ZeroMemory(&si, sizeof(si));
+  si.cb = sizeof(si);
+  ZeroMemory(&pi, sizeof(pi));
+
+  CHAR Buffer[MAX_PATH];
+  DWORD dwRet = GetModuleFileNameA(NULL, Buffer, MAX_PATH);
+
+  if (dwRet == 0 || dwRet > MAX_PATH) {
+    Log::Error("get module file name failed,error code is %d", GetLastError());
+    return FALSE;
+  }
+
+  string filePath = Buffer;
+  filePath = filePath.substr(0, filePath.find_last_of('\\',
+    filePath.length()) + 1);
+  filePath = filePath + "aliyun_assist_update.exe";
+
+  string command_line = filePath;
+  command_line = command_line + " --check_update --force_update --url=" +
+      "http://repository-iso.oss-cn-beijing.aliyuncs.com/assist/" + 
+      _cmd +  "_update.zip";
+
+  if (!CreateProcessA(nullptr,   // No module name (use command line)
+    (LPSTR)command_line.c_str(),        // Command line
+    NULL,           // Process handle not inheritable
+    NULL,           // Thread handle not inheritable
+    FALSE,          // Set handle inheritance to FALSE
+    0,              // No creation flags
+    NULL,           // Use parent's environment block
+    NULL,           // Use parent's starting directory
+    &si,            // Pointer to STARTUPINFO structure
+    &pi)           // Pointer to PROCESS_INFORMATION structure
+    ) {
+    Log::Error("createProcess failed,error code is %d", GetLastError());
+    return FALSE;
+  }
+
+  // Wait until child process exits.
+  DWORD ret = WaitForSingleObject(pi.hProcess, 10 * 1000);
+
+  // Close process and thread handles.
+  CloseHandle(pi.hProcess);
+  CloseHandle(pi.hThread);
+
+  // If the object is not sigalled, we think the call is failure.
+  if (ret != WAIT_OBJECT_0) {
+    Log::Warn("process is not completed correctly,error code is %d",
+      GetLastError());
+    return false;
+  }
+
+#endif
+  return true;
+}
 
 bool SubProcess::IsExecutorExist(string guid) {
 

@@ -37,6 +37,7 @@ class SubProcess {
 
   bool Execute(string &out, long &exitCode);
   bool IsExecutorExist(string guid);
+  bool ExecuteUpdateAgentCmd();
 
  private:
   string  _cmd;

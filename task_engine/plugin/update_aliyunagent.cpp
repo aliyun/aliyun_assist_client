@@ -9,7 +9,7 @@ UpdateAliyunAgentTask::UpdateAliyunAgentTask(TaskInfo info) : Task(info) {
 }
 
 void UpdateAliyunAgentTask::Run() {
-  sub_process_.set_cmd("aliyun_assist_update.exe --check_update");
-  sub_process_.Execute(task_output_, err_code_);
+  sub_process_.set_cmd(task_info_.content);
+  sub_process_.ExecuteUpdateAgentCmd();
 }
 }  // namespace task_engine
