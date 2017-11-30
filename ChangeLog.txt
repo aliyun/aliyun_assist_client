@@ -1,0 +1,8 @@
+2017-11-21 
+Linux Version: 1.0.1.168
+Windows Version: 1.0.0.81
+1  支持部分旧的镜像ACPI模式关机
+2  支持Windows Server 1709
+
+
+

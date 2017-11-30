@@ -60,10 +60,16 @@ void  Gshell::Parse(string input, string& output) {
     if (json["execute"] == "guest-command") {
         return QmpGuestCommand(json["arguments"], output);
     }
-
+#if !defined(GSHELL_NOT_SUPPORT_SHUTDOWN)
+    if (json["execute"] == "guest-shutdown") {
+        return QmpGuestShutdown(json["arguments"], output);
+    }
+#endif
     Error err;
     err.SetDesc("not suport");
     output = err.Json().dump() + "\n";
+	
+	
 };
 
 
@@ -95,7 +101,9 @@ void  Gshell::QmpGuestCommand(json11::Json  arguments, string& output) {
     }
 };
 
-
+// Some old linux images,such as centos6,ubuntu12 exist compatibility issues for acpi shutdown.
+// So use the GSHELL_NOT_SUPPORT_SHUTDOWN switch to let guest os shutdown normally.
+#if !defined(GSHELL_NOT_SUPPORT_SHUTDOWN)
 void Gshell::reopen_fd_to_null(int fd)
 {
     int nullfd;
@@ -122,6 +130,70 @@ bool  Gshell::ga_wait_child(pid_t pid, int *status) {
     }
     return  true;
 }
+
+
+
+
+void  Gshell::QmpGuestShutdown(json11::Json arguments, string& output) {
+    const char *shutdown_flag;
+    Error err;
+    pid_t pid;
+    int status;
+
+    if (arguments["mode"].is_null()) {
+        err.SetDesc("powerdown|reboot");
+        output = err.Json().dump() + "\n";
+        return;
+    }
+
+    if (arguments["mode"].string_value() == "powerdown") {
+        shutdown_flag = "-P";
+    }
+    else if (arguments["mode"].string_value() == "halt") {
+        shutdown_flag = "-H";
+    }
+    else if (arguments["mode"].string_value() == "reboot") {
+        shutdown_flag = "-r";
+    }
+    else {
+        err.SetDesc("valid values are: halt|powerdown|reboot");
+        output = err.Json().dump() + "\n";
+        return;
+    }
+
+    pid = fork();
+    if ( pid == 0 ) {
+        setsid();
+        reopen_fd_to_null(0);
+        reopen_fd_to_null(1);
+        reopen_fd_to_null(2);
+
+        execle("/sbin/shutdown", "shutdown", "-h", shutdown_flag, "+0",
+            "hypervisor initiated shutdown", (char*)NULL, environ);
+        _exit(EXIT_FAILURE);
+    }
+    else if (pid < 0) {
+        err.SetDesc("failed to create child process");
+        output = err.Json().dump() + "\n";
+        return;
+    }
+
+    if ( !ga_wait_child(pid, &status)  ||
+         !WIFEXITED(status) ||
+         !WEXITSTATUS(status) ) {
+        err.SetDesc("child process has failed to shutdown");
+        output = err.Json().dump() + "\n";
+        return;
+     }
+
+    json11::Json   GuestCommandResult = json11::Json::object{
+        { "result",8 },
+        { "cmd_output", "execute command success" }
+    };
+    json11::Json resp = json11::Json::object{ { "return", GuestCommandResult } };
+    output = resp.dump() + "\n";
+}
+#endif
 
 bool  Gshell::Poll() {
 
