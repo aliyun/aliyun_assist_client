@@ -10,6 +10,6 @@ UpdateAliyunAgentTask::UpdateAliyunAgentTask(TaskInfo info) : Task(info) {
 
 void UpdateAliyunAgentTask::Run() {
   sub_process_.set_cmd(task_info_.content);
-  sub_process_.ExecuteUpdateAgentCmd();
+  sub_process_.RunModule("aliyun_assist_update");
 }
 }  // namespace task_engine

@@ -9,6 +9,8 @@ Description: Provide functions to make process
 #ifdef _WIN32
 #include <Windows.h>
 #else
+#include <unistd.h>
+#include <linux/limits.h>
 #endif // _WIN32
 
 #include "SubProcess.h"
@@ -112,7 +114,7 @@ bool SubProcess::ExecuteCmd(char* cmd, const char* cwd, bool isWait, string& out
 #endif
 }
 
-bool SubProcess::ExecuteUpdateAgentCmd() {
+bool SubProcess::RunModule(string moduleName) {
 #ifdef _WIN32
   STARTUPINFOA si;
   PROCESS_INFORMATION pi;
@@ -132,12 +134,9 @@ bool SubProcess::ExecuteUpdateAgentCmd() {
   string filePath = Buffer;
   filePath = filePath.substr(0, filePath.find_last_of('\\',
     filePath.length()) + 1);
-  filePath = filePath + "aliyun_assist_update.exe";
+  filePath = filePath + moduleName + " ";
 
-  string command_line = filePath;
-  command_line = command_line + " --check_update --force_update --url=" +
-      "http://repository-iso.oss-cn-beijing.aliyuncs.com/assist/" + 
-      _cmd +  "_update.zip";
+  string command_line = filePath + _cmd;
 
   if (!CreateProcessA(nullptr,   // No module name (use command line)
     (LPSTR)command_line.c_str(),        // Command line
@@ -168,8 +167,22 @@ bool SubProcess::ExecuteUpdateAgentCmd() {
     return false;
   }
 
-#endif
   return true;
+#else
+  char buffer[PATH_MAX];
+  getcwd(buffer, PATH_MAX);
+  string filePath = buffer;
+  string command_line = filePath + "/" + moduleName + " " + _cmd;
+  FILE *ptr;
+  if ((ptr = popen(command_line.c_str(), "r")) != NULL) {
+    pclose(ptr);
+    ptr = NULL;
+    return true;
+  }
+  else {
+    return false;
+  }
+#endif
 }
 
 bool SubProcess::IsExecutorExist(string guid) {
