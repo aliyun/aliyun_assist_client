@@ -36,6 +36,7 @@ class SubProcess {
 #endif
 
   bool Execute(string &out, long &exitCode);
+  bool RunModule(string moduleName);
   bool IsExecutorExist(string guid);
 
  private:

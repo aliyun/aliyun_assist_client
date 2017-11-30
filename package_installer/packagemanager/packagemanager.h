@@ -1,7 +1,7 @@
 // Copyright (c) 2017-2018 Alibaba Group Holding Limited.
 
-#ifndef CLIENT_PACKAGE_INSTALLER_PACKAGEMANAGER_H_
-#define CLIENT_PACKAGE_INSTALLER_PACKAGEMANAGER_H_
+#ifndef PACKAGE_INSTALLER_PACKAGEMANAGER_PACKAGEMANAGER_H_
+#define PACKAGE_INSTALLER_PACKAGEMANAGER_PACKAGEMANAGER_H_
 
 #include <vector>
 #include <string>
@@ -46,9 +46,13 @@ class PackageManager {
   int ExecuteCmd(char* cmd, char* buff, int size);
 #endif
   int ComputeFileMD5(const std::string& file_path, std::string& md5_str);
+  bool InstallLatestVersion(const std::vector<PackageInfo>& package_infos,
+    const std::string& package_name);
+  const PackageInfo* GetLatestVersion(const std::vector<PackageInfo>& package_infos,
+    const std::string& package_name);
   DBManager* db_manager;
 };
 
 }  // namespace alyun_assist_installer
 
-#endif  // CLIENT_PACKAGE_INSTALLER_PACKAGEMANAGER_H_
+#endif  // PACKAGE_INSTALLER_PACKAGEMANAGER_PACKAGEMANAGER_H_
