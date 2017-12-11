@@ -60,6 +60,7 @@ Windows：
 Linux：  
     1) cmake .  
     2) make  
+    3) cmake_install.sh 源码安装
 
 
 ### 如何使用
@@ -185,3 +186,7 @@ main函数:
 ### Contributing
 
     欢迎使用Github的pull requests机制给我们提交代码.  
+
+## License
+
+    阿里云助手 is licensed under the GPL V3 License.  

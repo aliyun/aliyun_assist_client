@@ -61,7 +61,7 @@ Windows:
 Linux:  
     1) cmake .  
     2) make  
-		
+    3) cmake_install.sh   source code mode install
 
 ### How to use
 
@@ -188,3 +188,7 @@ main function:
 ### Contributing
 
     Welcome use Github pull requests to commit.  
+
+## License
+
+    aliyun assist is licensed under the GPL V3 License.  
