@@ -439,6 +439,7 @@ VOID ControlHandler(DWORD controlCode) {
   switch (controlCode) {
     // Stop the service
   case SERVICE_CONTROL_STOP:
+  case SERVICE_CONTROL_SHUTDOWN:
     // Tell the SCM what's happening
     ret = SendStatusToSCM(SERVICE_STOP_PENDING,
       NO_ERROR, 0, 1, 5000);
@@ -494,11 +495,6 @@ VOID ControlHandler(DWORD controlCode) {
   case SERVICE_CONTROL_INTERROGATE:
     // it will fall to bottom and send status
     break;
-
-    // Do nothing in a shutdown. Could do cleanup
-    // here but it must be very quick.
-  case SERVICE_CONTROL_SHUTDOWN:
-    return;
 
   default:
     break;
