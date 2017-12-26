@@ -16,15 +16,13 @@ Task::Task(TaskInfo info) :sub_process_(task_info_.working_dir,
     atoi(task_info_.time_out.c_str())) {
   task_info_ = info;
   err_code_ = 0;
-#if defined(_WIN32)
-  process_id = nullptr;
-#else
-  process_id = 0;
-#endif
   is_period_ = !task_info_.cronat.empty();
   Log::Info("taskid:%s command_id:%s content:%s params:%s", \
       task_info_.task_id.c_str(), task_info_.command_id.c_str(),
       task_info_.content.c_str(), task_info_.params.c_str());
+}
+
+Task::Task() : sub_process_("", 3600){
 }
 
 void Task::Run() {
@@ -56,6 +54,30 @@ void Task::ReportStatus(std::string status, std::string instance_id) {
   Log::Info("ReportStatus status:%s", status.c_str());
 }
 
+void Task::CheckTimeout() {
+#if defined(_WIN32)
+  HANDLE hprocess = sub_process_.get_id();
+  DWORD ExitCode = 0;
+  ::GetExitCodeProcess(hprocess, &ExitCode);
+  if(ExitCode == STILL_ACTIVE) {
+    Log::Info("process is timeout");
+    ReportTimeout();
+    ::TerminateProcess(hprocess, 0);
+  } else {
+    Log::Info("process is not timeout");
+  }
+#else
+  pid_t = sub_process_.get_id();
+  if(kill(pid, 0) != 0) {
+    Log::Info("process is not timeout");
+  } else {
+    Log::Info("process is timeout");
+    ReportTimeout();
+    kill(pid, SIGKILL)
+   }
+#endif
+}
+
 void Task::ReportOutput() {
   status_ = "finished";
 
@@ -85,4 +107,29 @@ void Task::ReportOutput() {
       task_info_.task_id.c_str(), task_output_.c_str(),
       err_code_, response.c_str());
 }
+
+void Task::ReportTimeout() {
+  Log::Info("Report timeout");
+
+  status_ = "failed";
+
+  std::string response;
+  std::string input;
+  Json::Value jsonRoot;
+  Json::Value jsonOutput;
+
+  jsonOutput["taskInstanceOutput"] = "";
+  jsonRoot["taskID"] = task_info_.task_id;
+  jsonOutput["errNo"] = (int)err_code_;
+  jsonRoot["taskStatus"] = status_;
+  jsonRoot["taskOutput"] = "";
+  input = jsonRoot.toStyledString();
+
+  if (HostChooser::m_HostSelect.empty()) {
+    return;
+  }
+  std::string url = ServiceProvide::GetReportTaskOutputService();
+  HttpRequest::http_request_post(url, input, response);
+}
+
 }  // namespace task_engine

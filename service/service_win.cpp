@@ -25,6 +25,7 @@
 #include "optparse/OptionParser.h"
 #include "curl/curl.h"
 #include "plugin/timer_manager.h"
+#include "plugin/timeout_listener.h"
 #include "utils/dump.h"
 #include "utils/Encode.h"
 #include "../VersionInfo.h"
@@ -40,6 +41,7 @@
 #define ROLL_TIMER_DUETIME 20*1000
 #define UPDATERFILE "aliyun_assist_update.exe"
 #define UPDATERCOMMANDLINE " --check_update"
+static bool fetch_period_task_finished = false;
 
 #define DEV_VIRTIO
 #define DEV_SERIAL "\\\\.\\Global\\org.qemu.guest_agent.0"
@@ -503,9 +505,11 @@ VOID ControlHandler(DWORD controlCode) {
 
 // Initializes the service by starting its threads
 BOOL InitService() {
-  Singleton<task_engine::TimerManager>::I().Start();
-  Singleton<task_engine::TaskSchedule>::I().Fetch();
-  Singleton<task_engine::TaskSchedule>::I().FetchPeriodTask();
+  if(!HostChooser::m_HostSelect.empty()) {
+    Singleton<task_engine::TaskSchedule>::I().Fetch();
+    Singleton<task_engine::TaskSchedule>::I().FetchPeriodTask();
+    fetch_period_task_finished = true;
+  }
 
   DWORD id;
 
@@ -704,6 +708,12 @@ void try_connect_again(void) {
     HostChooser  host_choose;
     bool found = host_choose.Init(path_service.GetConfigPath());
     if (found) {
+      if(!fetch_period_task_finished) {
+        if (!HostChooser::m_HostSelect.empty()) {
+          Singleton<task_engine::TaskSchedule>::I().FetchPeriodTask();
+          fetch_period_task_finished = true;
+        }
+      }
       break;
     }
   }

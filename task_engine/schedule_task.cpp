@@ -14,6 +14,7 @@
 #include "utils/Log.h"
 #include "utils/Encode.h"
 #include "plugin/timer_manager.h"
+#include "plugin/timeout_listener.h"
 
 namespace task_engine {
 void Execute(void* context) {
@@ -26,16 +27,37 @@ void Execute(void* context) {
   task->Run();
   Log::Info("task after running");
   task->ReportOutput();
+}
+
+void task_timeout_callback(void * context) {
+  Log::Info("task cleanup");
+  Task* task = reinterpret_cast<Task*>(context);
+  if(!task) {
+    Log::Error("task is nullptr");
+    return;
+  }
+  task->CheckTimeout();
 #if !defined(TEST_MODE)
   if (!task->IsPeriod()) {
     Singleton<TaskFactory>::I().RemoveTask(task->GetTaskInfo().task_id);
+  } else {
+    delete task;
   }
 #endif
 }
 
 void period_task_callback(void * context) {
   Log::Info("begin to execute period task in time thread");
-  Task* task = reinterpret_cast<Task*>(context);
+  Task* period_task = reinterpret_cast<Task*>(context);
+  if(!period_task) {
+    Log::Error("task is nullptr");
+    return;
+  }
+  Task* task = new Task();
+  memcpy(task, period_task, sizeof(Task));
+  Singleton<TimeoutListener>::I().CreateTimer(
+          &task_timeout_callback,
+          reinterpret_cast<void*>(task), atoi(task->GetTaskInfo().time_out.c_str()));
 #if defined(_WIN32)
   std::thread t1(Execute, task);
   t1.detach();
@@ -103,6 +125,9 @@ Task* TaskSchedule::Schedule(TaskInfo task_info) {
           task_info.task_id, time_id));
     }
   } else {
+       Singleton<TimeoutListener>::I().CreateTimer(
+          &task_timeout_callback,
+          reinterpret_cast<void*>(task), atoi(task_info.time_out.c_str()));
 #if defined(_WIN32)
     std::thread t1(Execute, task);
     t1.detach();

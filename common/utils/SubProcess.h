@@ -33,17 +33,25 @@ class SubProcess {
   HANDLE get_id() {
     return _hProcess;
   }
+#else
+  pid_t get_id() {
+    return _pid;
+  }
 #endif
 
   bool Execute(string &out, long &exitCode);
   bool RunModule(string moduleName);
   bool IsExecutorExist(string guid);
+  FILE *popen2(const char *cmdstring, const char *type, const char *dir);
+  int pclose2(FILE *fp);
 
  private:
   string  _cmd;
   string  _cwd;
 #if defined(_WIN32)
   HANDLE _hProcess;
+#else
+  pid_t _pid;
 #endif
   int  _time_out;
   bool ExecuteCmd(char * cmd, const char * cwd, bool isWait, string & out, long & exitCode);
