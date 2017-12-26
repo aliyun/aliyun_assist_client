@@ -11,6 +11,11 @@
 #include "utils/Log.h"
 #include "utils/service_provide.h"
 
+#if !defined(_WIN32)
+#include<sys/types.h>
+#include<signal.h>
+#endif
+
 namespace task_engine {
 Task::Task(TaskInfo info) :sub_process_(task_info_.working_dir,
     atoi(task_info_.time_out.c_str())) {
@@ -67,13 +72,13 @@ void Task::CheckTimeout() {
     Log::Info("process is not timeout");
   }
 #else
-  pid_t = sub_process_.get_id();
+  pid_t pid= sub_process_.get_id();
   if(kill(pid, 0) != 0) {
     Log::Info("process is not timeout");
   } else {
     Log::Info("process is timeout");
     ReportTimeout();
-    kill(pid, SIGKILL)
+    kill(pid, SIGKILL);
    }
 #endif
 }

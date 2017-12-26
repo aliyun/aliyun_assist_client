@@ -240,7 +240,8 @@ bool SubProcess::IsExecutorExist(string guid) {
 
 #ifndef _WIN32
 #define SHELL "/bin/bash"
-
+#include<sys/types.h>
+#include<sys/wait.h>
 static pid_t *childpid=NULL;  /*ptr to array allocated at run-time*/
 static int maxfd;  /*from our open_max(), {Prox openmax}*/
 
@@ -256,7 +257,7 @@ FILE *SubProcess::popen2(const char *cmdstring, const char *type, const char *di
     }
     if(childpid == NULL) {  /*first time throngh, allocate zeroed out array for child pids*/
        maxfd = sysconf(_SC_OPEN_MAX);
-       if((childpid = calloc(maxfd, sizeof(pid_t))) == NULL)
+       if((childpid = (pid_t *)calloc(maxfd, sizeof(pid_t))) == NULL)
            return(NULL);
     }
     if(pipe(pfd) < 0) 
@@ -281,7 +282,7 @@ FILE *SubProcess::popen2(const char *cmdstring, const char *type, const char *di
         for(i = 0; i < maxfd; i++) 
             if(childpid[i] > 0)
                 close(i);
-        if(length(dir) > 0) {
+        if(strlen(dir) > 0) {
           chdir(dir);
         }
         execl(SHELL, "bash", "-c", cmdstring, (char *)0);
