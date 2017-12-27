@@ -21,6 +21,7 @@ Task::Task(TaskInfo info) :sub_process_(task_info_.working_dir,
     atoi(task_info_.time_out.c_str())) {
   task_info_ = info;
   err_code_ = 0;
+  is_timeout = false;
   is_period_ = !task_info_.cronat.empty();
   Log::Info("taskid:%s command_id:%s content:%s params:%s", \
       task_info_.task_id.c_str(), task_info_.command_id.c_str(),
@@ -28,6 +29,7 @@ Task::Task(TaskInfo info) :sub_process_(task_info_.working_dir,
 }
 
 Task::Task() : sub_process_("", 3600){
+  is_timeout = false;
 }
 
 void Task::Run() {
@@ -66,7 +68,7 @@ void Task::CheckTimeout() {
   ::GetExitCodeProcess(hprocess, &ExitCode);
   if(ExitCode == STILL_ACTIVE) {
     Log::Info("process is timeout");
-    ReportTimeout();
+    is_timeout = true;
     ::TerminateProcess(hprocess, 0);
   } else {
     Log::Info("process is not timeout");
@@ -77,13 +79,17 @@ void Task::CheckTimeout() {
     Log::Info("process is not timeout");
   } else {
     Log::Info("process is timeout");
-    ReportTimeout();
+    is_timeout = true;
     kill(pid, SIGKILL);
    }
 #endif
 }
 
 void Task::ReportOutput() {
+  if(is_timeout) {
+    ReportTimeout();
+    return;
+  }
   status_ = "finished";
 
   std::string response;

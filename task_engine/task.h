@@ -27,6 +27,7 @@ class Task {
   void ReportOutput();
   void ReportTimeout();
   bool IsPeriod() { return is_period_; }
+  bool IsTimeout() { return is_timeout; }
   std::string GetOutput() { return task_output_; }
   TaskInfo GetTaskInfo() { return task_info_; }
   void CheckTimeout();
@@ -37,6 +38,7 @@ class Task {
   TaskInfo task_info_;
   SubProcess sub_process_;
   bool is_period_;
+  bool is_timeout;
 };
 }  // namespace task_engine
 #endif  // CLIENT_TASK_ENGINE_TASK_H_

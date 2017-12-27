@@ -98,7 +98,7 @@ bool SubProcess::ExecuteCmd(char* cmd, const char* cwd, bool isWait, string& out
     };
 
     if ( WAIT_OBJECT_0 ==
-         WaitForSingleObject(pi.hProcess, _time_out) ) {
+         WaitForSingleObject(pi.hProcess, INFINITE) ) {
       i++;
       DWORD exitCodeD;
       GetExitCodeProcess(pi.hProcess, &exitCodeD);
@@ -246,7 +246,7 @@ bool SubProcess::ExecuteCMD_LINUX(char* cmd, const char* cwd, bool isWait, strin
   char tmp_buf[1024] = {0};
   char result[1024 * 10] = {0};
   if(strlen() > 0) {
-    chdir(cwd);
+    chdir(cwd); //Fix later by rewrite popen source code.
   }
   if ((ptr_ = popen(cmd, "r", cwd)) != NULL) {
     while (fgets(tmp_buf, 1024, ptr_) != NULL) {

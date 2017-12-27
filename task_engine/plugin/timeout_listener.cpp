@@ -56,6 +56,11 @@ void  TimeoutListener::Stop() {
 
 void* TimeoutListener::CreateTimer(TimeoutNotifier notifier,
     void* ctx, int timeout) {
+#if !defined(TEST_MODE)
+  if(timeout < 10) {
+    timeout = 10;
+  }
+#endif
   const char*  err = nullptr;
 
   time_t   now = time(0);

@@ -89,27 +89,12 @@ TEST(TestTaskEgine, RunBatScriptTimeout) {
       Singleton<task_engine::TaskSchedule>::I().Schedule(info);
   Sleep(8000);
   bool finished = false;
-  if(task->GetOutput().find("test") != std::string::npos) {
+  if(task->IsTimeout() == true) {
     finished = true;
   }
   EXPECT_EQ(true, finished);
 }
 
-TEST(TestTaskEgine, RunPowshellScript) {
-  task_engine::TaskInfo info;
-  info.command_id = "RunPowerShellScript";
-  info.task_id = "t-120bf664f8454a7cbb64b0841c87f475";
-  info.content = "echo test";
-  info.time_out = "3600";
-  task_engine::Task* task =
-    Singleton<task_engine::TaskSchedule>::I().Schedule(info);
-  Sleep(4000);
-  bool finished = false;
-  if (task->GetOutput().find("test") != std::string::npos) {
-    finished = true;
-  }
-  EXPECT_EQ(true, finished);
-}
 
 TEST(TestTaskEgine, RunPeriodTask) {
   task_engine::TaskInfo info;
