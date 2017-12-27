@@ -58,7 +58,6 @@ class TimeoutListener {
   pthread_cond_t cond;
   pthread_mutex_t     mutex;
 #endif
-  std::set<TimeoutObject*>   m_deleted;
   std::thread*             m_worker;
 };
 

@@ -54,12 +54,6 @@ void  TimeoutListener::Stop() {
   }
 }
 
-void  TimeoutListener::DeleteTimer(void* item) {
-  AutoMutexLocker(&m_mutex) {
-    m_deleted.insert(reinterpret_cast<TimeoutObject*>(item));
-  }
-}
-
 void* TimeoutListener::CreateTimer(TimeoutNotifier notifier,
     void* ctx, int timeout) {
   const char*  err = nullptr;
@@ -89,9 +83,13 @@ void TimeoutListener::NotifyTimer() {
   AutoMutexLocker(&m_mutex) {
     time_t  now = time(0);
     while (!m_queue.empty() && now > m_queue.top()->time) {
-      delete m_queue.top();
+      execute_list.push_back(m_queue.top());
       m_queue.pop();
     }
+  }
+
+  for (int i = 0; i != execute_list.size(); i++) {
+    execute_list[i]->notifier(execute_list[i]->context);
   }
 }
 
