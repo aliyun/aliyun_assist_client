@@ -245,10 +245,10 @@ bool SubProcess::IsExecutorExist(string guid) {
 bool SubProcess::ExecuteCMD_LINUX(char* cmd, const char* cwd, bool isWait, string& out, long &exitCode) {
   char tmp_buf[1024] = {0};
   char result[1024 * 10] = {0};
-  if(strlen() > 0) {
+  if(strlen(cwd) > 0) {
     chdir(cwd); //Fix later by rewrite popen source code.
   }
-  if ((ptr_ = popen(cmd, "r", cwd)) != NULL) {
+  if ((ptr_ = popen(cmd, "r")) != NULL) {
     while (fgets(tmp_buf, 1024, ptr_) != NULL) {
       strcat(result, tmp_buf);
       if (strlen(result)>1024*8) break;
@@ -280,7 +280,7 @@ HANDLE SubProcess::get_id() {
 struct _IO_FILE_plus
 {
   _IO_FILE file;
-  const struct void *vtable;
+  const void *vtable;
 };
 
 struct _IO_proc_file

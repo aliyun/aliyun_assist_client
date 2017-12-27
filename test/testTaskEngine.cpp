@@ -98,15 +98,16 @@ TEST(TestTaskEgine, RunBatScriptTimeout) {
 
 TEST(TestTaskEgine, RunPeriodTask) {
   task_engine::TaskInfo info;
-  info.command_id = "RunPowerShellScript";
+  info.command_id = "RunBatScript";
   info.task_id = "t-120bf664f8454a7cbb64b0841c87f476";
   info.content = "echo test";
-  info.time_out = "3600";
-  info.cronat = "*/1 * * * * *";
+  info.time_out = "ping 1.1.1.1 -n 1 -w 1000 > nul";
+  info.cronat = "*/5 * * * * *";
+  info.time_out = "5";
   Singleton<task_engine::TimerManager>::I().Start();
   task_engine::Task* task =
     Singleton<task_engine::TaskSchedule>::I().Schedule(info);
-  Sleep(5*1000);
+  Sleep(5*1000000);
   // Todo() watch the log to check the task status.
 }
 #else
