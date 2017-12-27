@@ -40,12 +40,15 @@ class SubProcess {
   bool IsExecutorExist(string guid);
 
  private:
+  int pclose2(FILE *fp);
+  FILE * popen2(const char *cmdstring, const char *type, const char *);
+
   string  _cmd;
   string  _cwd;
 #if defined(_WIN32)
   HANDLE _hProcess;
 #else
-  FILE* ptr_;
+  pid_t pid_;
 #endif
   int  _time_out;
   bool ExecuteCmd(char * cmd, const char * cwd, bool isWait, string & out, long & exitCode);

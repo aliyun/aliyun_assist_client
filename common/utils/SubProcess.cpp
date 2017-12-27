@@ -24,7 +24,7 @@ SubProcess::SubProcess(string cwd, int time_out) {
 #if defined(_WIN32)
   _hProcess = nullptr;
 #else
-  ptr_ = nullptr;
+  pid_ = 0;
 #endif
 }
 
@@ -35,7 +35,7 @@ SubProcess::SubProcess(string cmd, string cwd) {
 #if defined(_WIN32)
   _hProcess = nullptr;
 #else
-  ptr_ = 0;
+  pid_ = 0;
 #endif
 }
 
@@ -242,13 +242,108 @@ bool SubProcess::IsExecutorExist(string guid) {
 
 #ifndef _WIN32
 
+#include    <sys/wait.h>  
+#include    <errno.h>  
+#include    <fcntl.h>  
+//#include    "ourhdr.h"  
+  
+static pid_t    *childpid = NULL;  
+                        /* ptr to array allocated at run-time */  
+static int      maxfd;  /* from our open_max(), {Prog openmax} */  
+  
+#define SHELL   "/bin/sh"  
+
+FILE * SubProcess::popen2(const char *cmdstring, const char *type, const char *cwd)  
+{  
+    int     i, pfd[2];  
+    pid_t   pid;  
+    FILE    *fp;  
+  
+            /* only allow "r" or "w" */  
+    if ((type[0] != 'r' && type[0] != 'w') || type[1] != 0) {  
+        errno = EINVAL;     /* required by POSIX.2 */  
+        return(NULL);  
+    }  
+  
+    if (childpid == NULL) {     /* first time through */  
+                /* allocate zeroed out array for child pids */  
+        maxfd = 1024 * 8;  
+        if ( (childpid = (pid_t *)calloc(maxfd, sizeof(pid_t))) == NULL)  
+            return(NULL);  
+    }  
+  
+    if (pipe(pfd) < 0)  
+        return(NULL);   /* errno set by pipe() */  
+  
+    if ( (pid = fork()) < 0)  
+        return(NULL);   /* errno set by fork() */  
+    else if (pid == 0) {                            /* child */  
+        chdir(cwd); //change dir
+        if (*type == 'r') {  
+            close(pfd[0]);  
+            if (pfd[1] != STDOUT_FILENO) {  
+                dup2(pfd[1], STDOUT_FILENO);  
+                close(pfd[1]);  
+            }  
+        } else {  
+            close(pfd[1]);  
+            if (pfd[0] != STDIN_FILENO) {  
+                dup2(pfd[0], STDIN_FILENO);  
+                close(pfd[0]);  
+            }  
+        }  
+            /* close all descriptors in childpid[] */  
+        for (i = 0; i < maxfd; i++)  
+            if (childpid[ i ] > 0)  
+                close(i);  
+  
+        execl(SHELL, "sh", "-c", cmdstring, (char *) 0);  
+        _exit(127);  
+    }  
+                                /* parent */  
+    pid_ = pid;
+    if (*type == 'r') {  
+        close(pfd[1]);  
+        if ( (fp = fdopen(pfd[0], type)) == NULL)  
+            return(NULL);  
+    } else {  
+        close(pfd[0]);  
+        if ( (fp = fdopen(pfd[1], type)) == NULL)  
+            return(NULL);  
+    }  
+    Log::Info("pid =%d", pid);
+    childpid[fileno(fp)] = pid; /* remember child pid for this fd */  
+    return(fp);  
+}  
+
+int SubProcess::pclose2(FILE *fp)  
+{  
+    int     fd, stat;  
+    pid_t   pid;  
+  
+    if (childpid == NULL)  
+        return(-1);     /* popen() has never been called */  
+  
+    fd = fileno(fp);  
+    if ( (pid = childpid[fd]) == 0)  
+        return(-1);     /* fp wasn't opened by popen() */  
+  
+    childpid[fd] = 0;  
+    if (fclose(fp) == EOF)  
+        return(-1);  
+  
+    while (waitpid(pid, &stat, 0) < 0)  
+        if (errno != EINTR)  
+            return(-1); /* error other than EINTR from waitpid() */  
+  
+    return(stat);   /* return child's termination status */  
+} 
+
 bool SubProcess::ExecuteCMD_LINUX(char* cmd, const char* cwd, bool isWait, string& out, long &exitCode) {
   char tmp_buf[1024] = {0};
   char result[1024 * 10] = {0};
-  if(strlen(cwd) > 0) {
-    chdir(cwd); //Fix later by rewrite popen source code.
-  }
-  if ((ptr_ = popen(cmd, "r")) != NULL) {
+
+  if ((ptr_ = popen2(cmd, "r" cwd)) != NULL) {
     while (fgets(tmp_buf, 1024, ptr_) != NULL) {
       strcat(result, tmp_buf);
       if (strlen(result)>1024*8) break;
@@ -256,7 +351,7 @@ bool SubProcess::ExecuteCMD_LINUX(char* cmd, const char* cwd, bool isWait, strin
     Log::Info("result:%s", result);
     out = result;
     exitCode = 0;
-    pclose(ptr_);
+    pclose2(ptr_);
     ptr_ = NULL;
     return true;
   } else  {
@@ -268,31 +363,14 @@ bool SubProcess::ExecuteCMD_LINUX(char* cmd, const char* cwd, bool isWait, strin
 }
 #endif
 
-
-
 #if defined(_WIN32)
 HANDLE SubProcess::get_id() {
   return _hProcess;
 }
 #else
 
-//#include "libio.h"
-struct _IO_FILE_plus
-{
-  _IO_FILE file;
-  const void *vtable;
-};
-
-struct _IO_proc_file
-{
-  struct _IO_FILE_plus file;
-  /* Following fields must match those in class procbuf (procbuf.h) */
-  pid_t pid;
-  struct _IO_proc_file *next;
-};
-
 pid_t SubProcess::get_id() {
-  return ((_IO_proc_file *) ptr_)->pid;
+  return pid_;
 }
 #endif
 
