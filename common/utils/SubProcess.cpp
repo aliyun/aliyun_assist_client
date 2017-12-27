@@ -46,12 +46,12 @@ bool SubProcess::Execute() {
   long   exitCode;
 
   char*  cwd = _cwd.length() ? (char*)_cwd.c_str() : nullptr;
-  return ExecuteCmd((char*)_cmd.c_str(),cwd, false, out, exitCode);
+  return ExecuteCmd((char*)_cmd.c_str(),(char*)_cwd.c_str(), false, out, exitCode);
 }
 
 bool SubProcess::Execute(string &out, long &exitCode) {
   char*  cwd = _cwd.length() ? (char*)_cwd.c_str() : nullptr;
-  return ExecuteCmd((char*)_cmd.c_str(), cwd, true, out, exitCode);
+  return ExecuteCmd((char*)_cmd.c_str(), (char*)_cwd.c_str(), true, out, exitCode);
 }
 
 
