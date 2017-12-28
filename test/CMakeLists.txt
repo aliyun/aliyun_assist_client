@@ -35,7 +35,7 @@ file(INSTALL ${CMAKE_CURRENT_SOURCE_DIR}/data/python-3.6.1.zip DESTINATION ${CMA
 file(INSTALL ${CMAKE_CURRENT_SOURCE_DIR}/data/node-v6.11.2-linux-x86.zip DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/../output)
 link_libraries(gtest gtest_main)
 link_libraries(assist-common)
-link_libraries(third_party)
+link_libraries(third_party dl)
 aux_source_directory(../task_engine DIR_SRCS)
 aux_source_directory(../task_engine/plugin DIR_SRCS)
 aux_source_directory(. DIR_SRCS)

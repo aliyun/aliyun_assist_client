@@ -15,6 +15,7 @@
 #include "jsoncpp/json.h"
 #include "schedule_task.h"
 #include "plugin/timer_manager.h"
+#include "plugin/timeout_listener.h"
 #include "./task.h"
 #include "./task_factory.h"
 #include "./fetch_task.h"
@@ -56,14 +57,14 @@ TEST(TestTaskEgine, FetchTask) {
   EXPECT_EQ(0, value.compare(task_info[0].instance_id));
 }
 
-
+// ping 1.1.1.1 -n 1 -w 60000
 TEST(TestTaskEgine, RunBatScript) {
   init_log();
   Log::Info("begin test");
   task_engine::TaskInfo info;
   info.command_id = "RunBatScript";
   info.task_id = "t-120bf664f8454a7cbb64b0841c87f474";
-  info.content = "echo test";
+  info.content = "echo 123";
   info.time_out = "3600";
   task_engine::Task* task =
       Singleton<task_engine::TaskSchedule>::I().Schedule(info);
@@ -75,33 +76,38 @@ TEST(TestTaskEgine, RunBatScript) {
   EXPECT_EQ(true, finished);
 }
 
-TEST(TestTaskEgine, RunPowshellScript) {
+TEST(TestTaskEgine, RunBatScriptTimeout) {
+  Singleton<task_engine::TimeoutListener>::I().Start();
+  init_log();
+  Log::Info("begin test");
   task_engine::TaskInfo info;
-  info.command_id = "RunPowerShellScript";
-  info.task_id = "t-120bf664f8454a7cbb64b0841c87f475";
-  info.content = "echo test";
-  info.time_out = "3600";
+  info.command_id = "RunBatScript";
+  info.task_id = "t-120bf664f8454a7cbb64b0841c87f000";
+  info.content = "ping 1.1.1.1 -n 1 -w 60000 > nul";
+  info.time_out = "5";
   task_engine::Task* task =
-    Singleton<task_engine::TaskSchedule>::I().Schedule(info);
-  Sleep(4000);
+      Singleton<task_engine::TaskSchedule>::I().Schedule(info);
+  Sleep(8000);
   bool finished = false;
-  if (task->GetOutput().find("test") != std::string::npos) {
+  if(task->IsTimeout() == true) {
     finished = true;
   }
   EXPECT_EQ(true, finished);
 }
 
+
 TEST(TestTaskEgine, RunPeriodTask) {
   task_engine::TaskInfo info;
-  info.command_id = "RunPowerShellScript";
+  info.command_id = "RunBatScript";
   info.task_id = "t-120bf664f8454a7cbb64b0841c87f476";
   info.content = "echo test";
-  info.time_out = "3600";
-  info.cronat = "*/1 * * * * *";
+  info.time_out = "10";
+  info.cronat = "*/5 * * * * *";
+  info.time_out = "5";
   Singleton<task_engine::TimerManager>::I().Start();
   task_engine::Task* task =
     Singleton<task_engine::TaskSchedule>::I().Schedule(info);
-  Sleep(5*1000);
+  Sleep(5*1000000);
   // Todo() watch the log to check the task status.
 }
 #else
@@ -118,6 +124,25 @@ TEST(TestTaskEgine, RunShellScript) {
   sleep(3);
   bool finished = false;
   if (task->GetOutput().find("test") != std::string::npos) {
+    finished = true;
+  }
+  EXPECT_EQ(true, finished);
+}
+
+TEST(TestTaskEgine, RunShellScriptTimeout) {
+  init_log();
+  Singleton<task_engine::TimeoutListener>::I().Start();
+  Log::Info("begin test");
+  task_engine::TaskInfo info;
+  info.command_id = "RunShellScript";
+  info.task_id = "t-120bf664f8454a7cbb64b0841c87f001";
+  info.content = "sleep 100";
+  info.time_out = "4";
+  task_engine::Task* task =
+      Singleton<task_engine::TaskSchedule>::I().Schedule(info);
+  sleep(6);
+  bool finished = false;
+  if(task->IsTimeout() == true) {
     finished = true;
   }
   EXPECT_EQ(true, finished);

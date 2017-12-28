@@ -30,9 +30,9 @@ class SubProcess {
     _cmd = cmd;
   }
 #if defined(_WIN32)
-  HANDLE get_id() {
-    return _hProcess;
-  }
+  HANDLE get_id();
+#else
+  pid_t get_id();
 #endif
 
   bool Execute(string &out, long &exitCode);
@@ -40,10 +40,15 @@ class SubProcess {
   bool IsExecutorExist(string guid);
 
  private:
+  int pclose2(FILE *fp);
+  FILE * popen2(const char *cmdstring, const char *type, const char *);
+
   string  _cmd;
   string  _cwd;
 #if defined(_WIN32)
   HANDLE _hProcess;
+#else
+  pid_t pid_;
 #endif
   int  _time_out;
   bool ExecuteCmd(char * cmd, const char * cwd, bool isWait, string & out, long & exitCode);
