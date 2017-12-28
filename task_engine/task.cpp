@@ -14,6 +14,7 @@
 #if !defined(_WIN32)
 #include<sys/types.h>
 #include<signal.h>
+#include <sys/wait.h>
 #endif
 
 namespace task_engine {
@@ -81,6 +82,7 @@ void Task::CheckTimeout() {
     Log::Info("process is timeout");
     is_timeout = true;
     kill(pid, SIGKILL);
+    ReportTimeout();
    }
 #endif
 }

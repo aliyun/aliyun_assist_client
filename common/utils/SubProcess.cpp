@@ -245,6 +245,7 @@ bool SubProcess::IsExecutorExist(string guid) {
 #include    <sys/wait.h>  
 #include    <errno.h>  
 #include    <fcntl.h>  
+
 //#include    "ourhdr.h"  
   
 static pid_t    *childpid = NULL;  
@@ -279,6 +280,7 @@ FILE * SubProcess::popen2(const char *cmdstring, const char *type, const char *c
         return(NULL);   /* errno set by fork() */  
     else if (pid == 0) {                            /* child */  
         chdir(cwd); //change dir
+
         if (*type == 'r') {  
             close(pfd[0]);  
             if (pfd[1] != STDOUT_FILENO) {  
@@ -342,17 +344,17 @@ int SubProcess::pclose2(FILE *fp)
 bool SubProcess::ExecuteCMD_LINUX(char* cmd, const char* cwd, bool isWait, string& out, long &exitCode) {
   char tmp_buf[1024] = {0};
   char result[1024 * 10] = {0};
-
-  if ((ptr_ = popen2(cmd, "r" cwd)) != NULL) {
-    while (fgets(tmp_buf, 1024, ptr_) != NULL) {
+  FILE* ptr = nullptr;
+  if ((ptr = popen2(cmd, "r", cwd)) != NULL) {
+    while (fgets(tmp_buf, 1024, ptr) != NULL) {
       strcat(result, tmp_buf);
       if (strlen(result)>1024*8) break;
     }
     Log::Info("result:%s", result);
     out = result;
     exitCode = 0;
-    pclose2(ptr_);
-    ptr_ = NULL;
+    pclose2(ptr);
+    ptr = NULL;
     return true;
   } else  {
     Log::Error("popen failed.");

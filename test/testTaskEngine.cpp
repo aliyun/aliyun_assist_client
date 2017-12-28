@@ -101,7 +101,7 @@ TEST(TestTaskEgine, RunPeriodTask) {
   info.command_id = "RunBatScript";
   info.task_id = "t-120bf664f8454a7cbb64b0841c87f476";
   info.content = "echo test";
-  info.time_out = "ping 1.1.1.1 -n 1 -w 1000 > nul";
+  info.time_out = "10";
   info.cronat = "*/5 * * * * *";
   info.time_out = "5";
   Singleton<task_engine::TimerManager>::I().Start();
@@ -131,6 +131,7 @@ TEST(TestTaskEgine, RunShellScript) {
 
 TEST(TestTaskEgine, RunShellScriptTimeout) {
   init_log();
+  Singleton<task_engine::TimeoutListener>::I().Start();
   Log::Info("begin test");
   task_engine::TaskInfo info;
   info.command_id = "RunShellScript";
@@ -141,7 +142,7 @@ TEST(TestTaskEgine, RunShellScriptTimeout) {
       Singleton<task_engine::TaskSchedule>::I().Schedule(info);
   sleep(6);
   bool finished = false;
-  if (task->GetOutput().find("test") != std::string::npos) {
+  if(task->IsTimeout() == true) {
     finished = true;
   }
   EXPECT_EQ(true, finished);
