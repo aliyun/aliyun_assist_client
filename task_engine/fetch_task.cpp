@@ -43,6 +43,9 @@ void parse_task_info(std::string response,
         info.working_dir = jsonValue["workingDirectory"].asString();
         info.cronat = jsonValue["cron"].asString();
         info.time_out = jsonValue["timeOut"].asString();
+        if(info.time_out.empty()) {
+          info.time_out = "3600";
+        }
         task_info.push_back(info);
       }
     }
