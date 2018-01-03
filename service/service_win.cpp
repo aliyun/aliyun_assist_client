@@ -505,6 +505,8 @@ VOID ControlHandler(DWORD controlCode) {
 
 // Initializes the service by starting its threads
 BOOL InitService() {
+  Singleton<task_engine::TimerManager>::I().Start();
+  Singleton<task_engine::TimeoutListener>::I().Start();
   if(!HostChooser::m_HostSelect.empty()) {
     Singleton<task_engine::TaskSchedule>::I().Fetch();
     Singleton<task_engine::TaskSchedule>::I().FetchPeriodTask();
