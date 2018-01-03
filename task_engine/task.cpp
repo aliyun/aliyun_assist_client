@@ -143,6 +143,11 @@ void Task::ReportTimeout() {
   }
   std::string url = ServiceProvide::GetReportTaskOutputService();
   HttpRequest::http_request_post(url, input, response);
+
+  Log::Info("ReportOutput input:%s", input.c_str());
+  Log::Info("Report taskid:%s task_output:%s error_code:%d %s:response",
+      task_info_.task_id.c_str(), task_output_.c_str(),
+      err_code_, response.c_str());
 }
 
 }  // namespace task_engine
