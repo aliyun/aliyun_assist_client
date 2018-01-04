@@ -10,8 +10,14 @@ if [ -e /usr/sbin/aliyun-service ]; then
 
   ln -sf /usr/local/share/aliyun-assist/$assist_version/aliyun-service /usr/sbin/aliyun-service
   ln -sf /usr/local/share/aliyun-assist/$assist_version/aliyun_installer /usr/sbin/aliyun_installer
-  systemctl restart agentwatch
-  service agentwatch restart
+  
+  init_path=$(readlink -f $(which init))
+  if echo $init_path | grep -q 'systemd' &&   [[ -d /var/run/systemd/system ]] ; then
+    systemctl restart agentwatch
+  else
+    service agentwatch restart
+  fi
+
 elif [ -e /opt/sbin/aliyun-service ]; then
   assist_version=$(cat /opt/local/share/aliyun-assist/version)
   data_dir="/opt/local/share/aliyun-assist/$assist_version"
