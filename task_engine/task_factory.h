@@ -16,6 +16,7 @@ class TaskFactory {
   Task* GetTask(std::string id);
  private:
   std::map<std::string, Task*> task_maps;
+  std::map<std::string, int> history_task_maps;
   std::mutex mtx;
 };
 }  // namespace task_engine

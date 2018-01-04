@@ -131,11 +131,15 @@ void Task::ReportTimeout() {
   Json::Value jsonRoot;
   Json::Value jsonOutput;
 
-  jsonOutput["taskInstanceOutput"] = "";
+  Encoder encoder;
+  char* pencodedata = encoder.B64Encode(
+      (const unsigned char *)task_output_.c_str(), task_output_.size());
+  jsonOutput["taskInstanceOutput"] = pencodedata;
+  jsonOutput["errNo"] = 0;
   jsonRoot["taskID"] = task_info_.task_id;
   jsonOutput["errNo"] = (int)err_code_;
   jsonRoot["taskStatus"] = status_;
-  jsonRoot["taskOutput"] = "";
+  jsonRoot["taskOutput"] = jsonOutput;
   input = jsonRoot.toStyledString();
 
   if (HostChooser::m_HostSelect.empty()) {
