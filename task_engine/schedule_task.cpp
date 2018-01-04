@@ -53,7 +53,7 @@ void period_task_callback(void * context) {
     Log::Error("task is nullptr");
     return;
   }
-  Task* task = Singleton<TaskFactory>::I().CreateTask(period_task->GetTaskInfo());
+  Task* task = Singleton<TaskFactory>::I().CopyTask(period_task->GetTaskInfo());
   if (!task) {
     Log::Error("copy task failed");
     return;

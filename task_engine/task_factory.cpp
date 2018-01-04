@@ -75,13 +75,6 @@ Task* TaskFactory::CopyTask(TaskInfo info) {
    task = new RunShellScriptTask(info);
 #endif
  }
-  if (task) {
-    std::lock_guard<std::mutex> lck(mtx);
-    task_maps.insert(std::pair<std::string, Task*>(info.task_id, task));
-  } else {
-    Log::Error("TaskFactory::CreateTask eror taskid:%s",
-        info.task_id.c_str());
-  }
   return task;
 }
 
