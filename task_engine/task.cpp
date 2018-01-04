@@ -23,6 +23,7 @@ Task::Task(TaskInfo info) :sub_process_(task_info_.working_dir,
   task_info_ = info;
   err_code_ = 0;
   is_timeout = false;
+  is_reported = false;
   is_period_ = !task_info_.cronat.empty();
   Log::Info("taskid:%s command_id:%s content:%s params:%s", \
       task_info_.task_id.c_str(), task_info_.command_id.c_str(),
@@ -123,6 +124,10 @@ void Task::ReportOutput() {
 
 void Task::ReportTimeout() {
   Log::Info("Report timeout");
+  if(is_reported == true) {
+    return;
+  }
+  is_reported = true;
 
   status_ = "failed";
 

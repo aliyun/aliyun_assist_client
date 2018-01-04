@@ -39,6 +39,7 @@ class Task {
   SubProcess sub_process_;
   bool is_period_;
   bool is_timeout;
+  bool is_reported;
 };
 }  // namespace task_engine
 #endif  // CLIENT_TASK_ENGINE_TASK_H_
