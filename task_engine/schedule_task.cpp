@@ -37,13 +37,13 @@ void task_timeout_callback(void * context) {
     return;
   }
   task->CheckTimeout();
-#if !defined(TEST_MODE)
-  if (!task->IsPeriod()) {
-    Singleton<TaskFactory>::I().RemoveTask(task->GetTaskInfo().task_id);
-  } else {
-    delete task;
-  }
-#endif
+//#if !defined(TEST_MODE)
+//  if (!task->IsPeriod()) {
+//    Singleton<TaskFactory>::I().RemoveTask(task->GetTaskInfo().task_id);
+//  } else {
+//    delete task;
+//  }
+//#endif
 }
 
 void period_task_callback(void * context) {
