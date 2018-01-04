@@ -14,7 +14,7 @@ if [ -e /usr/sbin/aliyun-service ]; then
   service agentwatch restart
 elif [ -e /opt/sbin/aliyun-service ]; then
   assist_version=$(cat /opt/local/share/aliyun-assist/version)
-  data_dir="/usr/local/share/aliyun-assist/$assist_version"
+  data_dir="/opt/local/share/aliyun-assist/$assist_version"
 
   chmod a+x $data_dir/aliyun_assist_update
   chmod a+x $data_dir/aliyun_installer
