@@ -78,6 +78,10 @@ bool SubProcess::ExecuteCmd(char* cmd, const char* cwd, bool isWait, string& out
   si.dwFlags   |= STARTF_USESTDHANDLES;
 
   EnableWow64(false) ;
+  if(strlen(cwd) == 0) {
+    cwd = nullptr;
+  }
+
   BOOL ret = CreateProcessA(NULL, cmd, 0, 0, TRUE, 0, 0, cwd, &si, &pi);
   _hProcess = pi.hProcess;
   Log::Info("create process id:%d", GetProcessId(_hProcess));
