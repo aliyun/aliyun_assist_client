@@ -53,8 +53,7 @@ void period_task_callback(void * context) {
     Log::Error("task is nullptr");
     return;
   }
-  Task* task = new Task();
-  memcpy(task, period_task, sizeof(Task));
+  Task* task = new Task(period_task->GetTaskInfo());
   Singleton<TimeoutListener>::I().CreateTimer(
           &task_timeout_callback,
           reinterpret_cast<void*>(task), atoi(task->GetTaskInfo().time_out.c_str()));
