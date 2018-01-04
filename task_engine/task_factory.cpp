@@ -55,6 +55,36 @@ Task* TaskFactory::CreateTask(TaskInfo info) {
   return task;
 }
 
+
+Task* TaskFactory::CopyTask(TaskInfo info) {
+  Task* task = nullptr;
+  if (!info.command_id.compare("InstallPackage")) {
+    task = new InsatllPackageTask(info);
+  } else if (!info.command_id.compare("RunPowerShellScript")) {
+#if defined(_WIN32)
+    task = new RunPowerShellTask(info);
+#endif
+  } else if (!info.command_id.compare("RunBatScript")) {
+#if defined(_WIN32)
+    task = new RunBatTask(info);
+#endif
+  } else if (!info.command_id.compare("UpdateAgent")) {
+    task = new UpdateAliyunAgentTask(info);
+  } else if (!info.command_id.compare("RunShellScript")) {
+#if !defined(_WIN32)
+   task = new RunShellScriptTask(info);
+#endif
+ }
+  if (task) {
+    std::lock_guard<std::mutex> lck(mtx);
+    task_maps.insert(std::pair<std::string, Task*>(info.task_id, task));
+  } else {
+    Log::Error("TaskFactory::CreateTask eror taskid:%s",
+        info.task_id.c_str());
+  }
+  return task;
+}
+
 bool TaskFactory::RemoveTask(std::string id) {
   std::lock_guard<std::mutex> lck(mtx);
   std::map<std::string, Task*>::iterator iter;

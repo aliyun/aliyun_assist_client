@@ -12,6 +12,7 @@ class TaskFactory {
  public:
   TaskFactory();
   Task* CreateTask(TaskInfo info);
+  Task* CopyTask(TaskInfo info);
   bool RemoveTask(std::string id);
   Task* GetTask(std::string id);
  private:
