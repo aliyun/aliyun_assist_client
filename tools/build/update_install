@@ -1,18 +1,25 @@
 #!/bin/bash
 
-assist_version=$(cat /usr/local/share/aliyun-assist/version)
-data_dir="/usr/local/share/aliyun-assist/$assist_version"
-
-chmod a+x $data_dir/aliyun_assist_update
-chmod a+x $data_dir/aliyun_installer
-chmod a+x $data_dir/aliyun-service
-
 if [ -e /usr/sbin/aliyun-service ]; then
+  assist_version=$(cat /usr/local/share/aliyun-assist/version)
+  data_dir="/usr/local/share/aliyun-assist/$assist_version"
+
+  chmod a+x $data_dir/aliyun_assist_update
+  chmod a+x $data_dir/aliyun_installer
+  chmod a+x $data_dir/aliyun-service
+
   ln -sf /usr/local/share/aliyun-assist/$assist_version/aliyun-service /usr/sbin/aliyun-service
   ln -sf /usr/local/share/aliyun-assist/$assist_version/aliyun_installer /usr/sbin/aliyun_installer
   systemctl restart agentwatch
   service agentwatch restart
 elif [ -e /opt/sbin/aliyun-service ]; then
+  assist_version=$(cat /opt/local/share/aliyun-assist/version)
+  data_dir="/usr/local/share/aliyun-assist/$assist_version"
+
+  chmod a+x $data_dir/aliyun_assist_update
+  chmod a+x $data_dir/aliyun_installer
+  chmod a+x $data_dir/aliyun-service
+
   ln -sf /opt/local/share/aliyun-assist/$assist_version/aliyun-service /opt/sbin/aliyun-service
   ln -sf /opt/local/share/aliyun-assist/$assist_version/aliyun_installer /opt/sbin/aliyun_installer
   systemctl restart aliyun.servcie
