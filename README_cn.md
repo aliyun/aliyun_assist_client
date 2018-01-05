@@ -168,7 +168,7 @@ def get_task_detail_by_id(instance_id, invoke_id, result):
     response = _send_request(request)  
     invoke_detail = None  
     if response is not None:  
-        result_list = response.get('Invocation').get('ResultLists').get('ResultItem')  
+        result_list = response.get('Invocation').get('InvocationResults').get('InvocationResult')  
         for item in result_list:  
             if item.get('Output') == result:  
                 invoke_detail = item  

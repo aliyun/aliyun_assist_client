@@ -4,5 +4,10 @@ Windows Version: 1.0.0.81
 1  支持部分旧的镜像ACPI模式关机
 2  支持Windows Server 1709
 
+2018-1-5
+Linux Version 1.0.1.187
+Windows Version: 1:0.0.94
+增加超时机制上报和kill进程机制
+
 
 
