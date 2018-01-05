@@ -18,6 +18,14 @@ TaskFactory::TaskFactory() {
 }
 
 Task* TaskFactory::CreateTask(TaskInfo info) {
+  {
+    std::lock_guard<std::mutex> lck(mtx);
+    std::map<std::string, int>::iterator it;
+    it = history_task_maps.find(info.task_id);
+    if (it != history_task_maps.end()) {
+      return nullptr;
+    }
+  }
   Task* task = nullptr;
   if (!info.command_id.compare("InstallPackage")) {
     task = new InsatllPackageTask(info);
@@ -39,10 +47,34 @@ Task* TaskFactory::CreateTask(TaskInfo info) {
   if (task) {
     std::lock_guard<std::mutex> lck(mtx);
     task_maps.insert(std::pair<std::string, Task*>(info.task_id, task));
+    history_task_maps.insert(std::pair<std::string, int>(info.task_id, 0));
   } else {
     Log::Error("TaskFactory::CreateTask eror taskid:%s",
         info.task_id.c_str());
   }
+  return task;
+}
+
+
+Task* TaskFactory::CopyTask(TaskInfo info) {
+  Task* task = nullptr;
+  if (!info.command_id.compare("InstallPackage")) {
+    task = new InsatllPackageTask(info);
+  } else if (!info.command_id.compare("RunPowerShellScript")) {
+#if defined(_WIN32)
+    task = new RunPowerShellTask(info);
+#endif
+  } else if (!info.command_id.compare("RunBatScript")) {
+#if defined(_WIN32)
+    task = new RunBatTask(info);
+#endif
+  } else if (!info.command_id.compare("UpdateAgent")) {
+    task = new UpdateAliyunAgentTask(info);
+  } else if (!info.command_id.compare("RunShellScript")) {
+#if !defined(_WIN32)
+   task = new RunShellScriptTask(info);
+#endif
+ }
   return task;
 }
 

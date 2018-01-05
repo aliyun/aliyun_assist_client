@@ -19,14 +19,18 @@ struct TaskInfo {
 
 class Task {
  public:
+  Task();
   explicit Task(TaskInfo info);
   virtual void Run();
   void Cancel();
   void ReportStatus(std::string status, std::string instance_id="");
   void ReportOutput();
+  void ReportTimeout();
   bool IsPeriod() { return is_period_; }
+  bool IsTimeout() { return is_timeout; }
   std::string GetOutput() { return task_output_; }
   TaskInfo GetTaskInfo() { return task_info_; }
+  void CheckTimeout();
  protected:
   std::string task_output_;
   long err_code_;
@@ -34,11 +38,8 @@ class Task {
   TaskInfo task_info_;
   SubProcess sub_process_;
   bool is_period_;
-#if defined(_WIN32)
-  HANDLE process_id;
-#else
-  int process_id;
-#endif
+  bool is_timeout;
+  bool is_reported;
 };
 }  // namespace task_engine
 #endif  // CLIENT_TASK_ENGINE_TASK_H_

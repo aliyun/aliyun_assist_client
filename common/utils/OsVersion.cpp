@@ -1,5 +1,8 @@
 #ifdef _WIN32
 #include <Windows.h>
+#include <stdio.h>
+#include <tchar.h>
+#include <conio.h>
 #else
 #include <sys/utsname.h>
 #endif // _WIN32
@@ -11,6 +14,14 @@ string OsVersion::GetVersion() {
   return WindowsGetVersion();
 #else
   return LinuxGetVersion();
+#endif
+};
+
+bool OsVersion::Is64BitOS() {
+#ifdef _WIN32
+  return WindowsIs64BitOS();
+#else
+  return LinuxIs64BitOS();
 #endif
 };
 
@@ -108,6 +119,28 @@ string OsVersion::WindowsGetVersion() {
   // https://msdn.microsoft.com/en-us/library/ms724832.aspx
   return osname;
 }
+
+bool OsVersion::WindowsIs64BitOS()
+{
+  SYSTEM_INFO si;
+  typedef VOID(WINAPI *LPFN_GetNativeSystemInfo)(LPSYSTEM_INFO lpSystemInfo);
+  LPFN_GetNativeSystemInfo fnGetNativeSystemInfo = 
+      (LPFN_GetNativeSystemInfo)GetProcAddress(GetModuleHandle(_T("kernel32")), "GetNativeSystemInfo");
+
+  if (NULL != fnGetNativeSystemInfo) {
+    fnGetNativeSystemInfo(&si);
+  } else {
+    GetSystemInfo(&si);
+  }
+
+  if (si.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64 ||
+    si.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_IA64) {
+    return true;
+  }
+
+  return false;
+}
+
 #endif // _WIN32
 
 #ifndef _WIN32
@@ -140,5 +173,18 @@ string OsVersion::LinuxGetVersion() {
   */
 
   return osname;
+}
+
+bool OsVersion::LinuxIs64BitOS() {
+  struct utsname utsn;
+  if (uname(&utsn)) {
+    return false;
+  }
+
+  if (utsn.machine == "x86_64") {
+    return true;
+  } else {
+    return false;
+  }
 }
 #endif // !_WIN32

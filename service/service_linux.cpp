@@ -31,6 +31,7 @@
 #include "optparse/OptionParser.h"
 #include "curl/curl.h"
 #include "plugin/timer_manager.h"
+#include "plugin/timeout_listener.h"
 #include "utils/dump.h"
 #include "utils/Encode.h"
 #include "../VersionInfo.h"
@@ -69,7 +70,6 @@ void try_reconnect_net(void) {
       Singleton<task_engine::TaskSchedule>::I().FetchPeriodTask();
       fetch_period_task_finished = true;
     }
-
   }
 }
 
@@ -245,7 +245,7 @@ int BecomeDeamon()
 	}
 
 	/* Change the current working directory */
-	if ((chdir("/")) < 0) {
+	if ((chdir("/root")) < 0) {
 		Log::Error("Failed to change working directory for AliYunAssistService: %s", strerror(errno));
 		exit(EXIT_FAILURE);
 	}
@@ -262,6 +262,7 @@ int InitService()
 {
   Log::Info("InitService");
   Singleton<task_engine::TimerManager>::I().Start();
+  Singleton<task_engine::TimeoutListener>::I().Start();
   if(!HostChooser::m_HostSelect.empty()) {
     Singleton<task_engine::TaskSchedule>::I().Fetch();
     Singleton<task_engine::TaskSchedule>::I().FetchPeriodTask();

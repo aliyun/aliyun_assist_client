@@ -12,10 +12,12 @@ class TaskFactory {
  public:
   TaskFactory();
   Task* CreateTask(TaskInfo info);
+  Task* CopyTask(TaskInfo info);
   bool RemoveTask(std::string id);
   Task* GetTask(std::string id);
  private:
   std::map<std::string, Task*> task_maps;
+  std::map<std::string, int> history_task_maps;
   std::mutex mtx;
 };
 }  // namespace task_engine
