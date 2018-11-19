@@ -10,6 +10,7 @@ Description: Provide functions to make process
 #include <Windows.h>
 #else
 #include <unistd.h>
+#include <signal.h>
 #include <linux/limits.h>
 #endif // _WIN32
 
@@ -58,6 +59,8 @@ bool SubProcess::Execute(string &out, long &exitCode) {
 bool SubProcess::ExecuteCmd(char* cmd, const char* cwd, bool isWait, string& out, long &exitCode) {
 
 #ifdef _WIN32
+
+
   SECURITY_ATTRIBUTES sattr = { 0 };
   sattr.nLength = sizeof(sattr);
   sattr.bInheritHandle = TRUE;
@@ -77,38 +80,43 @@ bool SubProcess::ExecuteCmd(char* cmd, const char* cwd, bool isWait, string& out
   si.hStdError  = hChildOutW;
   si.dwFlags   |= STARTF_USESTDHANDLES;
 
-  EnableWow64(false) ;
-  if(strlen(cwd) == 0) {
+  if( strlen(cwd) == 0 ) {
     cwd = nullptr;
   }
 
+  EnableWow64(false);
   BOOL ret = CreateProcessA(NULL, cmd, 0, 0, TRUE, 0, 0, cwd, &si, &pi);
-  _hProcess = pi.hProcess;
-  Log::Info("create process id:%d", GetProcessId(_hProcess));
   EnableWow64(true);
 
+  _hProcess = pi.hProcess;
+  Log::Info("create process id:%d", GetProcessId(_hProcess));
+  
   if ( !ret ) {
     CloseHandle(hChildOutR);
     CloseHandle(hChildOutW);
     return false;
   }
-  string task_out;
-  for (int i = 0; i < 2 && isWait;) {
-    DWORD  len = 0;
-    while ( PeekNamedPipe(hChildOutR, 0, 0, 0, &len, 0) && len) {
-      CHAR  output[0x1000] = { 0 };
-      ReadFile(hChildOutR, output, sizeof(output) - 1, &len, 0);
-      task_out = task_out + output;
-    };
 
-    if ( WAIT_OBJECT_0 ==
-         WaitForSingleObject(pi.hProcess, INFINITE) ) {
-      i++;
-      DWORD exitCodeD;
-      GetExitCodeProcess(pi.hProcess, &exitCodeD);
-      exitCode = exitCodeD;
+  string task_out;
+  bool exited = false;
+
+  while ( !exited && isWait ) {
+   
+    if ( WAIT_OBJECT_0 == WaitForSingleObject(pi.hProcess, 100 ) ) {
+		exited = true;
+        GetExitCodeProcess(pi.hProcess, (LPDWORD)&exitCode);
     }
+
+	DWORD  len = 0;
+	while ( task_out.length()< 18*1024 &&
+		    PeekNamedPipe(hChildOutR, 0, 0, 0, &len, 0) 
+		    && len ) {
+		 CHAR  output[1024] = { 0 };
+		 ReadFile(hChildOutR, output, sizeof(output) - 1, &len, 0);
+		 task_out = task_out + output;
+	};
   }
+
   out = task_out;
   CloseHandle(hChildOutR);
   CloseHandle(hChildOutW);
@@ -118,7 +126,6 @@ bool SubProcess::ExecuteCmd(char* cmd, const char* cwd, bool isWait, string& out
 
 #else
   return ExecuteCMD_LINUX(cmd, cwd, isWait, out, exitCode);
-
 #endif
 }
 
@@ -284,11 +291,11 @@ FILE * SubProcess::popen2(const char *cmdstring, const char *type, const char *c
         return(NULL);   /* errno set by fork() */  
     else if (pid == 0) {                            /* child */  
         chdir(cwd); //change dir
-
         if (*type == 'r') {  
             close(pfd[0]);  
             if (pfd[1] != STDOUT_FILENO) {  
                 dup2(pfd[1], STDOUT_FILENO);  
+                dup2(pfd[1], STDERR_FILENO);  
                 close(pfd[1]);  
             }  
         } else {  
@@ -347,12 +354,13 @@ int SubProcess::pclose2(FILE *fp)
 
 bool SubProcess::ExecuteCMD_LINUX(char* cmd, const char* cwd, bool isWait, string& out, long &exitCode) {
   char tmp_buf[1024] = {0};
-  char result[1024 * 10] = {0};
+  char result[1024 * 64] = {0};
   FILE* ptr = nullptr;
   if ((ptr = popen2(cmd, "r", cwd)) != NULL) {
-    while (fgets(tmp_buf, 1024, ptr) != NULL) {
-      strcat(result, tmp_buf);
-      if (strlen(result)>1024*8) break;
+    while (fgets(tmp_buf, sizeof(tmp_buf), ptr) != NULL) {
+      if (strlen(result) < 1024*60) {
+        strcat(result, tmp_buf);
+      }
     }
     Log::Info("result:%s", result);
     out = result;

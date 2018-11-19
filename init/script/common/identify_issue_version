@@ -721,9 +721,9 @@ function get_issue_version()
     big_enable=1
     small_enable=1
     if [ "$enable_file" == "" ]; then
-        glogger -o "[`now`] failed to find the issue info file" -t $default_time 1>/dev/null 2>&1
+        #glogger -o "[`now`] failed to find the issue info file" -t $default_time 1>/dev/null 2>&1
         echo "failed to find $issue version"
-        exit 1
+        #exit 1
     fi
     if [ "$enable_file" == "$des_dir/etc/issue" ]; then
         big=`cat $enable_file | head -n 1 | awk -F'.' {'print $1'} | awk {'print $NF'}`
@@ -880,9 +880,9 @@ get_issue_version
 
 
 if [ "$issue" = "" -o "$issue_version" = "" ]; then
-    glogger -o "[`now`] 3119:failed to parse issue $issue and issue_version $issue_version" -t $default_time 1>/dev/null 2>&1
+   # glogger -o "[`now`] 3119:failed to parse issue $issue and issue_version $issue_version" -t $default_time 1>/dev/null 2>&1
     echo "3119:failed to parse issue $issue and issue_version $issue_version"
-    exit 1
+   # exit 1
 fi
 
 

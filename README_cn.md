@@ -60,25 +60,13 @@ Windows：
 Linux：  
     1) cmake .  
     2) make  
-    3) cmake_install.sh 源码安装
 
 
 ### 如何使用
 
 aliyuncli方式：  
- 
-首先安装aliyuncli和aliyun openapi sdk：  
--   1 pip install aliyuncli
--   2 pip install aliyun-python-sdk-core
--   3 pip install aliyun-python-sdk-ecs
-	
-由于我们修改了aliyuncli对于数组的支持，下载我们的aliyuncli的aliyunOpenApiData.py文件去替换%python_install_path%\Lib\site-packages\aliyuncli\aliyunOpenApiData.py  
-下载地址：http://repository-iso.oss-cn-beijing.aliyuncs.com/cli/aliyunOpenApiData.py  
-Linux参考：  
-  linux(ubuntu)  
-    /usr/local/lib/python2.7/dist-packages  
-  linux(redhat)  
-    /usr/lib/python2.7/site-packages  
+
+安装最新版本的aliyuncli
 
 配置用户key和region  
 $ aliyuncli configure  
@@ -97,7 +85,7 @@ Type包括：
 -   RunPowerShellScript  
 
 b)选中目标实例执行命令：  
-  aliyuncli ecs InvokeCommand --InstanceIds  your-vm-instance-id1 instance-id2 --CommandId your-command-id --Timed false  
+  aliyuncli ecs InvokeCommand --InstanceId.1  your-vm-instance-id --CommandId your-command-id --Timed false  
 其中Timed表示是否周期性任务，通过设置--Frequency "0 */10 * * * *" 将该任务设置为每10分钟执行一次，其中上面的描述为cron表达式。  
 执行成功后将为所有的目标实例返回一个统一的额invokeid，后续可使用该invokeid查询命令的执行情况  
 

@@ -18,6 +18,7 @@ using  std::string;
 class HostChooser {
  public:
   static string m_HostSelect;
+  static bool m_Classical;
   bool Init(string path);
 
  private:

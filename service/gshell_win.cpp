@@ -5,6 +5,7 @@
 #include <string>
 #include <windows.h>
 #include "utils/Log.h"
+#include "utils/CheckNet.h"
 
 Gshell::Gshell(KICKER kicker) {
   m_kicker = kicker;
@@ -126,14 +127,27 @@ void  Gshell::QmpGuestCommand(json11::Json  arguments, string& output) {
   string cmd = arguments["cmd"].string_value();
   if (arguments["cmd"] == "kick_vm" && m_kicker) {
     m_kicker();
-    json11::Json   GuestCommandResult = json11::Json::object{
-        { "result",8 },
-        { "cmd_output", "execute kick_vm success" }
-    };
 
-    json11::Json  resp = json11::Json::object{ { "return",
-        GuestCommandResult } };
-    output = resp.dump() + "\n";
+    if (HostChooser::m_Classical) {
+        json11::Json   GuestCommandResult = json11::Json::object{
+            { "result",9 },
+            { "cmd_output", "execute kick_vm success" }
+        };
+      Log::Info("kick under classical net");
+      json11::Json  resp = json11::Json::object{ { "return",
+         GuestCommandResult } };
+      output = resp.dump() + "\n";
+    } else {
+       json11::Json   GuestCommandResult = json11::Json::object{
+            { "result",8 },
+            { "cmd_output", "execute kick_vm success" }
+        };
+      Log::Info("kick under vpc net");
+      json11::Json  resp = json11::Json::object{ { "return",
+         GuestCommandResult } };
+      output = resp.dump() + "\n";
+    }
+
   } else {
     Error err;
     err.SetDesc("not suport");

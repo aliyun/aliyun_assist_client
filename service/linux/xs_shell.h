@@ -31,8 +31,9 @@ extern "C" {
 #define ERR_EXEC_PROCESS        "556: exec process error, error"
 #define ERR_WAIT_SUBPROCESS     "557: wait subprocess error, error"
 #define ERR_READFILE            "558: read file error, error"
-#define ERR_CMD_NOT_SUPPORT     "command is not supported"
-#define SUC_KICK_VM             "kick vm success"
+#define ERR_CMD_NOT_SUPPORT     "command is not supported\n"
+#define SUC_KICK_VM_CLASSICAL   "\"result\":9, execute kick_vm success\n"
+#define SUC_KICK_VM             "\"result\":8, execute kick_vm success\n"
 
 #define SHELL_CMD_TERM_PROCESS  "reset"
 

@@ -28,6 +28,8 @@ class Task {
   void ReportTimeout();
   bool IsPeriod() { return is_period_; }
   bool IsTimeout() { return is_timeout; }
+  int getRetryNum(){ return retry_num_; }
+  void setRetryNum(int num) { retry_num_ = num; }
   std::string GetOutput() { return task_output_; }
   TaskInfo GetTaskInfo() { return task_info_; }
   void CheckTimeout();
@@ -40,6 +42,7 @@ class Task {
   bool is_period_;
   bool is_timeout;
   bool is_reported;
+  int retry_num_;
 };
 }  // namespace task_engine
 #endif  // CLIENT_TASK_ENGINE_TASK_H_

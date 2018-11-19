@@ -12,16 +12,54 @@ echo "issue:$issue"
 
 
 if [ ! -e $script_dir/script/$issue/common/update_service ]; then
-    echo "3131:failed to find update script."
+    #echo "find update script."
     #exit 1
+    . "$script_dir/script/update_service"
+    if [ $? -ne 0 ]; then
+        echo "3131:failed to find update install script."
+        #exit 1
+    fi
 else
     ######### compare the pv in vm and newest pv##########
     . "$script_dir/script/$issue/common/update_service"
     if [ $? -ne 0 ]; then
-        echo "3131:failed to find update gshelld script."
+        echo "3131:failed to find update install script."
         #exit 1
     fi
 fi
 
-/etc/init.d/agentwatch reload
+if [ -e /etc/systemd/system/aliyun.service ]; then
+  cmd="systemctl restart aliyun.service"
+  $cmd
+  rc=$?
+  if [ ${rc} -eq 0 ] ;then
+    echo $cmd
+    exit 0
+  fi
+fi
+
+if [ -f /etc/init/aliyun-service.conf ]; then
+        grep -i "Ubuntu" /etc/issue
+        if [ $? -eq 0 ]; then
+              cmd="/sbin/initctl restart aliyun-service"
+              $cmd
+              rc=$?
+              if [ ${rc} -eq 0 ] ;then
+                echo $cmd
+                exit 0
+              fi
+              service agentwatch restart
+              exit 0
+        else
+              setsid /sbin/initctl restart aliyun-service
+              exit 0
+        fi
+fi
+
+
+if echo $init_path | grep -q 'systemd' &&   [[ -d /var/run/systemd/system ]] ; then
+   systemctl restart agentwatch
+else
+   service agentwatch restart
+fi
 #echo "0:success"

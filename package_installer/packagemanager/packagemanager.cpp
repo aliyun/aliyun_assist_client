@@ -439,12 +439,12 @@ vector<PackageInfo> PackageManager::GetPackageInfo(
     return package_infos;
   }
 
-  std::string url = "http://" + HostChooser::m_HostSelect +
+  std::string url = "https://" + HostChooser::m_HostSelect +
     "/luban/api/v1/repo/query_software?";
   /*std::string url = "http://100.81.152.153:6666";
   url += "/luban/api/v1/repo/query_software?";*/
 
-  bool ret = HttpRequest::http_request_post(url, json, response);
+  bool ret = HttpRequest::https_request_post(url, json, response);
   /*ret = true;
   response = "[{\"packageId\":\"1\",\"name\":\"python3\",\
       \"url\":\"http://30.27.84.30:5656/python-3.6.1.zip\",\

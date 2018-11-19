@@ -36,6 +36,7 @@ if(UNIX)
 	SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -m32 -s")
 endif()
 
+file(INSTALL ${CMAKE_CURRENT_SOURCE_DIR}/config/GlobalSignRootCA.crt DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/output/config)
 file(INSTALL ${CMAKE_CURRENT_SOURCE_DIR}/config/host.conf DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/output/config)
 
 if(UNIX)

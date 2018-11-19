@@ -31,11 +31,9 @@ extern "C" {
 /*Error message*/
 #define ERR_CMD_IS_EMPTY        "51: cmd line is empty\n"
 #define ERR_CMD_LAST_IS_RUNNING "52: last cmd is still running\n"
-#define ERR_CREATE_PIPE         "53: create pipe error, last error"
-#define ERR_CREATE_PROCESS      "54: create process error, last error"
-#define ERR_READFILE            "55: read file error, last error"
-#define ERR_CMD_NOT_SUPPORT     "command is not supported"
-#define SUC_KICK_VM             "kick vm success"
+#define ERR_CMD_NOT_SUPPORT     "command is not supported\n"
+#define SUC_KICK_VM_CLASSICAL   "\"result\":9, execute kick_vm success\n"
+#define SUC_KICK_VM             "\"result\":8, execute kick_vm success\n"
 
 #define SHELL_CMD_TERM_PROCESS  "reset"
 

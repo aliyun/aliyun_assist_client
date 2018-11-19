@@ -61,24 +61,13 @@ Windows:
 Linux:  
     1) cmake .  
     2) make  
-    3) cmake_install.sh   source code mode install
+		
 
 ### How to use
 
 aliyuncli：
  
-Install aliyuncli and aliyun openapi sdk：  
--   1 pip install aliyuncli
--   2 pip install aliyun-python-sdk-core
--   3 pip install aliyun-python-sdk-ecs
-
-We modify origin aliyun，please download aliyunOpenApiData.py to replace %python_install_path%\Lib\site-packages\aliyuncli\aliyunOpenApiData.py  
-Download url：http://repository-iso.oss-cn-beijing.aliyuncs.com/cli/aliyunOpenApiData.py  
-Linux system：  
-linux(ubuntu)  
-    /usr/local/lib/python2.7/dist-packages   
-linux(redhat)
-    /usr/lib/python2.7/site-packages
+Download the aliyuncli from the website
 
 Config key and region  
 
@@ -98,7 +87,7 @@ RunShellScript
 RunPowerShellScript  
 
 b)Invoke task：  
-  aliyuncli ecs InvokeCommand --InstanceIds  your-vm-instance-id1 instance-id2 --CommandId your-command-id --Timed false  
+  aliyuncli ecs InvokeCommand --InstanceId.1  your-vm-instance-id --CommandId your-command-id --Timed false  
 
 --Timed means period task，passing --Frequency "0 */10 * * * *" set per 10 minutes run once。
 

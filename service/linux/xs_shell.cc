@@ -10,6 +10,7 @@
 #include <xs.h>
 #include <xs_shell.h>
 #include "utils/Log.h"
+#include "utils/CheckNet.h"
 
 pthread_mutex_t  gmutex_stdin = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t   gcond_stdin  = PTHREAD_COND_INITIALIZER;
@@ -52,7 +53,16 @@ void exec_cmd(struct xs_handle *xsh, XENKICKER kicker) {
     char* strCmd = strstr(cmdbuf, "kick_vm");
     if ((strCmd != NULL) && !strcmp(strCmd, "kick_vm")) {
         kicker();
-        write_xenstore(xsh, XBT_NULL, XS_PATH_CMDSTDOUT, SUC_KICK_VM, strlen(SUC_KICK_VM), ptimestamp);
+        if (HostChooser::m_Classical) {
+          write_xenstore(xsh, XBT_NULL, XS_PATH_CMDSTDOUT, SUC_KICK_VM_CLASSICAL, 
+              strlen(SUC_KICK_VM_CLASSICAL), ptimestamp);
+          Log::Info("kick under classical net");
+        }
+        else {
+          write_xenstore(xsh, XBT_NULL, XS_PATH_CMDSTDOUT, SUC_KICK_VM, 
+              strlen(SUC_KICK_VM), ptimestamp);
+          Log::Info("kick under vpc net");
+        }
     } else {
         write_xenstore(xsh, XBT_NULL, XS_PATH_CMDSTDOUT, ERR_CMD_NOT_SUPPORT, strlen(ERR_CMD_NOT_SUPPORT), ptimestamp);
     }

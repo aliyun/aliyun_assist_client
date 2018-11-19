@@ -11,7 +11,7 @@
 #endif
 
 using std::string;
-#define THREAD_SLEEP_TIME 500
+#define THREAD_SLEEP_TIME 100
 
 struct Error {
   Error() {

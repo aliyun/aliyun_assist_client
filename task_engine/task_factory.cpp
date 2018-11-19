@@ -9,6 +9,7 @@
 #include "plugin/install_package.h"
 #include "plugin/run_batscript.h"
 #include "plugin/run_shellscript.h"
+#include "plugin/bad_script.h"
 #include "plugin/run_powshellscript.h"
 #include "plugin/update_aliyunggent.h"
 #include "utils/Log.h"
@@ -49,6 +50,8 @@ Task* TaskFactory::CreateTask(TaskInfo info) {
     task_maps.insert(std::pair<std::string, Task*>(info.task_id, task));
     history_task_maps.insert(std::pair<std::string, int>(info.task_id, 0));
   } else {
+    BadTask bad_task(info);
+    bad_task.ReportStatus("failed");
     Log::Error("TaskFactory::CreateTask eror taskid:%s",
         info.task_id.c_str());
   }

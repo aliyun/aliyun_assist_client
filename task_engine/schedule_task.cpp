@@ -15,19 +15,48 @@
 #include "utils/Encode.h"
 #include "plugin/timer_manager.h"
 #include "plugin/timeout_listener.h"
+#if !defined(_WIN32)
+#include <pthread.h>
+#endif
 
 namespace task_engine {
+#if !defined(_WIN32)
+void* Execute(void* context) {
+#else
 void Execute(void* context) {
+#endif
   Log::Info("begin to execute task in thread");
   Task* task = reinterpret_cast<Task*>(context);
   if(!task) {
     Log::Error("task is nullptr");
+#if !defined(_WIN32)
+    return nullptr;
+#else
     return;
+#endif
   }
   task->Run();
   Log::Info("task after running");
   task->ReportOutput();
+#if !defined(_WIN32)
+  pthread_detach(pthread_self()); 
+#endif
 }
+
+static int s_retry_num = 3;
+void fetch_retry_callback(void * context) {
+  Log::Error("fetch from kick failed, add retry");
+  if(s_retry_num > 0) {
+    s_retry_num--;
+    int num = Singleton<task_engine::TaskSchedule>::I().Fetch();
+    if(num == 0 && s_retry_num > 0) {
+        Singleton<TimeoutListener>::I().CreateTimer(
+            &fetch_retry_callback,
+            nullptr, 5);
+    }
+  }
+}
+
 
 void task_timeout_callback(void * context) {
   Log::Info("task cleanup");
@@ -65,7 +94,8 @@ void period_task_callback(void * context) {
   std::thread t1(Execute, task);
   t1.detach();
 #else
-  new std::thread(Execute, task);
+  pthread_t thread;
+  pthread_create(&thread, NULL, Execute, (void* )task);
 #endif
 }
 
@@ -96,7 +126,7 @@ void TaskSchedule::FetchPeriodTask() {
   }
 }
 
-void TaskSchedule::Fetch() {
+int TaskSchedule::Fetch(bool from_kick) {
   std::vector<TaskInfo> tasks;
   std::vector<TaskInfo> canceled_tasks;
   task_engine::TaskFetch task_fetch;
@@ -110,6 +140,16 @@ void TaskSchedule::Fetch() {
   for (size_t i = 0; i < canceled_tasks.size(); i++) {
     Cancel(canceled_tasks[i]);
   }
+  int task_size = tasks.size() + canceled_tasks.size();
+  if(from_kick == true && task_size == 0) {
+      s_retry_num = 3;
+      Singleton<TimeoutListener>::I().CreateTimer(
+          &fetch_retry_callback,
+          nullptr, 5);
+  }
+
+  return task_size;
+
 }
 
 Task* TaskSchedule::Schedule(TaskInfo task_info) {
@@ -135,7 +175,8 @@ Task* TaskSchedule::Schedule(TaskInfo task_info) {
     std::thread t1(Execute, task);
     t1.detach();
 #else
-    new std::thread(Execute, task);
+    pthread_t thread;
+    pthread_create(&thread, NULL, Execute, (void* )task);
 #endif
   }
   return task;

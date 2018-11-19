@@ -119,7 +119,7 @@ string AssistPath::GetConfigPath() {
 string AssistPath::GetWorkPath(string subpath) {
   string path = GetCommonPath("work");
   if (subpath == "")  return path;
-  path += "\\" + subpath;
+  path += FileUtils::separator() + subpath;
   MakeSurePath(path);
   return path;
 }
@@ -147,7 +147,7 @@ string AssistPath::GetLogPath(string subpath) {
 string AssistPath::GetSetupPath(string subpath) {
   string path = GetCommonPath("setup");
   if (subpath == "")  return path;
-  path += "\\" + subpath;
+  path += FileUtils::separator() + subpath;
   MakeSurePath(path);
   return path;
 }
@@ -161,7 +161,7 @@ string AssistPath::GetSetupPath(string subpath) {
 string AssistPath::GetBackupPath(string subpath) {
   string path = GetCommonPath("backup");
   if (subpath == "")  return path;
-  path += "\\" + subpath;
+  path += FileUtils::separator() + subpath;
   MakeSurePath(path);
   return path;
 };

@@ -37,7 +37,7 @@
 #include "../VersionInfo.h"
 #include "./xs_shell.h"
 
-#define THREAD_SLEEP_TIME_SECONDS 5
+#define THREAD_SLEEP_TIME_SECONDS 1
 #define PROCESS_MAX_DURATION 60 * 60 * 1000
 #define UPDATER_TIMER_DURATION 3600
 #define UPDATER_TIMER_DUETIME 15
@@ -73,6 +73,17 @@ void try_reconnect_net(void) {
   }
 }
 
+void* update_timeout_callback(void* context) {
+  pid_t* pid = reinterpret_cast<pid_t*>(context);
+	if(kill(*pid, 0) != 0) {
+		
+  } else {
+    Log::Error("update process is timeout, we try kill it");
+    kill(*pid, SIGKILL);
+   }
+	
+}
+
 bool LaunchProcessAndWaitForExit(char* path, char* name, char* commandLines, bool wait) {
   pid_t pid;
 
@@ -86,7 +97,12 @@ bool LaunchProcessAndWaitForExit(char* path, char* name, char* commandLines, boo
 		}
 		exit(0);
 	} else if (wait){
-		int stat;
+
+		Singleton<task_engine::TimeoutListener>::I().CreateTimer(
+				&update_timeout_callback,
+				(void*)&pid, 100);
+		
+	  int stat;
 		pid_t newPID;
 		newPID = waitpid(pid, &stat, 0);
 		if (newPID != pid) {
@@ -97,12 +113,16 @@ bool LaunchProcessAndWaitForExit(char* path, char* name, char* commandLines, boo
 	return true;
 }
 
+void* fetch_task(void* context) {
+	Singleton<task_engine::TaskSchedule>::I().Fetch(true);
+	pthread_detach(pthread_self()); 
+}
+
 void*  ProducerThreadFunc(void*)
 {
   Gshell gshell([]() {
-    pthread_mutex_lock(&signalQueueMutex);
-    gMessageCount++;
-    pthread_mutex_unlock(&signalQueueMutex);
+      pthread_t thread;
+      pthread_create(&thread, nullptr, fetch_task, nullptr);
   });
 
   bool result = true;
@@ -113,11 +133,11 @@ void*  ProducerThreadFunc(void*)
   return 0;
 }
 
-void* ConsumerThreadFunc(void*) {
+/*void* ConsumerThreadFunc(void*) {
   while (true) {
     //When GShell messageg arrives, we launch the executor to process the message.
     if (gMessageCount > 0) {
-        Singleton<task_engine::TaskSchedule>::I().Fetch();
+        Singleton<task_engine::TaskSchedule>::I().Fetch(true);
         pthread_mutex_lock(&signalQueueMutex);
         gMessageCount--;
         pthread_mutex_unlock(&signalQueueMutex);
@@ -131,7 +151,7 @@ void* ConsumerThreadFunc(void*) {
   }
 
   return 0;	
-}
+}*/
 
 void auto_update() {
   AssistPath path_service("");
@@ -139,7 +159,7 @@ void auto_update() {
   update_path += FileUtils::separator();
   update_path += "aliyun_assist_update";
 
-  LaunchProcessAndWaitForExit((char*)update_path.c_str(), "aliyun_assist_update", "--check_update", false);
+  LaunchProcessAndWaitForExit((char*)update_path.c_str(), "aliyun_assist_update", "--check_update", true);
 }
 
 void*  SignalProcessingThreadFunc(void* arg) {
@@ -153,13 +173,13 @@ void*  SignalProcessingThreadFunc(void* arg) {
 			Log::Error("Failed to set updater timer interval: %s", strerror(errCode));
 		}
 		switch (sigNo) {
-		case SIGTERM:
+	/*	case SIGTERM:
 			pthread_mutex_lock(&signalQueueMutex);
 			gTerminated = true;
 			pthread_mutex_unlock(&signalQueueMutex);
 			pthread_cond_signal(&terminatedCond);
 			pthread_exit(NULL);
-			break;
+			break;*/
 		case SIGUSR1:
       try_reconnect_net();
       Singleton<task_engine::TaskSchedule>::I().Fetch();
@@ -244,11 +264,6 @@ int BecomeDeamon()
 		exit(EXIT_FAILURE);
 	}
 
-	/* Change the current working directory */
-	if ((chdir("/root")) < 0) {
-		Log::Error("Failed to change working directory for AliYunAssistService: %s", strerror(errno));
-		exit(EXIT_FAILURE);
-	}
 
 	/* Close out the standard file descriptors */
   reopen_fd_to_null(STDIN_FILENO);
@@ -270,7 +285,7 @@ int InitService()
   }
 
 	int ret = 0;
-	pthread_t pUpdaterThread, pConsumerThread, pProducerThread, pSignalProcessingThread, pXenCmdExecThread, pXenCmdReadThread;
+	pthread_t pUpdaterThread, pProducerThread, pSignalProcessingThread, pXenCmdExecThread, pXenCmdReadThread;
 
 	ret = pthread_create(&pUpdaterThread, NULL, UpdaterThreadFunc, NULL);
 	if (ret != 0) {
@@ -278,11 +293,11 @@ int InitService()
 		return -1;
 	}
 
-	ret = pthread_create(&pConsumerThread, NULL, ConsumerThreadFunc, NULL);
+	/*ret = pthread_create(&pConsumerThread, NULL, ConsumerThreadFunc, NULL);
 	if (ret != 0) {
 		Log::Error("Failed to create AliYunAssistService consumer thread: %s", strerror(errno));
 		return -1;
-	}
+	}*/
 
 	ret = pthread_create(&pProducerThread, NULL, ProducerThreadFunc, NULL);
 	if (ret != 0) {
@@ -316,11 +331,11 @@ int InitService()
     return -1;
   }
 
-  ret = pthread_join(pConsumerThread, NULL);
+  /*ret = pthread_join(pConsumerThread, NULL);
   if (ret != 0) {
     Log::Error("Failed to join the AliYunAssistService comsumer thread: %s", strerror(errno));
     return -1;
-  }
+  }*/
 
   ret = pthread_join(pProducerThread, NULL);
   if (ret != 0) {
@@ -382,13 +397,19 @@ int main(int argc, char *argv[]) {
     printf("%s\n", FILE_VERSION_RESOURCE_STR);
     return 0;
   } else if (options.is_set("fetch_task")) {
-    Singleton<task_engine::TaskSchedule>::I().Fetch();
-    Singleton<task_engine::TaskSchedule>::I().FetchPeriodTask();
+    Singleton<task_engine::TimeoutListener>::I().Start();
+    Singleton<task_engine::TaskSchedule>::I().Fetch(true);
     sleep(3600);
     return 0;
   }
   if (options.is_set("deamon") && !options.is_set("test-service")) {
     BecomeDeamon();
+  }
+  
+    /* Change the current working directory */
+  if ((chdir("/root")) < 0) {
+    Log::Error("Failed to change working directory for AliYunAssistService: %s", strerror(errno));
+    exit(EXIT_FAILURE);
   }
 
   curl_global_init(CURL_GLOBAL_ALL);
@@ -404,14 +425,13 @@ int main(int argc, char *argv[]) {
 
   /*Process SIGTERM and SIGUSR1 signals in a seperate signal processing thread and block them in all other threads */
   sigemptyset(&sigMask);
-  sigaddset(&sigMask, SIGTERM);
+ // sigaddset(&sigMask, SIGTERM);
   sigaddset(&sigMask, SIGUSR1);
   if (pthread_sigmask(SIG_BLOCK, &sigMask, &sigOldMask) != 0) {
     Log::Error("Failed to set signal mask for AliYunAssistService: %s", strerror(errno));
     exit(EXIT_FAILURE);
   }
 
-  signal(SIGCHLD,SIG_IGN);
   InitService();
 
   if (pthread_sigmask(SIG_SETMASK, &sigOldMask, NULL) != 0) {

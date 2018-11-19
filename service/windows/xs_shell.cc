@@ -3,6 +3,7 @@
 #include "./xs_shell.h"
 #include "./xs.h"
 #include "utils/Log.h"
+#include "utils/CheckNet.h"
 
 HANDLE gMutexStdin;
 HANDLE gEvent;
@@ -79,8 +80,16 @@ void ExecCmd(HANDLE handle, XENKICKER kicker) {
   char* strCmd = strstr(cmdBuf, "kick_vm");
   if ((strCmd != NULL) && !strcmp(strCmd, "kick_vm")) {
     kicker();
-    WriteToXenstore(handle, XS_PATH_CMDSTDOUT, SUC_KICK_VM,
-        strlen(SUC_KICK_VM), ptimeStamp);
+    if (HostChooser::m_Classical) {
+      WriteToXenstore(handle, XS_PATH_CMDSTDOUT, SUC_KICK_VM_CLASSICAL,
+          strlen(SUC_KICK_VM_CLASSICAL), ptimeStamp);
+      Log::Info("kick under classical net");
+    }
+    else {
+      WriteToXenstore(handle, XS_PATH_CMDSTDOUT, SUC_KICK_VM,
+          strlen(SUC_KICK_VM), ptimeStamp);
+      Log::Info("kick under vpc net");
+    }
   } else {
     WriteToXenstore(handle, XS_PATH_CMDSTDOUT, ERR_CMD_NOT_SUPPORT,
         strlen(ERR_CMD_NOT_SUPPORT), ptimeStamp);
@@ -263,3 +272,4 @@ int XSShellStart(th_param* param,
   Log::Info("Threads created");
   return 1;
 }
+

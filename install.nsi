@@ -52,6 +52,7 @@ Section "MainSection" SEC01
   File "output\install.bat"
   SetOutPath "$INSTDIR\config"
   File "output\config\host.conf"
+  File "output\config\GlobalSignRootCA.crt"
 SectionEnd
 
 Section -Post

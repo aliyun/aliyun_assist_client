@@ -22,11 +22,22 @@ Description: Provide functions to resolve server address and check net
 #include "TimeTool.h"
 #include "SubProcess.h"
 #include "Log.h"
+#include "utils/AssistPath.h"
+#include "utils/FileUtil.h"
 
 using namespace json11;
 
 string HostChooser::m_HostSelect;
-
+bool HostChooser::m_Classical = false;
+std::string TrimString(const std::string& s)
+{
+  std::string out;
+  for(int i=0; i < s.length(); i++) {
+    if (s[i] != '\r' && s[i] != '\n' && s[i] != ' ')
+      out.append(std::string(1, s[i]));
+  }
+  return out;
+}
 /*
 *Summary: to get server address
 *Parameters: (string&) ip
@@ -36,11 +47,30 @@ string HostChooser::m_HostSelect;
 bool HostChooser::Init(string path)  {
   std::string region;
   if (HttpRequest::FindRegion(region)) {
-    std::string host = "axt." + region + ".alibaba-inc.com";
+    std::string host = region + ".axt.aliyun.com";
     Log::Info("host:%s", host.c_str());
     if(HttpRequest::DetectHost(host)) {
       m_HostSelect = host;
       return true;
+    }
+  } else {
+    AssistPath path_service("");
+    std::string cur_dir = path_service.GetCurrDir();
+    std::string region_file = cur_dir + FileUtils::separator() + ".." + FileUtils::separator() + "region-id";
+    if (FileUtils::fileExists(region_file.c_str())) {
+      Log::Info("get region-id from config file");
+      std::string content;
+      FileUtils::ReadFileToString(region_file, content);
+
+      std::string trim = TrimString(content);
+      std::string host = trim + ".axt.aliyun.com";
+
+      Log::Info("host:%s", host.c_str());
+      if(HttpRequest::DetectHost(host)) {
+        m_HostSelect = host;
+        m_Classical = true;
+        return true;
+      }
     }
   }
   string CfgFile = path + "/host.conf";

@@ -102,12 +102,13 @@ TEST(TestTaskEgine, RunPeriodTask) {
   info.task_id = "t-120bf664f8454a7cbb64b0841c87f476";
   info.content = "echo test";
   info.time_out = "10";
-  info.cronat = "*/5 * * * * *";
-  info.time_out = "5";
+  info.cronat = "*/2 * * * * *";
+  info.time_out = "1";
   Singleton<task_engine::TimerManager>::I().Start();
+  Singleton<task_engine::TimeoutListener>::I().Start();
   task_engine::Task* task =
     Singleton<task_engine::TaskSchedule>::I().Schedule(info);
-  Sleep(5*1000000);
+  Sleep(50*1000000);
   // Todo() watch the log to check the task status.
 }
 #else
@@ -131,13 +132,15 @@ TEST(TestTaskEgine, RunShellScript) {
 
 TEST(TestTaskEgine, RunShellScriptTimeout) {
   init_log();
+  Singleton<task_engine::TimerManager>::I().Start();
   Singleton<task_engine::TimeoutListener>::I().Start();
   Log::Info("begin test");
   task_engine::TaskInfo info;
   info.command_id = "RunShellScript";
   info.task_id = "t-120bf664f8454a7cbb64b0841c87f001";
-  info.content = "sleep 100";
-  info.time_out = "4";
+  info.content = "echo 123";
+  info.cronat = "*/2 * * * * *";
+  info.time_out = "1";
   task_engine::Task* task =
       Singleton<task_engine::TaskSchedule>::I().Schedule(info);
   sleep(6);

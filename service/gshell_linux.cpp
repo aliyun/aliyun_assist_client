@@ -14,6 +14,7 @@
 #include <sys/stat.h>
 #include <inttypes.h>
 #include "utils/Log.h"
+#include "utils/CheckNet.h"
 
 #define EXIT_SUCCESS    0
 #define EXIT_FAILURE    1
@@ -23,7 +24,7 @@ Gshell::Gshell(KICKER kicker) {
     m_kicker = kicker;
 
     m_hFile = open("/dev/virtio-ports/org.qemu.guest_agent.0", 
-        O_RDWR|O_NONBLOCK);
+        O_RDWR|O_NONBLOCK|O_CLOEXEC);
 
     Log::Info("/dev/virtio-ports/org.qemu.guest_agent.0:%d", m_hFile);
     if ( m_hFile > 0 ) {
@@ -85,14 +86,24 @@ void  Gshell::QmpGuestCommand(json11::Json  arguments, string& output) {
     if (arguments["cmd"] == "kick_vm" && m_kicker) {
 
         m_kicker();
-        json11::Json   GuestCommandResult = json11::Json::object{
-            { "result",8 },
-            { "cmd_output", "execute kick_vm success" }
-        };
 
-        json11::Json  resp = json11::Json::object{ { "return", GuestCommandResult } };
-        output = resp.dump() + "\n";
-
+        if (HostChooser::m_Classical) {
+          json11::Json   GuestCommandResult = json11::Json::object{
+              { "result",9 },
+              { "cmd_output", "execute kick_vm success" }
+          };
+          Log::Info("kick under classical net");
+          json11::Json  resp = json11::Json::object{ { "return", GuestCommandResult } };
+          output = resp.dump() + "\n";
+        } else {
+          json11::Json   GuestCommandResult = json11::Json::object{
+              { "result",8 },
+              { "cmd_output", "execute kick_vm success" }
+          };
+          Log::Info("kick under vpc net");
+          json11::Json  resp = json11::Json::object{ { "return", GuestCommandResult } };
+          output = resp.dump() + "\n";
+        }
     }
     else {
         Error err;
@@ -218,7 +229,7 @@ bool  Gshell::Poll() {
     Parse(buffer, output);
     //WriteFile(m_hFile, output.c_str(), output.length(), &len, 0);
     write(m_hFile, output.c_str(), output.length());
-
+    usleep(3*1000);
 #ifdef _DEBUG
     printf("[w]:%s\n", output.c_str());
 #endif 

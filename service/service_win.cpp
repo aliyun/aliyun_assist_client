@@ -116,26 +116,31 @@ BOOL LaunchProcessAndWaitForExit(CHAR* moduleName, CHAR* commandLines) {
   }
 
   // Wait until child process exits.
-  DWORD ret = WaitForSingleObject(pi.hProcess, PROCESS_MAX_DURATION);
-
-  // Close process and thread handles.
-  CloseHandle(pi.hProcess);
-  CloseHandle(pi.hThread);
+  DWORD ret = WaitForSingleObject(pi.hProcess, 90*1000);
 
   // If the object is not sigalled, we think the call is failure.
   if (ret != WAIT_OBJECT_0) {
     Log::Warn("process is not completed correctly,error code is %d",
         GetLastError());
+    ::TerminateProcess(pi.hProcess, 0);
     return FALSE;
   }
+  // Close process and thread handles.
 
+  CloseHandle(pi.hProcess);
+  CloseHandle(pi.hThread);
   return TRUE;
 }
 
 
+void fetch_task(void* context) {
+  Singleton<task_engine::TaskSchedule>::I().Fetch(true);
+}
+
 DWORD ProducerThreadFunc(LPDWORD param) {
     Gshell gshell([]() {
-        InterlockedIncrement(&gMsgCount);
+       std::thread t1(fetch_task, nullptr);
+       t1.detach();
     });
 
     bool result = true;
@@ -146,10 +151,10 @@ DWORD ProducerThreadFunc(LPDWORD param) {
     return TRUE;
 }
 
-DWORD ConsumerThreadFunc(LPDWORD param) {
+/*DWORD ConsumerThreadFunc(LPDWORD param) {
   while (!terminatingService) {
     if (gMsgCount > 0) {
-      Singleton<task_engine::TaskSchedule>::I().Fetch();
+      Singleton<task_engine::TaskSchedule>::I().Fetch(true);
       Log::Info("Received kick msg");
       InterlockedDecrement(&gMsgCount);
     }
@@ -157,7 +162,7 @@ DWORD ConsumerThreadFunc(LPDWORD param) {
   }
 
   return TRUE;
-}
+}*/
 
 BOOL ServerMsgSyncUp() {
   Singleton<task_engine::TaskSchedule>::I().Fetch();
@@ -463,7 +468,7 @@ VOID ControlHandler(DWORD controlCode) {
         NO_ERROR, 0, 1, 1000);
       pauseService = TRUE;
       SuspendThread(producerThreadHandle);
-      SuspendThread(consumerThreadHandle);
+      //SuspendThread(consumerThreadHandle);
       SuspendThread(updaterThreadHandle);
       SuspendThread(serverSyncThreadHandle);
       SuspendThread(xenThreadHandle);
@@ -482,7 +487,7 @@ VOID ControlHandler(DWORD controlCode) {
         NO_ERROR, 0, 1, 1000);
       pauseService = FALSE;
       ResumeThread(producerThreadHandle);
-      ResumeThread(consumerThreadHandle);
+      //ResumeThread(consumerThreadHandle);
       ResumeThread(updaterThreadHandle);
       ResumeThread(serverSyncThreadHandle);
       ResumeThread(xenThreadHandle);
@@ -525,14 +530,14 @@ BOOL InitService() {
     return FALSE;
   }
 
-  consumerThreadHandle = CreateThread(0, 0,
+ /* consumerThreadHandle = CreateThread(0, 0,
     (LPTHREAD_START_ROUTINE)ConsumerThreadFunc,
     0, 0, &id);
   if (consumerThreadHandle == 0) {
     Log::Error("Failed to create the consumer thread, error code is %d",
         GetLastError());
     return FALSE;
-  }
+  }*/
 
   serverSyncThreadHandle = CreateThread(0, 0,
     (LPTHREAD_START_ROUTINE)ServerSyncThreadFunc,
@@ -586,9 +591,9 @@ VOID Terminate(DWORD errCode) {
   }
 
 
-  if (consumerThreadHandle) {
+  /*if (consumerThreadHandle) {
     CloseHandle(consumerThreadHandle);
-  }
+  }*/
 
   if (producerThreadHandle) {
     CloseHandle(producerThreadHandle);
@@ -772,6 +777,8 @@ void main(int argc, char *argv[]) {
     }
 
   } else if (options.is_set("fetch_task")) {
+    std::string test;
+    HttpRequest::FindRegion(test);
     Singleton<task_engine::TaskSchedule>::I().Fetch();
     Singleton<task_engine::TaskSchedule>::I().FetchPeriodTask();
     Sleep(3600*1000);

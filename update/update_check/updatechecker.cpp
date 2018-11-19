@@ -88,7 +88,7 @@ bool UpdateProcess::CheckUpdate() {
     return false;
   }
   std::string url = ServiceProvide::GetUpdateService();
-  HttpRequest::http_request_post(url, json, response);
+  HttpRequest::https_request_post(url, json, response);
   Log::Info("check update response:%s", response.c_str());
   return parse_response_string(response);
 }

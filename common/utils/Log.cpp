@@ -1,7 +1,12 @@
 #include "Log.h"
 #include <ctime>
 #include <iostream>
-
+#if defined (_WIN32)
+#include <windows.h>
+#else
+#include <sys/time.h>
+#include <time.h>
+#endif
 const char* Log::TypeToString( const Type& type ) {
   switch( type ) {
   case LOG_TYPE_FATAL:
@@ -188,7 +193,7 @@ Log& Log::get() {
 
 
 void Log::write( const char* format, ... ) {
-  char buffer[512];
+  char buffer[1024*256];
 
   va_list varArgs;
   va_start( varArgs, format );
@@ -207,8 +212,16 @@ bool Log::log( const Type& type, const std::string& message ) {
     time_t timestamp;
     time( &timestamp );
     strftime( buffer, sizeof( buffer ), "%X %x", localtime( &timestamp ) );
-
-    write( "[%s] %s - %s", buffer, TypeToString( type ), message.c_str() );
+#if defined (_WIN32)
+    SYSTEMTIME systime;
+    GetLocalTime(&systime);
+    write( "[%s %d] %s - %s", buffer, systime.wMilliseconds ,TypeToString( type ), message.c_str() );
+#else
+    timeval curTime;
+    gettimeofday(&curTime, NULL);
+    int milli = curTime.tv_usec / 1000;
+    write( "[%s %d] %s - %s", buffer, milli, TypeToString( type ), message.c_str() );
+#endif
     return true;
   }
   return false;
@@ -216,7 +229,7 @@ bool Log::log( const Type& type, const std::string& message ) {
 
 
 bool Log::log( const Type& type, const char* format, va_list& varArgs) {
-  char buffer[512];
+  char buffer[1024*256];
   vsnprintf( buffer, sizeof(buffer), format, varArgs);
   return log( type, buffer );
 }

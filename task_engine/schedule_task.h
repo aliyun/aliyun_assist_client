@@ -13,7 +13,7 @@ class TaskSchedule {
  public:
   TaskSchedule();
   void Cancel(TaskInfo task_info);
-  void Fetch();
+  int Fetch(bool from_kick=false);
 #if defined(TEST_MODE)
   void TestFetch(std::string info);
 #endif

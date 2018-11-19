@@ -57,8 +57,8 @@ void  TimeoutListener::Stop() {
 void* TimeoutListener::CreateTimer(TimeoutNotifier notifier,
     void* ctx, int timeout) {
 #if !defined(TEST_MODE)
-  if(timeout < 10) {
-    timeout = 10;
+  if(timeout < 5) {
+    timeout = 5;
   }
 #endif
   Log::Info("add timeout listen:%d", timeout);

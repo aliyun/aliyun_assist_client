@@ -88,18 +88,6 @@ int main(int argc, char *argv[]) {
       Log::Error("exit by another update process is running");
       return -1;
     }
-#if !defined(_WIN32)
-    std::string version_file = cur_dir + FileUtils::separator() + ".." + FileUtils::separator() + "version";
-    if(FileUtils::fileExists(version_file.c_str())) {
-      std::string cur_version(FILE_VERSION_RESOURCE_STR);
-      std::string content;
-      FileUtils::ReadFileToString(version_file, content);
-      if(content.compare(cur_version)) {
-        Log::Info("need reboot under linux system");
-        return -1;
-      }
-    }
-#endif
     curl_global_init(CURL_GLOBAL_ALL);
     HostChooser host_choose;
     bool found = host_choose.Init(path_service.GetConfigPath());
@@ -111,11 +99,16 @@ int main(int argc, char *argv[]) {
     alyun_assist_update::UpdateProcess process(update_info);
     bool need_update = process.CheckUpdate();
     // In test mode, we use download url pass form command line.
-    if(options.is_set("force_update")) {
+    std::string test_force_update_file = cur_dir + FileUtils::separator() + ".." + FileUtils::separator() + "force_update";
+    if(options.is_set("force_update") || FileUtils::fileExists(test_force_update_file.c_str())) {
       need_update = true;
       alyun_assist_update::Appcast cast;
       cast.need_update = 1;
+      cast.flag = 0;
       std::string url =  options.get("url");
+      if(url.empty()) {
+        url = "https://repo-aliyun-assist.oss-cn-beijing.aliyuncs.com/download/update.zip";
+      }
       cast.download_url = url;
       process.SetUpdateInfo(cast);
     }

@@ -73,6 +73,7 @@ start() {
 	    	echo "Type=simple" >> $FILE
 	    	echo "ExecStart=/usr/sbin/aliyun-service" >> $FILE
 	    	echo "Restart=always " >> $FILE
+        echo "KillMode=process " >> $FILE
 	    	echo "RestartSec=1" >> $FILE
 	    	echo "[Install]" >> $FILE
 	    	echo "WantedBy=multi-user.target" >> $FILE

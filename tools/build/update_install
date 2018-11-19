@@ -1,6 +1,36 @@
 #!/bin/bash
 
+FILE=/etc/systemd/system/aliyun.service
+
+
 if [ -e /usr/sbin/aliyun-service ]; then
+  if [ -e $FILE ]; then
+    rm $FILE
+    touch $FILE
+    echo "[Unit]" >> $FILE
+    echo "Description=auto run aliyunservice or agent" >> $FILE
+    echo "[Service]" >> $FILE
+    echo "Type=simple" >> $FILE
+    echo "ExecStart=/usr/sbin/aliyun-service" >> $FILE
+    echo "Restart=always " >> $FILE
+    echo "KillMode=process " >> $FILE
+    echo "RestartSec=1" >> $FILE
+    echo "[Install]" >> $FILE
+    echo "WantedBy=multi-user.target" >> $FILE
+    /bin/systemctl daemon-reload
+  fi
+
+
+  if [ -e /etc/init.d/agentwatch ]; then
+    grep -q 'echo "KillMode=process " >> $FILE'  /etc/init.d/agentwatch
+    if  [ $?  -ne  0 ]; then
+      grep -q 'echo "Restart=always " >> $FILE'  /etc/init.d/agentwatch
+      if  [ $?  -eq  0 ]; then
+        sed -i '/echo "Restart=always " >> $FILE/a\echo "KillMode=process " >> $FILE' /etc/init.d/agentwatch
+      fi
+    fi
+  fi
+
   assist_version=$(cat /usr/local/share/aliyun-assist/version)
   data_dir="/usr/local/share/aliyun-assist/$assist_version"
 
@@ -11,14 +41,58 @@ if [ -e /usr/sbin/aliyun-service ]; then
   ln -sf /usr/local/share/aliyun-assist/$assist_version/aliyun-service /usr/sbin/aliyun-service
   ln -sf /usr/local/share/aliyun-assist/$assist_version/aliyun_installer /usr/sbin/aliyun_installer
   
-  init_path=$(readlink -f $(which init))
+  cmd="systemctl restart aliyun.service"
+  $cmd
+  rc=$?
+  if [ ${rc} -eq 0 ] ;then
+    echo $cmd
+    exit 0
+  fi
+  
+  if [ -f /etc/init/aliyun-service.conf ]; then
+          grep -i "Ubuntu" /etc/issue
+          if [ $? -eq 0 ]; then
+                cmd="/sbin/initctl restart aliyun-service"
+                $cmd
+                rc=$?
+                if [ ${rc} -eq 0 ] ;then
+                  echo $cmd
+                  exit 0
+                fi
+                service agentwatch restart
+                exit 0
+          else
+                setsid /sbin/initctl restart aliyun-service
+                exit 0
+          fi
+  fi
+  
+  
   if echo $init_path | grep -q 'systemd' &&   [[ -d /var/run/systemd/system ]] ; then
-    systemctl restart agentwatch
+     systemctl restart agentwatch
   else
-    service agentwatch restart
+     service agentwatch restart
   fi
 
+
+
 elif [ -e /opt/sbin/aliyun-service ]; then
+  if [ -e $FILE ]; then
+    rm $FILE
+    touch $FILE
+    echo "[Unit]" >> $FILE
+    echo "Description=auto run aliyunservice or agent" >> $FILE
+    echo "[Service]" >> $FILE
+    echo "Type=simple" >> $FILE
+    echo "ExecStart=/opt/sbin/aliyun-service" >> $FILE
+    echo "Restart=always " >> $FILE
+    echo "KillMode=process " >> $FILE
+    echo "RestartSec=1" >> $FILE
+    echo "[Install]" >> $FILE
+    echo "WantedBy=multi-user.target" >> $FILE
+    /bin/systemctl daemon-reload
+  fi
+  
   assist_version=$(cat /opt/local/share/aliyun-assist/version)
   data_dir="/opt/local/share/aliyun-assist/$assist_version"
 
@@ -28,7 +102,10 @@ elif [ -e /opt/sbin/aliyun-service ]; then
 
   ln -sf /opt/local/share/aliyun-assist/$assist_version/aliyun-service /opt/sbin/aliyun-service
   ln -sf /opt/local/share/aliyun-assist/$assist_version/aliyun_installer /opt/sbin/aliyun_installer
-  systemctl restart aliyun.servcie
+  
+  systemctl restart aliyun.service
+  systemctl restart gshell.service
+  exit 0
 fi
 
 

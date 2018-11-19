@@ -11,6 +11,7 @@
 #include "utils/CheckNet.h"
 #include "utils/Encode.h"
 #include "utils/Log.h"
+#include "utils/AssistPath.h"
 
 namespace {
 void parse_task_info(std::string response,
@@ -62,10 +63,15 @@ TaskFetch::TaskFetch() {
 void TaskFetch::FetchTasks(std::vector<TaskInfo>& task_info) {
   std::string response;
   if(HostChooser::m_HostSelect.empty()) {
+    AssistPath path_service("");
+    HostChooser  host_choose;
+    host_choose.Init(path_service.GetConfigPath());
+  }
+  if(HostChooser::m_HostSelect.empty()) {
     return;
   }
   std::string url = ServiceProvide::GetFetchTaskService();
-  HttpRequest::http_request_post(url, "", response);
+  HttpRequest::https_request_post(url, "", response);
   parse_task_info(response, task_info);
   Log::Info("response:%s", response.c_str());
   Log::Info("Fetch_Tasks:Fetch %d Tasks", task_info.size());
@@ -83,7 +89,7 @@ void TaskFetch::FetchCancledTasks(std::vector<TaskInfo>& task_info) {
     return;
   }
   std::string url = ServiceProvide::GetFetchCanceledTaskService();
-  HttpRequest::http_request_post(url, "", response);
+  HttpRequest::https_request_post(url, "", response);
   parse_task_info(response, task_info);
   Log::Info("Fetch_Cancled_Tasks:Fetch %d Tasks", task_info.size());
 }
@@ -94,7 +100,7 @@ void TaskFetch::FetchPeriodTasks(std::vector<TaskInfo>& task_info) {
     return;
   }
   std::string url = ServiceProvide::GetFetchPeriondTaskService();
-  HttpRequest::http_request_post(url, "", response);
+  HttpRequest::https_request_post(url, "", response);
   parse_task_info(response, task_info);
   Log::Info("Fetch_Period_Tasks:Fetch %d Tasks", task_info.size());
 }

@@ -10,6 +10,8 @@
 #include "utils/Encode.h"
 #include "utils/Log.h"
 #include "utils/service_provide.h"
+#include "utils/singleton.h"
+#include "plugin/timeout_listener.h"
 
 #if !defined(_WIN32)
 #include<sys/types.h>
@@ -18,10 +20,26 @@
 #endif
 
 namespace task_engine {
-Task::Task(TaskInfo info) :sub_process_(task_info_.working_dir,
-    atoi(task_info_.time_out.c_str())) {
+
+void upload_retry_callback(void * context) {
+  Log::Error("upload ouput failed, add retry");
+  Task* task = reinterpret_cast<Task*>(context);
+  if(!task) {
+    Log::Error("task is nullptr");
+    return;
+  }
+  if(task->getRetryNum() > 0) {
+    task->setRetryNum(task->getRetryNum() - 1);
+    task->ReportOutput();
+  }
+ 
+}
+
+Task::Task(TaskInfo info) :sub_process_(info.working_dir,
+    atoi(info.time_out.c_str())) {
   task_info_ = info;
   err_code_ = 0;
+  retry_num_ = 3;
   is_timeout = false;
   is_reported = false;
   is_period_ = !task_info_.cronat.empty();
@@ -32,6 +50,7 @@ Task::Task(TaskInfo info) :sub_process_(task_info_.working_dir,
 
 Task::Task() : sub_process_("", 3600){
   is_timeout = false;
+  is_reported = false;
 }
 
 void Task::Run() {
@@ -58,7 +77,7 @@ void Task::ReportStatus(std::string status, std::string instance_id) {
     return;
   }
   std::string url = ServiceProvide::GetReportTaskStatusService();
-  HttpRequest::http_request_post(url, input, response);
+  HttpRequest::https_request_post(url, input, response);
   Log::Info("ReportStatus input:%s", input.c_str());
   Log::Info("ReportStatus status:%s", status.c_str());
 }
@@ -89,6 +108,10 @@ void Task::CheckTimeout() {
 }
 
 void Task::ReportOutput() {
+  if (HostChooser::m_HostSelect.empty()) {
+    return;
+  }
+
   if(is_timeout) {
     ReportTimeout();
     return;
@@ -110,20 +133,27 @@ void Task::ReportOutput() {
   jsonRoot["taskOutput"] = jsonOutput;
   input = jsonRoot.toStyledString();
 
-  if (HostChooser::m_HostSelect.empty()) {
-    return;
-  }
   std::string url = ServiceProvide::GetReportTaskOutputService();
-  HttpRequest::http_request_post(url, input, response);
+  bool ret = HttpRequest::https_request_post(url, input, response);
 
   Log::Info("ReportOutput input:%s", input.c_str());
   Log::Info("Report taskid:%s task_output:%s error_code:%d %s:response",
       task_info_.task_id.c_str(), task_output_.c_str(),
       err_code_, response.c_str());
+  if(ret == false && retry_num_ > 0) {
+      Singleton<TimeoutListener>::I().CreateTimer(
+          &upload_retry_callback,
+          reinterpret_cast<void*>(this), 5);
+  }
 }
 
 void Task::ReportTimeout() {
   Log::Info("Report timeout");
+
+  if (HostChooser::m_HostSelect.empty()) {
+    return;
+  }
+
   if(is_reported == true) {
     return;
   }
@@ -147,11 +177,8 @@ void Task::ReportTimeout() {
   jsonRoot["taskOutput"] = jsonOutput;
   input = jsonRoot.toStyledString();
 
-  if (HostChooser::m_HostSelect.empty()) {
-    return;
-  }
   std::string url = ServiceProvide::GetReportTaskOutputService();
-  HttpRequest::http_request_post(url, input, response);
+  HttpRequest::https_request_post(url, input, response);
 
   Log::Info("ReportOutput input:%s", input.c_str());
   Log::Info("Report taskid:%s task_output:%s error_code:%d %s:response",

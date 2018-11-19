@@ -32,7 +32,10 @@ shut() {
 
 which() {
     skip_qemu_kvm=false
-    cpuid=$($VIRTWHAT)
+    cpuid="KVMKVMKVM"
+    if [ -f VIRTWHAT ]; then
+      cpuid=$($VIRTWHAT)
+    fi
     if [ "$cpuid" = "XenVMMXenVMM" ]; then 
         skip_qemu_kvm=true
     fi
@@ -73,6 +76,7 @@ start() {
 	    	echo "Type=simple" >> $FILE
 	    	echo "ExecStart=/usr/sbin/aliyun-service" >> $FILE
 	    	echo "Restart=always " >> $FILE
+        echo "KillMode=process " >> $FILE
 	    	echo "RestartSec=1" >> $FILE
 	    	echo "[Install]" >> $FILE
 	    	echo "WantedBy=multi-user.target" >> $FILE
