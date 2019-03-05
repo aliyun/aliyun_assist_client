@@ -23,8 +23,9 @@ For example, you can create a command using aliyun openapi, then select some vir
 -   FreeBSD
 -   CoreOS
 
-### [Setup](https://help.aliyun.com/document_detail/64921.html)
-
+### Setup
+- [English Version](https://www.alibabacloud.com/help/doc-detail/64921.htm)
+- [Chinese Version](https://help.aliyun.com/document_detail/64921.html)
 
 ### How to compile
 
@@ -37,8 +38,9 @@ For example, you can create a command using aliyun openapi, then select some vir
     2) make  
 
 
-### [How to use](https://help.aliyun.com/document_detail/64741.html)
-
+### How to use
+- [English Version](https://help.aliyun.com/document_detail/64741.html)
+- [Chinese Version](https://www.alibabacloud.com/help/doc-detail/64741.html)
 
 ### Contributing
 
