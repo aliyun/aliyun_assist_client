@@ -38,7 +38,7 @@ VIAddVersionKey /LANG=2052 "LegalCopyright" "${PRODUCT_PUBLISHER} (C) 版权所�
 ; MUI end ------
 
 Name "${PRODUCT_NAME} ${PRODUCT_VERSION}"
-InstallDir "$PROGRAMFILES\aliyun\assist\${PRODUCT_VERSION}"
+InstallDir "C:\ProgramData\aliyun\assist\${PRODUCT_VERSION}"
 OutFile "aliyun_agent.exe"
 #InstallDirRegKey HKLM "${PRODUCT_DIR_REGKEY}" ""
 ShowInstDetails show

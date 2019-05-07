@@ -5,11 +5,9 @@
 #include <string>
 
 #include "utils/AssistPath.h"
-#include "utils/TimeTool.h"
-#include "utils/SubProcess.h"
 
 namespace task_engine {
-BadTask::BadTask(TaskInfo info) : Task(info) {
+BadTask::BadTask(TaskInfo info) : BaseTask(info) {
 }
 
 void BadTask::Run() {

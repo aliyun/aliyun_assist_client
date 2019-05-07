@@ -3,18 +3,22 @@
 #include <string>
 #include "./packagemanager/packagemanager.h"
 #include "optparse/OptionParser.h"
-#include "utils/SubProcess.h"
+#include "utils/process.h"
 #include "utils/Log.h"
 #include "utils/AssistPath.h"
 #include "utils/FileUtil.h"
-#include "utils/CheckNet.h"
-#include "utils/dump.h"
+#include "utils/host_finder.h"
 #include "../VersionInfo.h"
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#else
+#include <sys/file.h>
+#include <unistd.h>
 #endif
+
+
 
 using optparse::OptionParser;
 
@@ -73,22 +77,35 @@ OptionParser& initParser() {
 
 bool process_singleton() {
 #ifdef _WIN32
-  if (NULL == ::CreateMutex(NULL, FALSE, L"alyun_installer")) {
-    if (GetLastError() == ERROR_ALREADY_EXISTS) {
-      return false;
-    }
-  }
-#else
+	CreateMutex(NULL, FALSE, L"alyun_assist_installer");
+	if (GetLastError() == ERROR_ALREADY_EXISTS) {
+		return false;
+	}
+	else {
+		return true;
+	}
 
+#else
+	static int lockfd = open("/var/tmp/alyun_assist_installer.lock", O_CREAT | O_RDWR, 0644);
+	if (-1 == lockfd) {
+		Log::Error("Fail to open lock file. Error: %s\n", strerror(errno));
+		return false;
+	}
+
+	if (0 == flock(lockfd, LOCK_EX | LOCK_NB)) {
+		atexit([] {
+			close(lockfd);
+		});
+		return true;
+	}
+
+	close(lockfd);
+	return false;
 #endif
-  return true;
-}
+	}
 
 int main(int argc, char *argv[]) {
-#if defined(_WIN32)
-  SetDllDirectory(TEXT(""));
-  DumpService::InitMinDump("aliyun installer");
-#endif
+
   AssistPath path_service("");
   std::string log_path = path_service.GetLogPath();
   log_path += FileUtils::separator();
@@ -104,9 +121,8 @@ int main(int argc, char *argv[]) {
   optparse::Values options = parser.parse_args(argc, argv);
   alyun_assist_installer::PackageManager package_mgr;
 
-  HostChooser host_choose;
-  bool found = host_choose.Init(path_service.GetConfigPath());
-  if (!found) {
+
+  if ( HostFinder::getServerHost().empty() ) {
     Log::Error("could not find a match region host");
     return -1;
   }

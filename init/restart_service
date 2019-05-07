@@ -1,0 +1,80 @@
+#!/bin/bash
+# used in update_install
+aliyun_service_name='aliyun-service'
+aliyun_service_bin="/usr/sbin/$aliyun_service_name"
+
+stop_service() {
+    if [ -e /etc/inittab ]; then
+        result=`cat /etc/inittab | grep "$aliyun_service_name"`
+        if [ $? -eq 0 ]; then
+            sed -i /$aliyun_service_name/d /etc/inittab
+            kill -HUP 1
+            sleep 1
+        fi
+    fi
+        
+    for service_pid in `ps axf | grep "$aliyun_service_bin" | grep -v grep | awk {'print $1'}`
+    do
+        kill -9 $service_pid
+    done
+}
+
+clean() {
+    # This file exist in offcial suse image, it cause conflict
+    [ -e "/usr/lib/systemd/system/aliyun.service" ] && rm -rf /usr/lib/systemd/system/aliyun.service
+    
+    [ -e "/var/lock/agentwatch" ] && rm -f "/var/lock/agentwatch"
+    
+    #remove old agentwatch first
+    if [ -e /etc/init.d/agentwatch ]; then
+        /etc/init.d/agentwatch stop
+        CHK=$(which chkconfig)
+        if [ ! -x "${CHK}" ]; then
+            echo "No find chkconfig"
+            URC=$(which update-rc.d)
+            if [ -x "${URC}" ]; then
+                echo "Find update-rc.d"
+                update-rc.d -f agentwatch remove
+            fi
+        else
+            echo "Find chkconfig"
+            chkconfig --del agentwatch
+        fi
+        
+        rm -rf /etc/init.d/agentwatch
+    fi
+}
+
+start_service() {
+    assist_version=$(cat /usr/local/share/aliyun-assist/version)
+    src_dir="/usr/local/share/aliyun-assist/$assist_version/init"
+    . $src_dir/init-functions
+    if detect_systemd; then
+        cp -f $src_dir/aliyun.service /etc/systemd/system/aliyun.service
+        systemctl daemon-reload
+        systemctl enable aliyun.service
+        systemctl restart aliyun.service
+    elif detect_sysvinit; then
+        cp -f $src_dir/aliyun-service /etc/init.d/aliyun-service
+        chmod 755 /etc/init.d/aliyun-service
+        /etc/init.d/aliyun-service restart
+        CHK=$(which chkconfig)
+        if [ ! -x "${CHK}" ]; then
+            echo "No find chkconfig"
+            URC=$(which update-rc.d)
+            if [ -x "${URC}" ]; then
+                echo "Find update-rc.d"
+                update-rc.d aliyun-service defaults
+            fi
+        else
+            echo "Find chkconfig"
+            chkconfig --add aliyun-service
+            chkconfig aliyun-service on
+        fi
+    fi
+}
+
+clean
+# In some cases, calling "agentwatch stop" can not stop servcie
+stop_service
+start_service

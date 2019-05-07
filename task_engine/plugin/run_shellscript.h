@@ -3,12 +3,13 @@
 #define CLIENT_TASK_ENGINE_PLUGIN_RUNSHELLSCRIPT_H_
 
 #include <string>
-#include "../task.h"
+#include "../base_task.h"
 
 namespace task_engine {
-class RunShellScriptTask : public Task {
+class RunShellScriptTask : public BaseTask {
  public:
   explicit RunShellScriptTask(TaskInfo info);
+  virtual  ~RunShellScriptTask() {};
   void Run();
  private:
   bool BuildScript(string fileName, std::string content);

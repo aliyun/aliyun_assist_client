@@ -14,6 +14,7 @@ class FileUtils {
   static void rmdirRecursive(const char* path);
   static void rmdir(const char* dir);
   static void removeFile(const char* src);
-  static bool ReadFileToString(const std::string& path, std::string& content);
+  static bool readFile(const std::string& path, std::string& content);
+  static bool writeFile(const std::string& file, const std::string& content);
 };
 

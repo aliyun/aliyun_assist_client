@@ -12,92 +12,17 @@
 #include "./fetch_task.h"
 #include "utils/singleton.h"
 #include "utils/Log.h"
-#include "utils/Encode.h"
-#include "plugin/timer_manager.h"
-#include "plugin/timeout_listener.h"
+#include "utils/encoder.h"
+#include "utils/MutexLocker.h"
+#include "timer_manager.h"
 #if !defined(_WIN32)
 #include <pthread.h>
+#include <unistd.h>
+#else
+#include <windows.h>
 #endif
 
 namespace task_engine {
-#if !defined(_WIN32)
-void* Execute(void* context) {
-#else
-void Execute(void* context) {
-#endif
-  Log::Info("begin to execute task in thread");
-  Task* task = reinterpret_cast<Task*>(context);
-  if(!task) {
-    Log::Error("task is nullptr");
-#if !defined(_WIN32)
-    return nullptr;
-#else
-    return;
-#endif
-  }
-  task->Run();
-  Log::Info("task after running");
-  task->ReportOutput();
-#if !defined(_WIN32)
-  pthread_detach(pthread_self()); 
-#endif
-}
-
-static int s_retry_num = 3;
-void fetch_retry_callback(void * context) {
-  Log::Error("fetch from kick failed, add retry");
-  if(s_retry_num > 0) {
-    s_retry_num--;
-    int num = Singleton<task_engine::TaskSchedule>::I().Fetch();
-    if(num == 0 && s_retry_num > 0) {
-        Singleton<TimeoutListener>::I().CreateTimer(
-            &fetch_retry_callback,
-            nullptr, 5);
-    }
-  }
-}
-
-
-void task_timeout_callback(void * context) {
-  Log::Info("task cleanup");
-  Task* task = reinterpret_cast<Task*>(context);
-  if(!task) {
-    Log::Error("task is nullptr");
-    return;
-  }
-  task->CheckTimeout();
-//#if !defined(TEST_MODE)
-//  if (!task->IsPeriod()) {
-//    Singleton<TaskFactory>::I().RemoveTask(task->GetTaskInfo().task_id);
-//  } else {
-//    delete task;
-//  }
-//#endif
-}
-
-void period_task_callback(void * context) {
-  Log::Info("begin to execute period task in time thread");
-  Task* period_task = reinterpret_cast<Task*>(context);
-  if(!period_task) {
-    Log::Error("task is nullptr");
-    return;
-  }
-  Task* task = Singleton<TaskFactory>::I().CopyTask(period_task->GetTaskInfo());
-  if (!task) {
-    Log::Error("copy task failed");
-    return;
-  }
-  Singleton<TimeoutListener>::I().CreateTimer(
-          &task_timeout_callback,
-          reinterpret_cast<void*>(task), atoi(task->GetTaskInfo().time_out.c_str()));
-#if defined(_WIN32)
-  std::thread t1(Execute, task);
-  t1.detach();
-#else
-  pthread_t thread;
-  pthread_create(&thread, NULL, Execute, (void* )task);
-#endif
-}
 
 TaskSchedule::TaskSchedule() {
 }
@@ -119,21 +44,22 @@ void TaskSchedule::TestFetch(std::string info) {
 void TaskSchedule::FetchPeriodTask() {
   std::vector<TaskInfo> tasks;
   task_engine::TaskFetch task_fetch;
-  task_fetch.FetchPeriodTasks(tasks);
-
+  //task_fetch.FetchPeriodTasks(tasks);
   for (size_t i = 0; i < tasks.size(); i++) {
     Schedule(tasks[i]);
   }
 }
 
 int TaskSchedule::Fetch(bool from_kick) {
-  std::vector<TaskInfo> tasks;
-  std::vector<TaskInfo> canceled_tasks;
+
+  std::vector<TaskInfo>  tasks;
+  std::vector<TaskInfo>  canceled_tasks;
   task_engine::TaskFetch task_fetch;
+  
   task_fetch.FetchTasks(tasks);
   task_fetch.FetchCancledTasks(canceled_tasks);
 
-  for (size_t i = 0; i < tasks.size(); i++) {
+  for ( size_t i = 0; i < tasks.size(); i++ ) {
     Schedule(tasks[i]);
   }
 
@@ -141,62 +67,101 @@ int TaskSchedule::Fetch(bool from_kick) {
     Cancel(canceled_tasks[i]);
   }
   int task_size = tasks.size() + canceled_tasks.size();
-  if(from_kick == true && task_size == 0) {
-      s_retry_num = 3;
-      Singleton<TimeoutListener>::I().CreateTimer(
-          &fetch_retry_callback,
-          nullptr, 5);
+
+  for (int i =  0; i < 3 &&  from_kick  && task_size == 0 ;i++ ) {
+	  std::this_thread::sleep_for(std::chrono::seconds(3));
+	  task_size = Fetch(false);
   }
-
   return task_size;
-
 }
 
-Task* TaskSchedule::Schedule(TaskInfo task_info) {
-  Task* task = Singleton<TaskFactory>::I().CreateTask(task_info);
-  if (!task) {
-    Log::Error("Invalid task taskid:%s", task_info.task_id.c_str());
-    return nullptr;
-  }
-  if (task->IsPeriod()) {
-    if (period_tasks_.find(task_info.task_id) == period_tasks_.end()) {
-      std::lock_guard<std::mutex> lck(mtx_);
-      void* time_id = Singleton<TimerManager>::I().CreateTimer(
-          &period_task_callback,
-          reinterpret_cast<void*>(task), task_info.cronat);
-      period_tasks_.insert(std::pair<std::string, void*>(
-          task_info.task_id, time_id));
-    }
-  } else {
-       Singleton<TimeoutListener>::I().CreateTimer(
-          &task_timeout_callback,
-          reinterpret_cast<void*>(task), atoi(task_info.time_out.c_str()));
-#if defined(_WIN32)
-    std::thread t1(Execute, task);
-    t1.detach();
-#else
-    pthread_t thread;
-    pthread_create(&thread, NULL, Execute, (void* )task);
-#endif
-  }
-  return task;
+void TaskSchedule::Schedule(TaskInfo task_info) {
+
+	MutexLocker( &m_mutex ) {
+		if ( m_tasklist.find(task_info.task_id) != m_tasklist.end() ) {
+			return;
+		}
+		BaseTask* task = Singleton<TaskFactory>::I().CreateTask(task_info);
+		if ( task == nullptr ) {
+			return;
+		}
+
+		m_tasklist[task_info.task_id] = task;
+		if ( task_info.cronat.empty() ) {
+			DispatchTask(task);
+		}
+		else {
+			task->timer = (void*)Singleton<TimerManager>::I().createTimer( [this,task] {
+				DispatchTask(task);
+			}, task_info.cronat );
+		}
+	}
 }
 
 void TaskSchedule::Cancel(TaskInfo task_info) {
   Log::Error("cancel task taskid:%s", task_info.task_id.c_str());
-  Task* task = Singleton<TaskFactory>::I().GetTask(task_info.task_id);
-  if (task) {
-    if (task->IsPeriod()) {
-      task->ReportStatus("stopped", task_info.instance_id);
-      std::lock_guard<std::mutex> lck(mtx_);
-      std::map<std::string, void*>::iterator iter =
-          period_tasks_.find(task_info.task_id);
-      if (iter != period_tasks_.end()) {
-        Singleton<TimerManager>::I().DeleteTimer(iter->second);
-      } 
-    } else {
-      task->Cancel();
-    }
+  BaseTask* task = nullptr;
+  MutexLocker( &m_mutex ) {
+	  std::map<std::string, BaseTask*>::iterator it;
+	  it = m_tasklist.find(task_info.task_id);
+	  if ( it == m_tasklist.end() ) {
+		  return;
+	  }
+	  task = it->second;
   }
+  task->Cancel();
 }
+
+
+void TaskSchedule::Execute( BaseTask* task ) {
+	
+
+	if ( !task->canceled ) {
+		task->Run();
+		MutexLocker(&m_mutex) {
+			if ( !task->timer ) { //非周期任务,执行完删除
+				m_tasklist.erase(task->task_info.task_id);
+				Singleton<TaskFactory>::I().DeleteTask(task);
+			}
+		};
+		return;
+	}
+	//任务被取消
+	MutexLocker( &m_mutex ) {
+		if (task->timer) {
+			Singleton<TimerManager>::I().deleteTimer((task_engine::Timer*)task->timer);
+		}
+		m_tasklist.erase(task->task_info.task_id);
+		Singleton<TaskFactory>::I().DeleteTask(task);
+	};		
+};
+
+void TaskSchedule::DispatchTask(BaseTask* task) {
+#if defined(_WIN32)
+
+	std::thread ([this,task] {
+		Execute(task);
+	}).detach();
+
+#else
+	struct Args {
+		TaskSchedule* pthis;
+		BaseTask*     task;
+	};
+
+	Args* args  = new Args();
+	args->pthis = this;
+	args->task  = task;
+
+	pthread_t  tid;
+	pthread_create(&tid, nullptr, [](void* args)->void* {
+		((Args*)args)->pthis->Execute(((Args*)args)->task);
+		delete(Args*)args;
+	}, args);
+	pthread_detach(tid);
+
+#endif
+};
+
+
 }  // namespace task_engine

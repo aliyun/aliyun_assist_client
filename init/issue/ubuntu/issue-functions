@@ -1,0 +1,51 @@
+#!/bin/bash
+
+
+ubuntu_detect_issue() {
+    for i in /etc/issue \
+             /etc/issue.net \
+             /etc/lsb-release \
+             /etc/os-release \
+             /boot/grub/grub.cfg ;
+    do
+            [[ ! -f $i ]] && continue
+            if grep -q -i 'Ubuntu' $i ; then
+                return 0
+            fi
+    done
+    return 1
+}
+
+
+ubuntu_detect_version() {
+    # Ubuntu 16.04.4 LTS
+    # Ubuntu 14.04.5 LTS
+    for i in /etc/issue \
+             /etc/issue.net \
+             /etc/lsb-release \
+             /etc/os-release ;
+    do
+        [[ ! -f $i ]] && continue
+        global_big=`grep -i -E 'Ubuntu[[[:space:]]*[0-9]+' -o $i | awk '{print $NF}'`
+        global_big=${global_big%%.*}
+        if [[ -n $global_big ]]; then
+            return 0
+        fi
+    done
+
+    if [[ -f /etc/lsb-release ]]; then
+        global_big=`awk -F'=' '/^DISTRIB_RELEASE/ {gsub("\"","",$NF); print $NF}' /etc/lsb-release`
+        global_big=${global_big%%.*}
+        if [[ -n $global_big ]]; then
+            return 0
+        fi
+    fi
+
+    if [[ -f /etc/os-release ]]; then
+        global_big=`awk -F'=' '/^VERSION_ID/ {gsub("\"","",$NF); print $NF}' /etc/os-release`
+        global_big=${global_big%%.*}
+        if [[ -n $global_big ]]; then
+            return 0
+        fi
+    fi
+}

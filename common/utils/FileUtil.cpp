@@ -76,28 +76,54 @@ void FileUtils::mkpath(const char* dir) {
   }
 }
 
-bool FileUtils::ReadFileToString(const std::string& path, std::string& content) {
-  FILE* file = fopen(path.c_str(), "rb");
-  if (!file) {
-    return false;
-  }
 
-  const size_t kBufferSize = 1 << 16;
-  char* buf = new char[kBufferSize];
-  size_t len;
-  size_t size = 0;
+bool FileUtils::readFile(const std::string& file, std::string &content) {
 
-  // Many files supplied in |path| have incorrect size (proc files etc).
-  // Hence, the file is read sequentially as opposed to a one-shot read.
-  while ((len = fread(buf, 1, kBufferSize, file)) > 0) {
-    content.append(buf, len);
+	Log::Info("Read file :" + file);
+	FILE *fp = fopen(file.c_str(), "r");
+	if (!fp) {
+		Log::Error("File open error!");
+		return false;
+	}
 
-    size += len;
-  }
-  delete[] buf;
-  fclose(file);
-  return true;
+	char *pBuf = nullptr;
+	fseek(fp, 0, SEEK_END);
+	long len = ftell(fp); //获取文件长度
+	if (len < 0) {
+		fclose(fp);
+		return false;
+	}
+	pBuf = new char[len + 1];
+	memset(pBuf, 0, sizeof(char) * (len + 1));
+
+	fseek(fp, 0, SEEK_SET);
+	int count = fread(pBuf, sizeof(char), len, fp);
+
+	pBuf[len] = 0;
+	fclose(fp);
+
+	content = pBuf;
+	delete[] pBuf;
+	return true;
 }
+
+bool FileUtils::writeFile(const std::string& file, const std::string& content) {
+
+	Log::Info("Write file :" + file);
+	FILE *fp = fopen(file.c_str(), "w");;
+	if (!fp) {
+		Log::Error("File open error!");
+		return false;
+	}
+
+	fwrite(content.c_str(), 1, content.length(), fp);
+	fflush(fp);
+	fclose(fp);
+	return true;
+}
+
+
+
 
 void FileUtils::rmdirRecursive(const char* path) {
   // remove dir contents
@@ -106,7 +132,7 @@ void FileUtils::rmdirRecursive(const char* path) {
     std::string name = dir.fileName();
     if (name != "." && name != "..") {
       if (dir.isDir()) {
-        rmdir(dir.filePath().c_str());
+        rmdirRecursive(dir.filePath().c_str());
       } else {
         removeFile(dir.filePath().c_str());
       }

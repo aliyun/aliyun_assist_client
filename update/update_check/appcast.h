@@ -22,6 +22,11 @@ struct Appcast {
 
   // Operating system
   std::string OS;
+ 
+  Appcast() {
+	flag = 0;
+	need_update = 0;
+  }
 };
 
 }  // namespace alyun_assist_update

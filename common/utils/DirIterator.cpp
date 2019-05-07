@@ -1,7 +1,5 @@
 #include "DirIterator.h"
 
-#include "utils/Log.h"
-
 #if !defined _WIN32
 #include <dirent.h>
 #endif

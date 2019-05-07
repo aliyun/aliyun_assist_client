@@ -16,7 +16,7 @@ class UpdateProcess {
   bool UnZip(const std::string file_path, const std::string dir);
   bool CheckMd5(const std::string path, const std::string md5_string);
   bool InstallFiles(const std::string src_dir, const std::string des_dir);
-  bool RemoveOldVersion(const std::string dir);
+  static bool RemoveOldVersion(const std::string dir);
 #if defined(TEST_MODE)
   bool test_parse_response_string(std::string response);
 #endif
@@ -29,6 +29,7 @@ class UpdateProcess {
   bool InstallFilesRecursive(std::string src_dir, std::string dst_dir);
   bool InstallFile(std::string src_path, std::string des_path);
   Appcast update_info_;
+  std::string script_dir;
 };
 
 }  // namespace alyun_assist_update

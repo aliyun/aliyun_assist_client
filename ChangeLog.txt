@@ -9,5 +9,12 @@ Linux Version 1.0.1.187
 Windows Version: 1:0.0.94
 增加超时机制上报和kill进程机制
 
+2019-5-7
+Linux Version 1.0.1.346
+Windows Version: 1:0.0.127
+增加对神龙服务器的支持
+不再agentwatch脚本启动云助手
+Fix任务执行上报结果的bug
+
 
 

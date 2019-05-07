@@ -2,14 +2,15 @@
 #ifndef CLIENT_TASK_ENGINE_PLUGIN_RUN_POWSHELLSCRIPT_H_
 #define CLIENT_TASK_ENGINE_PLUGIN_RUN_POWSHELLSCRIPT_H_
 #include <string>
-#include "../task.h"
+#include "../base_task.h"
 
 using std::string;
 
 namespace task_engine {
-class RunPowerShellTask : public Task {
+class RunPowerShellTask : public BaseTask {
  public:
   explicit RunPowerShellTask(TaskInfo info);
+  virtual  ~RunPowerShellTask() {};
   void Run();
  private:
   bool BuildScript(string fileName, string content);

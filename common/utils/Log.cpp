@@ -1,12 +1,23 @@
 #include "Log.h"
+#include <stdio.h>
 #include <ctime>
-#include <iostream>
+#include "utils/DirIterator.h"
 #if defined (_WIN32)
 #include <windows.h>
 #else
+#include <unistd.h>
 #include <sys/time.h>
-#include <time.h>
 #endif
+
+#if defined(_WIN32)
+#define MAX_FIlE_PATH   260
+#else
+#define MAX_FIlE_PATH   1024
+#endif
+
+
+INITIALIZE_EASYLOGGINGPP
+
 const char* Log::TypeToString( const Type& type ) {
   switch( type ) {
   case LOG_TYPE_FATAL:
@@ -26,13 +37,20 @@ const char* Log::TypeToString( const Type& type ) {
 }
 
 
-bool Log::Initialise( const std::string& fileName ) {
-  Log& log = Log::get();
+bool Log::Initialise(const std::string& fileName, int preserveDays) {
+    Log& log = Log::get();
 
   if( !log.m_initialised ) {
     log.m_fileName = fileName;
-    log.m_stream.open( fileName.c_str(),
-                       std::ios_base::app | std::ios_base::out );
+    log.m_preserveDays = preserveDays;
+
+    el::Loggers::addFlag(el::LoggingFlag::DisableApplicationAbortOnFatalLog);
+    el::Loggers::addFlag(el::LoggingFlag::StrictLogFileTimeCheck);
+    el::Loggers::reconfigureAllLoggers(el::ConfigurationType::ToStandardOutput, "false");
+    el::Loggers::reconfigureAllLoggers(el::ConfigurationType::Filename, log.m_fileName);
+    el::Loggers::reconfigureAllLoggers(el::ConfigurationType::LogFileRollingTime, "day");
+    el::Helpers::installPreRollOutCallback(RolloutHandler);
+
     log.m_initialised = true;
     Info( "LOG INITIALISED" );
     return true;
@@ -46,16 +64,10 @@ bool Log::Finalise() {
 
   if( log.m_initialised ) {
     Info( "LOG FINALISED" );
-    log.m_stream.close();
+    el::Helpers::uninstallPreRollOutCallback();
     return true;
   }
   return false;
-}
-
-
-void Log::SetThreshold( const Type& type ) {
-  Log& log = Log::get();
-  log.m_threshold = type;
 }
 
 
@@ -127,53 +139,150 @@ bool Log::Debug( const char* format, ... ) {
   return success;
 }
 
+void Log::RolloutHandler(const char* filename, std::size_t size, el::base::RollingLogFileBasis rollingbasis)
+{
+  switch (rollingbasis)
+  {
+  case el::base::RollingLogFileBasis::RollLog_FileSize:
+    /// 按大小滚动日志文件
+    break;
+  case el::base::RollingLogFileBasis::RollLog_DateTime:
+    /// 按时间滚动日志文件
+  {
+    time_t currenttime = time(NULL);
+    currenttime -= 24 * 3600;
 
-std::string Log::Peek() {
-  return Log::get().m_stack.back();
-};
+    struct::tm oneDayAgo;
+#if defined(_WIN32)
+    localtime_s(&oneDayAgo, &currenttime);
+#else
+    localtime_r(&currenttime, &oneDayAgo);
+#endif
 
+    std::string filenameTemp = filename;
+    int pos = filenameTemp.rfind('.');
+    filenameTemp = filenameTemp.substr(0, pos);
+    char backupFile[MAX_FIlE_PATH] = { 0 };
+#if defined(_WIN32)
+    sprintf_s(backupFile, MAX_FIlE_PATH, 
+      "%s_%04d%02d%02d%02d%02d.log",
+      filenameTemp.c_str(),
+      oneDayAgo.tm_year + 1900,
+      oneDayAgo.tm_mon + 1,
+      oneDayAgo.tm_mday,
+      oneDayAgo.tm_hour,
+      oneDayAgo.tm_min);
+#else
+    snprintf(backupFile, MAX_FIlE_PATH,
+      "%s_%04d%02d%02d%02d%02d.log",
+      filenameTemp.c_str(),
+      oneDayAgo.tm_year + 1900,
+      oneDayAgo.tm_mon + 1,
+      oneDayAgo.tm_mday,
+      oneDayAgo.tm_hour,
+      oneDayAgo.tm_min);
+#endif
 
-bool Log::Push( const std::string& input ) {
-  if( !input.empty() ) {
-    Debug( input + " BEGIN" );
-    Log::get().m_stack.push_back( input );
-    return true;
+    /// 自定义日志备份
+    Log::copyFile(filename, backupFile);
   }
-  return false;
+  break;
+  default:
+    break;
+  }
+
+  Log::CleanLogs();
+}
+
+void Log::CleanLogs() {
+  int preserve_days = Log::get().GetPreserveDays();
+  std::string filenameTemp = Log::get().GetFileName();
+  int pos = filenameTemp.rfind(Log::separator());
+  std::string dir = filenameTemp.substr(0, pos);
+
+  if (dir.empty()) {
+    return;
+  }
+
+  DirIterator it_dir(dir.c_str());
+  while (it_dir.next()) {
+    std::string name = it_dir.fileName();
+    if (name == "." || name == "..")
+      continue;
+
+    if (it_dir.isDir())
+      continue;
+
+    std::string file_path = dir + Log::separator() + name;
+    if (file_path == filenameTemp)
+      continue;
+
+    time_t currenttime = time(NULL);
+    struct stat file_info;
+    stat(file_path.c_str(), &file_info);
+    double totalT = difftime(currenttime, file_info.st_ctime);
+    if (totalT > preserve_days * 24 * 3600) {
+      Log::removeFile(file_path.c_str());
+    }
+  }
+
+  return;
+}
+
+void Log::copyFile(const char* src, const char* dest) {
+#if !defined _WIN32
+  std::ifstream inputFile(src, std::ios::binary);
+  std::ofstream outputFile(dest, std::ios::binary | std::ios::trunc);
+
+  if (!inputFile.good()) {
+    Log::Error("copy file failed");
+  }
+  if (!outputFile.good()) {
+    Log::Error("copy file failed");
+  }
+
+  outputFile << inputFile.rdbuf();
+
+  if (inputFile.bad()) {
+    Log::Error("copy file failed");
+  }
+  if (outputFile.bad()) {
+    Log::Error("copy file failed");
+  }
+#else
+  if (!CopyFileA(src, dest, FALSE)) {
+    Log::Error("copy file failed");
+  }
+#endif
+}
+
+char Log::separator() {
+#ifdef _WIN32
+  return '\\';
+#else
+  return '/';
+#endif
+}
+
+void Log::removeFile(const char* src) {
+#if !defined _WIN32
+  unlink(src);
+#else
+  DeleteFileA(src);
+#endif
 }
 
 
-std::string Log::Pop() {
-  Log& log = Log::get();
-  if( !log.m_stack.empty() ) {
-    std::string temp( log.Peek() );
-    log.m_stack.pop_back();
-    Debug( temp + " END" );
-    return temp;
-  }
-  return std::string();
+std::string Log::GetFileName() {
+  return m_fileName;
 }
 
-
-void Log::PrintStackTrace() {
-  Log& log = Log::get();
-  std::string temp = "---Stack Trace---\n";
-
-  for( std::vector<std::string>::reverse_iterator i = log.m_stack.rbegin();
-       i != log.m_stack.rend(); ++i) {
-    temp += "| " + *i + "\n";
-  }
-
-  temp += "-----------------";
-  log.write( temp.c_str() );
+int Log::GetPreserveDays() {
+  return m_preserveDays > 0 ? m_preserveDays : 0;
 }
-
 
 Log::Log()
-  : m_threshold( LOG_TYPE_INFO ),
-    m_fileName(),
-    m_stack(),
-    m_stream() {
+  : m_fileName() {
 }
 
 
@@ -191,38 +300,25 @@ Log& Log::get() {
   return log;
 }
 
-
-void Log::write( const char* format, ... ) {
-  char buffer[1024*256];
-
-  va_list varArgs;
-  va_start( varArgs, format );
-  vsnprintf( buffer, sizeof(buffer), format, varArgs);
-  va_end( varArgs );
-
-  //std::cout << buffer << std::endl;
-  m_stream  << buffer << std::endl;
-}
-
-
 bool Log::log( const Type& type, const std::string& message ) {
-  if( type <= m_threshold ) {
-    static const int TIMESTAMP_BUFFER_SIZE = 21;
-    char buffer[TIMESTAMP_BUFFER_SIZE];
-    time_t timestamp;
-    time( &timestamp );
-    strftime( buffer, sizeof( buffer ), "%X %x", localtime( &timestamp ) );
-#if defined (_WIN32)
-    SYSTEMTIME systime;
-    GetLocalTime(&systime);
-    write( "[%s %d] %s - %s", buffer, systime.wMilliseconds ,TypeToString( type ), message.c_str() );
-#else
-    timeval curTime;
-    gettimeofday(&curTime, NULL);
-    int milli = curTime.tv_usec / 1000;
-    write( "[%s %d] %s - %s", buffer, milli, TypeToString( type ), message.c_str() );
-#endif
+  switch (type) {
+  case LOG_TYPE_FATAL:
+    LOG(FATAL) << message;
     return true;
+  case LOG_TYPE_ERROR:
+    LOG(ERROR) << message;
+    return true;
+  case LOG_TYPE_WARN:
+    LOG(WARNING) << message;
+    return true;
+  case LOG_TYPE_INFO:
+    LOG(INFO) << message;
+    return true;
+  case LOG_TYPE_DEBUG:
+    LOG(DEBUG) << message;
+    return true;
+  default:
+    break;
   }
   return false;
 }
@@ -238,3 +334,4 @@ bool Log::log( const Type& type, const char* format, va_list& varArgs) {
 Log& Log::operator=(const Log&) {
   return *this;
 }
+

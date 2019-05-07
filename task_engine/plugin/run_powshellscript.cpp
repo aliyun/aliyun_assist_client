@@ -3,17 +3,24 @@
 #include "./run_powshellscript.h"
 
 #include <string>
+#include <mutex>
 
 #include "./run_batscript.h"
 #include "utils/AssistPath.h"
-#include "utils/TimeTool.h"
-#include "utils/SubProcess.h"
+#include "utils/process.h"
+#include "utils/Log.h"
+#include "utils/FileUtil.h"
 
 namespace task_engine {
-RunPowerShellTask::RunPowerShellTask(TaskInfo info) : Task(info) {
+RunPowerShellTask::RunPowerShellTask(TaskInfo info) : BaseTask(info) {
 }
 
 bool RunPowerShellTask::BuildScript(string fileName, string content) {
+ 
+  if ( FileUtils::fileExists(fileName.c_str()) ) {
+	 return true;
+  };
+
   FILE* fp = fopen(fileName.c_str(), "a+");
   if (!fp) {
     return false;
@@ -25,20 +32,24 @@ bool RunPowerShellTask::BuildScript(string fileName, string content) {
 }
 
 void RunPowerShellTask::Run() {
+
   AssistPath assistPath("../");
   string scriptPath = assistPath.GetWorkPath("script");
-  string time = Time::GetLocalTime();
-  string filename = scriptPath + "\\" + time + task_info_.task_id + ".ps1";
-  BuildScript(filename, task_info_.content);
+  string filename = scriptPath + "\\"  + task_info.task_id + ".ps1";
+  BuildScript(filename, task_info.content);
 
-  string out;
-  long   exitcode;
-  string cmd = "powershell.exe Set-ExecutionPolicy RemoteSigned";
-  SubProcess process(cmd);
-  process.Execute(out, exitcode);
+  
+  Process("powershell.exe Set-ExecutionPolicy RemoteSigned")
+	  .syncRun(10);
 
-  cmd = "powershell -file \"" + filename + "\"";
-  sub_process_.set_cmd(cmd);
-  sub_process_.Execute(task_output_, err_code_);
+  string  cmd = "powershell -file \"" + filename + "\"";
+  string  dir = task_info.working_dir;
+  int timeout = atoi( task_info.time_out.c_str() );
+  DoWork(cmd, dir, timeout);
+
 }
+
+
+
+
 }  // namespace task_engine

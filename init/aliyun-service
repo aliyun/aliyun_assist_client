@@ -1,0 +1,64 @@
+#!/bin/bash
+#
+# chkconfig: 35 90 12
+# description: aliyun service
+#
+
+aliyun_service_name='aliyun-service'
+aliyun_service_bin="/usr/sbin/$aliyun_service_name"
+aliyun_service_opts='-d'
+start_cmd="$aliyun_service_bin $aliyun_service_opts"
+service_lock=/var/lock/$aliyun_service_name
+
+# Start the service aliyun-service
+start() {
+    if [ -f $service_lock ]; then
+        ps aux | grep "$start_cmd" | grep -v grep 1>/dev/null 2>&1
+        if [ $? -eq 0 ]; then
+            echo "$aliyun_service_name is already started!" 1>/dev/null 2>&1
+            return 0
+        else
+            rm -rf $service_lock
+        fi
+    fi
+
+    $start_cmd
+        
+    ### Create the lock file ###
+    touch $service_lock
+}
+
+# Stop the service aliyun-service
+stop() {
+    if [ -f $service_lock ]; then
+        echo "aliyun service" 1>/dev/null 2>&1
+
+        for service_pid in `ps axf | grep "$start_cmd" | grep -v grep | awk {'print $1'}`
+        do
+            kill -9 $service_pid
+        done
+        rm -rf $service_lock    
+    fi
+}
+
+### main logic ###
+case "$1" in
+start)
+    start
+    ;;
+stop)
+    stop
+    ;;
+status)
+    status $aliyun_service_name
+    ;;
+restart|reload|condrestart)
+    stop
+    start
+    ;;
+*)
+    echo $"Usage: $0 {start|stop|restart|reload|status}"
+    exit 1
+esac
+
+exit 0

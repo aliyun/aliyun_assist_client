@@ -1,13 +1,14 @@
-#pragma once;
-
+#ifndef _mutex_locker_
+#define _mutex_locker_
+				  
 #include <mutex>
 
-struct MutexLocker {
-  MutexLocker(std::mutex* mutex) :m_mark(true), m_mutex(mutex) {
+struct MutexLockerHelper {
+  MutexLockerHelper(std::mutex* mutex) :m_mark(true), m_mutex(mutex) {
     m_mutex->lock();
   };
 
-  ~MutexLocker() {
+  ~MutexLockerHelper() {
     m_mutex->unlock();
   };
 
@@ -15,8 +16,8 @@ struct MutexLocker {
   bool        m_mark;
 };
 
-#define AutoMutexLocker(mutex) for(MutexLocker locker(mutex); locker.m_mark; locker.m_mark = false)
-
+#define MutexLocker(mutex) for(MutexLockerHelper locker(mutex); locker.m_mark; locker.m_mark = false)
+#endif // 
 
 
 

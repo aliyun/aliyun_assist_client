@@ -5,51 +5,50 @@
 #include <vector>
 #include <string>
 
-#include "jsoncpp/json.h"
 #include "utils/http_request.h"
 #include "utils/service_provide.h"
-#include "utils/CheckNet.h"
-#include "utils/Encode.h"
+#include "utils/host_finder.h"
+#include "utils/encoder.h"
 #include "utils/Log.h"
 #include "utils/AssistPath.h"
+#include "json11/json11.h"
 
 namespace {
 void parse_task_info(std::string response,
     std::vector<task_engine::TaskInfo>& task_info) {
-  Json::Value jsonRoot;
-  Json::Value jsonValue;
-  Json::Reader reader;
+ 
   try {
-    if (!reader.parse(response, jsonRoot)) {
-      Log::Error("invalid json format");
-      return;
-    }
+	  string errinfo;
+	  auto json = json11::Json::parse(response, errinfo);
+	  if (errinfo != "") {
+		  Log::Error("invalid json format");
+		  return;
+	  }
+    
+	  for ( auto &it : json.array_items() ) {
+		  task_engine::TaskInfo info;
+		 
+		  auto taskjson = it["taskItem"];
+		  if ( taskjson.is_null() )
+			  continue;
 
-    if (jsonRoot.isArray()) {
-      for (unsigned int i = 0; i < jsonRoot.size(); i++) {
-        task_engine::TaskInfo info;
-        if (jsonRoot[i]["taskInstanceID"].isString())
-          info.instance_id = jsonRoot[i]["taskInstanceID"].asString();
-        jsonValue = jsonRoot[i]["taskItem"];
-        if (jsonValue.empty())
-          return;
-        info.command_id = jsonValue["type"].asString();
-        info.task_id = jsonValue["taskID"].asString();
-        std::string content = jsonValue["commandContent"].asString();
-        Encoder encode;
-        if (!content.empty()) {
-          info.content = reinterpret_cast<char *>(encode.B64Decode(
-            content.c_str(), content.size()));
-        }
-        info.working_dir = jsonValue["workingDirectory"].asString();
-        info.cronat = jsonValue["cron"].asString();
-        info.time_out = jsonValue["timeOut"].asString();
-        if(info.time_out.empty()) {
-          info.time_out = "3600";
-        }
-        task_info.push_back(info);
-      }
-    }
+		  info.command_type = taskjson["type"].string_value();
+		  info.task_id = taskjson["taskID"].string_value();
+		  std::string content = taskjson["commandContent"].string_value();
+		  Encoder encode;
+		  if ( !content.empty() ) {
+			  info.content = reinterpret_cast<char *>(encode.B64Decode(
+				  content.c_str(), content.size()));
+		  }
+		  info.working_dir = taskjson["workingDirectory"].string_value();
+		  info.cronat = taskjson["cron"].string_value();
+		  info.time_out = taskjson["timeOut"].string_value();
+		  if ( info.time_out.empty() ) {
+			  info.time_out = "3600";
+		  }
+		  task_info.push_back(info);
+	  }
+
   } catch(...) {
     Log::Error("fetch task json is invalid");
   }
@@ -61,20 +60,15 @@ TaskFetch::TaskFetch() {
 }
 
 void TaskFetch::FetchTasks(std::vector<TaskInfo>& task_info) {
+ 
+  if (HostFinder::getServerHost().empty() ) {
+	return;
+  }
   std::string response;
-  if(HostChooser::m_HostSelect.empty()) {
-    AssistPath path_service("");
-    HostChooser  host_choose;
-    host_choose.Init(path_service.GetConfigPath());
-  }
-  if(HostChooser::m_HostSelect.empty()) {
-    return;
-  }
   std::string url = ServiceProvide::GetFetchTaskService();
   HttpRequest::https_request_post(url, "", response);
   parse_task_info(response, task_info);
-  Log::Info("response:%s", response.c_str());
-  Log::Info("Fetch_Tasks:Fetch %d Tasks", task_info.size());
+  Log::Info("Fetch %d Tasks response is: %s", task_info.size(), response.c_str());
 }
 
 #if defined(TEST_MODE)
@@ -85,7 +79,7 @@ void TaskFetch::TestFetchTasks(std::string res, std::vector<TaskInfo>& task_info
 
 void TaskFetch::FetchCancledTasks(std::vector<TaskInfo>& task_info) {
   std::string response;
-  if (HostChooser::m_HostSelect.empty()) {
+  if (HostFinder::getServerHost().empty()) {
     return;
   }
   std::string url = ServiceProvide::GetFetchCanceledTaskService();
@@ -94,7 +88,7 @@ void TaskFetch::FetchCancledTasks(std::vector<TaskInfo>& task_info) {
   Log::Info("Fetch_Cancled_Tasks:Fetch %d Tasks", task_info.size());
 }
 
-void TaskFetch::FetchPeriodTasks(std::vector<TaskInfo>& task_info) {
+/*void TaskFetch::FetchPeriodTasks(std::vector<TaskInfo>& task_info) {
   std::string response;
   if (HostChooser::m_HostSelect.empty()) {
     return;
@@ -103,6 +97,6 @@ void TaskFetch::FetchPeriodTasks(std::vector<TaskInfo>& task_info) {
   HttpRequest::https_request_post(url, "", response);
   parse_task_info(response, task_info);
   Log::Info("Fetch_Period_Tasks:Fetch %d Tasks", task_info.size());
-}
+}*/
 
 }  // namespace task_engine

@@ -1,65 +1,123 @@
 #!/bin/bash
 
+aliyun_service_name='aliyun-service'
+aliyun_service_bin="/usr/sbin/$aliyun_service_name"
+service_lock=/var/lock/$aliyun_service_name
 des_dir=""
 script_dir="/usr/local/share/aliyun-assist/$assist_version/init"
 src_dir=$script_dir
 echo "script_dir:$script_dir"
 echo "assist_version:$assist_version"
 
-issue=""
-. "$script_dir/script/common/identify_issue_version"
-echo "issue:$issue"
-
-
-if [ ! -e $script_dir/script/$issue/common/update_service ]; then
-    #echo "find update script."
-    #exit 1
-    . "$script_dir/script/update_service"
-    if [ $? -ne 0 ]; then
-        echo "3131:failed to find update install script."
-        #exit 1
-    fi
-else
-    ######### compare the pv in vm and newest pv##########
-    . "$script_dir/script/$issue/common/update_service"
-    if [ $? -ne 0 ]; then
-        echo "3131:failed to find update install script."
-        #exit 1
-    fi
-fi
-
-if [ -e /etc/systemd/system/aliyun.service ]; then
-  cmd="systemctl restart aliyun.service"
-  $cmd
-  rc=$?
-  if [ ${rc} -eq 0 ] ;then
-    echo $cmd
-    exit 0
-  fi
-fi
-
-if [ -f /etc/init/aliyun-service.conf ]; then
-        grep -i "Ubuntu" /etc/issue
-        if [ $? -eq 0 ]; then
-              cmd="/sbin/initctl restart aliyun-service"
-              $cmd
-              rc=$?
-              if [ ${rc} -eq 0 ] ;then
-                echo $cmd
-                exit 0
-              fi
-              service agentwatch restart
-              exit 0
+clean() {
+    # This file exist in offcial suse image, it cause conflict
+    [ -e "/usr/lib/systemd/system/aliyun.service" ] && rm -rf /usr/lib/systemd/system/aliyun.service
+    
+    [ -e "/var/lock/agentwatch" ] && rm -f "/var/lock/agentwatch"
+    
+    #remove old agentwatch first
+    if [ -e /etc/init.d/agentwatch ]; then
+        /etc/init.d/agentwatch stop
+        CHK=$(which chkconfig)
+        if [ ! -x "${CHK}" ]; then
+            echo "No find chkconfig"
+            URC=$(which update-rc.d)
+            if [ -x "${URC}" ]; then
+                echo "Find update-rc.d"
+                update-rc.d -f agentwatch remove
+            fi
         else
-              setsid /sbin/initctl restart aliyun-service
-              exit 0
+            echo "Find chkconfig"
+            chkconfig --del agentwatch
         fi
-fi
+        
+        rm -rf /etc/init.d/agentwatch
+    fi
+}
+
+create_link() {
+    ln -sf /usr/local/share/aliyun-assist/$assist_version/aliyun-service /usr/sbin/aliyun-service
+    ln -sf /usr/local/share/aliyun-assist/$assist_version/aliyun_installer /usr/sbin/aliyun_installer
+}
+
+stop_service() {
+    if [ -e /etc/inittab ]; then
+        result=`cat /etc/inittab | grep "$aliyun_service_name"`
+        if [ $? -eq 0 ]; then
+            sed -i /$aliyun_service_name/d /etc/inittab
+            kill -HUP 1
+            sleep 1
+        fi
+    fi
+    
+    for service_pid in `ps axf | grep "$aliyun_service_bin" | grep -v grep | awk {'print $1'}`
+    do
+        kill -9 $service_pid
+    done
+}
+
+start_service() {
+    . $src_dir/issue/ubuntu/issue-functions
+    . $src_dir/init-functions
+    
+    # Use upstart first if it is ubuntu
+    if ubuntu_detect_issue; then
+        global_big=''
+        ubuntu_detect_version
+        if [[ $global_big -le 14 ]]; then
+            # ubuntu 10/12/14
+            if detect_upstart; then
+                cp -f $src_dir/aliyun-service.conf /etc/init/aliyun-service.conf
+                /sbin/initctl list | grep "aliyun-service start/running"
+                if [ $? -eq 0 ]; then
+                    /sbin/initctl restart aliyun-service
+                else
+                    /sbin/initctl start aliyun-service
+                fi
+                sleep 1
+                return
+            fi
+        fi
+    fi
+
+    if detect_systemd; then
+        cp -f $src_dir/aliyun.service /etc/systemd/system/aliyun.service
+        systemctl daemon-reload
+        systemctl enable aliyun.service
+        systemctl restart aliyun.service
+    elif detect_sysvinit; then
+        cp -f $src_dir/aliyun-service /etc/init.d/aliyun-service
+        chmod 755 /etc/init.d/aliyun-service
+        /etc/init.d/aliyun-service restart
+        CHK=$(which chkconfig)
+        if [ ! -x "${CHK}" ]; then
+            echo "No find chkconfig"
+            URC=$(which update-rc.d)
+            if [ -x "${URC}" ]; then
+                echo "Find update-rc.d"
+                update-rc.d aliyun-service defaults
+            fi
+        else
+            echo "Find chkconfig"
+            chkconfig --add aliyun-service
+            chkconfig aliyun-service on
+        fi
+    elif detect_upstart; then
+        cp -f $src_dir/aliyun-service.conf /etc/init/aliyun-service.conf
+        /sbin/initctl list | grep "aliyun-service start/running"
+        if [ $? -eq 0 ]; then
+            /sbin/initctl restart aliyun-service
+        else
+            /sbin/initctl start aliyun-service
+        fi
+        sleep 1
+    fi
+}
+
+clean
+create_link
+stop_service
+start_service
 
 
-if echo $init_path | grep -q 'systemd' &&   [[ -d /var/run/systemd/system ]] ; then
-   systemctl restart agentwatch
-else
-   service agentwatch restart
-fi
 #echo "0:success"

@@ -3,16 +3,19 @@
 #include "./run_shellscript.h"
 
 #include <string>
+#include <mutex>
 
 #include "utils/AssistPath.h"
-#include "utils/TimeTool.h"
-#include "utils/SubProcess.h"
+#include "utils/process.h"
+#include "utils/Log.h"
 
 namespace task_engine {
-RunShellScriptTask::RunShellScriptTask(TaskInfo info) : Task(info) {
+RunShellScriptTask::RunShellScriptTask(TaskInfo info) : BaseTask(info) {
 }
 
 bool RunShellScriptTask::BuildScript(string fileName, string content) {
+  
+  
   FILE *fp = fopen(fileName.c_str(), "a+");
   if (!fp) {
     return false;
@@ -21,12 +24,13 @@ bool RunShellScriptTask::BuildScript(string fileName, string content) {
   fclose(fp);
   fp = NULL;
   return true;
+
 }
 
 void RunShellScriptTask::Run() {
-  string out;
-  string cmd = task_info_.content;
-  sub_process_.set_cmd(cmd);
-  sub_process_.Execute(task_output_, err_code_);
+  string cmd  = task_info.content;
+  string  dir = task_info.working_dir;
+  int timeout = atoi(task_info.time_out.c_str());
+  DoWork(cmd, dir, timeout);
 }
 }  // namespace task_engine

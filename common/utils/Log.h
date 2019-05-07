@@ -7,11 +7,9 @@
 #include <iostream>
 #include <fstream>
 #include <stdarg.h>
-
-
-#define PUSH_LOG_STACK \
-	const StackLogger stackLoggerTempObject = StackLogger( __FUNCTION__ );
-
+#define  ELPP_THREAD_SAFE
+#define  ELPP_NO_DEFAULT_LOG_FILE
+#include "easyloggingpp/easylogging++.h"
 
 class Log {
  public:
@@ -25,10 +23,8 @@ class Log {
 
   static const char* TypeToString(const Type& type);
 
-  static bool Initialise(const std::string& fileName);
+  static bool Initialise(const std::string& fileName, int preserveDays = 30);
   static bool Finalise();
-
-  static void SetThreshold(const Type& type);
 
   static bool Fatal(const std::string& message);
   static bool Fatal(const char* format, ...);
@@ -45,17 +41,22 @@ class Log {
   static bool Debug(const std::string& message);
   static bool Debug(const char* format, ...);
 
-  static std::string Peek();
-  static bool Push(const std::string& input);
-  static std::string Pop();
-  static void PrintStackTrace();
+  static void RolloutHandler(const char* filename,
+    std::size_t size,
+    el::base::RollingLogFileBasis rollingbasis);
+  static void CleanLogs();
+
+  static void copyFile(const char* src, const char* dest);
+  static char separator();
+  static void removeFile(const char* src);
+
+  std::string GetFileName();
+  int GetPreserveDays();
 
  private:
-  Type m_threshold;
   bool m_initialised;
   std::string m_fileName;
-  std::vector<std::string> m_stack;
-  std::ofstream m_stream;
+  int m_preserveDays;
 
   Log();
   Log(const Log&);
@@ -63,22 +64,10 @@ class Log {
 
   static Log& get();
 
-  void write(const char* format, ...);
-
   bool log(const Type& type, const std::string& message);
   bool log(const Type& type, const char* format, va_list& varArgs);
 
   Log& operator=(const Log&);
-};
-
-struct StackLogger {
-  StackLogger(const std::string& input) {
-    Log::Push( input );
-  }
-
-  ~StackLogger() {
-    Log::Pop();
-  }
 };
 
 #endif

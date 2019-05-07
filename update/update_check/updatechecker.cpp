@@ -6,20 +6,21 @@
 #include <string>
 #include <cstdlib>
 #include <algorithm>
+#include <regex>
 
 #include "./appcast.h"
 #include "utils/http_request.h"
 #include "utils/OsVersion.h"
 #include "utils/FileVersion.h"
-#include "utils/ProcessUtil.h"
 #include "utils/AssistPath.h"
 #include "utils/DirIterator.h"
-#include "utils/CheckNet.h"
+#include "utils/host_finder.h"
 #include "utils/FileUtil.h"
-#include "utils/SubProcess.h"
+#include "utils/process.h"
 #include "utils/service_provide.h"
+#include "utils/VersionComparator.h"
 #include "zip/zip.h"
-#include "jsoncpp/json.h"
+#include "json11/json11.h"
 #include "utils/Log.h"
 #include "md5/md5.h"
 
@@ -32,20 +33,20 @@ UpdateProcess::UpdateProcess(Appcast update_info) {
 }
 
 std::string UpdateProcess::get_request_string() {
-  Json::Value jsonRoot;
-  try {
+ 
+	json11::Json  json = json11::Json::object {
 #ifdef _WIN32
-    jsonRoot["os"] = "windows";
+		{"os","windows"},
 #else
-    jsonRoot["os"] = "linux";
+		{"os", "linux"},
 #endif
-    jsonRoot["os_version"] = OsVersion::GetVersion();
-    jsonRoot["app_id"] = "aliyun assistant";
-    jsonRoot["app_version"] = FILE_VERSION_RESOURCE_STR;
-  } catch (...) {
-    Log::Error("get_request_string failed");
-  }
-  return jsonRoot.toStyledString();
+		{ "os_version", OsVersion::GetVersion() },
+	    { "app_id", "aliyun assistant" },
+	    { "app_version",FILE_VERSION_RESOURCE_STR }
+	};
+
+	return json.dump();
+ 
 }
 
 #if defined(TEST_MODE)
@@ -55,26 +56,27 @@ bool UpdateProcess::test_parse_response_string(std::string response) {
 #endif
 
 bool UpdateProcess::parse_response_string(std::string response) {
-  Json::Value jsonRoot;
-  Json::Reader reader;
+  
   try {
-    if (!reader.parse(response, jsonRoot)) {
-      Log::Error("invalid json format");
-      return false;
-    }
+	  string errinfo;
+	  auto json = json11::Json::parse(response, errinfo);
+	  if (errinfo != "") {
+		  Log::Error("invalid json format");
+		  return false;
+	  }
 
-    update_info_.need_update = jsonRoot["need_update"].asInt();
+    update_info_.need_update = json["need_update"].int_value();
     if (update_info_.need_update == 0) {
       Log::Info("not need update");
       return false;
     }
-    update_info_.flag = jsonRoot["flag"].asInt();
+    update_info_.flag = json["flag"].int_value();
 
-    Json::Value url_info = jsonRoot["update_info"];
-    update_info_.download_url = url_info["url"].asString();
-    update_info_.md5 = url_info["md5"].asString();
-    update_info_.file_name = url_info["file_name"].asString();
+    update_info_.download_url = json["update_info"]["url"].string_value();
+    update_info_.md5 = json["update_info"]["md5"].string_value();
+    update_info_.file_name = json["update_info"]["file_name"].string_value();
     Log::Info("url:%s", update_info_.download_url.c_str());
+
   } catch(...) {
     Log::Error("update check json is invalid");
   }
@@ -84,7 +86,7 @@ bool UpdateProcess::parse_response_string(std::string response) {
 bool UpdateProcess::CheckUpdate() {
   std::string json = get_request_string();
   std::string response;
-  if (HostChooser::m_HostSelect.empty()) {
+  if ( HostFinder::getServerHost().empty() ) {
     return false;
   }
   std::string url = ServiceProvide::GetUpdateService();
@@ -109,7 +111,7 @@ void UninstallService() {
   std::string exe_path = path_service.GetCurrDir();
   exe_path += FileUtils::separator();
   exe_path.append("uninstall.bat");
-  ProcessUtils::runSync(exe_path, "");
+  Process(exe_path).syncRun();
 }
 
 bool UpdateProcess::InstallFiles(const std::string src_dir,
@@ -136,20 +138,17 @@ bool UpdateProcess::InstallFile(std::string src_path, std::string des_path) {
   return true;
 }
 
-static std::string script_dir;
 bool UpdateProcess::update_script() {
+
 #if !defined(TEST_MODE)
   Log::Info("install update script, path:%s", script_dir.c_str());
 #if defined(_WIN32)
-  ProcessUtils::runSync(script_dir, "");
+  Process(script_dir).syncRun();
 
 #else
-  std::string content, output;
-  long err_code;
-  FileUtils::ReadFileToString(script_dir, content);
-  SubProcess sub_process("", 3600);
-  sub_process.set_cmd(content);
-  sub_process.Execute(output, err_code);
+  std::string content;
+  FileUtils::readFile(script_dir, content);
+  Process(content).syncRun();
 #endif
 #endif
   return true;
@@ -196,27 +195,53 @@ bool UpdateProcess::InstallFilesRecursive(std::string src_dir,
 }
 
 bool UpdateProcess::CheckMd5(const std::string path,
-    const std::string md5_string) {
-  /*std::string content;
-  FileUtils::ReadFileToString(path, content);
-  md5 md5_service(content);
-  std::string file_md5 = md5_service.Md5();
-  if (md5_string.compare(file_md5) == 0) {
+     const std::string md5_string) {
+  
+  std::string origal = md5_string;
+  transform(origal.begin(), origal.end(), origal.begin(), (int(*)(int))tolower);
+
+  std::string file_md5 = md5file( path.c_str() );
+  transform(file_md5.begin(), file_md5.end(), file_md5.begin(), (int(*)(int))tolower);
+
+  if (origal.compare(file_md5) == 0) {
     return true;
   }
   else {
     return false;
-  }*/
-  return true;
+  }
 }
 
 bool UpdateProcess::RemoveOldVersion(std::string dir) {
-  if (dir.find("assist") != std::string::npos) {
-    Log::Info("begin remove old version");
-    FileUtils::rmdirRecursive(dir.c_str());
-    return true;
+  Log::Info("Remove old version from %s", dir.c_str());
+  if (dir.empty()) {
+    Log::Error("Install dir is empty");
+    return false;
   }
-  return false;
+
+  std::string current_version = FILE_VERSION_RESOURCE_STR;
+  DirIterator it_dir(dir.c_str());
+  while (it_dir.next()) {
+    std::string name = it_dir.fileName();
+    if (name == "." || name == "..")
+      continue;
+
+    if (!it_dir.isDir())
+      continue;
+
+    //Filter the sub dir which name is not like 1.0.0.130
+    regex reg("\\d+(.\\d+){3}");
+    smatch str_match;
+    if (!regex_match(name, str_match, reg))
+      continue;
+
+    if (VersionComparator::CompareVersions(name, current_version) < 0) {
+      std::string outdated_dir = dir + FileUtils::separator() + name;
+      Log::Info("Remove old version: %s", outdated_dir.c_str());
+      FileUtils::rmdirRecursive(outdated_dir.c_str());
+    }
+  }
+
+  return true;
 }
 
 }  // namespace alyun_assist_update

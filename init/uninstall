@@ -1,0 +1,40 @@
+#!/bin/bash
+
+[ -e "/usr/sbin/aliyun-service" ] && rm -rf /usr/sbin/aliyun-service
+[ -e "/usr/sbin/aliyun_installer" ] && rm -rf /usr/sbin/aliyun_installer
+rm -rf /usr/local/share/aliyun-assist
+
+if [ -e /etc/systemd/system/aliyun.service ]; then
+    cmd="systemctl stop aliyun.service"
+    $cmd
+    rc=$?
+    if [ ${rc} -eq 0 ] ;then
+        echo $cmd
+        rm -f /etc/systemd/system/aliyun.service
+        exit 0
+    fi
+fi
+
+if [ -f /etc/init/aliyun-service.conf ]; then
+    /sbin/initctl stop aliyun-service
+    rm -f /etc/init/aliyun-service.conf
+fi
+
+if [ -f /etc/init.d/aliyun-service ]; then
+    CHK=$(which chkconfig)
+    if [ ! -x "${CHK}" ]; then
+        echo "No find chkconfig"
+        URC=$(which update-rc.d)
+        if [ -x "${URC}" ]; then
+            echo "Find update-rc.d"
+            update-rc.d -f aliyun-service remove
+        fi
+    else
+        echo "Find chkconfig"
+        chkconfig aliyun-service off
+        chkconfig --del aliyun-service
+    fi
+    rm -f /etc/init.d/aliyun-service
+fi
+
+echo "0:success"

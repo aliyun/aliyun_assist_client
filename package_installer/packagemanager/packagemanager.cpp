@@ -14,12 +14,12 @@
 #include "utils/AssistPath.h"
 #include "utils/OsVersion.h"
 #include "utils/FileVersion.h"
-#include "utils/CheckNet.h"
+#include "utils/host_finder.h"
 #include "utils/http_request.h"
 #include "utils/Log.h"
 #include "utils/FileUtil.h"
 #include "utils/VersionComparator.h"
-#include "jsoncpp/json.h"
+#include "json11/json11.h"
 #include "zip/zip.h"
 #include "md5/md5.h"
 
@@ -435,11 +435,11 @@ vector<PackageInfo> PackageManager::GetPackageInfo(
   std::string response;
   vector<PackageInfo> package_infos;
 
-  if (HostChooser::m_HostSelect.empty()) {
+  if ( HostFinder::getServerHost().empty() ) {
     return package_infos;
   }
 
-  std::string url = "https://" + HostChooser::m_HostSelect +
+  std::string url = "https://" + HostFinder::getServerHost() +
     "/luban/api/v1/repo/query_software?";
   /*std::string url = "http://100.81.152.153:6666";
   url += "/luban/api/v1/repo/query_software?";*/
@@ -466,56 +466,46 @@ std::string PackageManager::GetRequestString(
     const std::string& package_name,
     const std::string& package_version,
     const std::string& arch) {
-  Json::Value jsonRoot;
-  if (!package_name.empty())
-    jsonRoot["package_name"] = package_name;
 
-  if (!package_version.empty())
-    jsonRoot["package_version"] = package_version;
-
-  if (!arch.empty())
-    jsonRoot["arch"] = arch;
-
+  json11::Json json = json11::Json::object { 
+	  { "package_name",package_name.empty()? json11::Json(nullptr): package_name },
+      { "package_version",package_version.empty()? json11::Json(nullptr) : package_version },
+      { "arch",arch.empty()? json11::Json(nullptr) : arch },
 #ifdef _WIN32
-  jsonRoot["os"] = "windows";
+	  {"os","windows"}
 #else
-  jsonRoot["os"] = "linux";
+      {"os","linux"}
 #endif
-
-  return jsonRoot.toStyledString();
+  };
+  return json.dump();
 }
 
 vector<PackageInfo> PackageManager::ParseResponseString(
     std::string response) {
-  Json::Value jsonRoot;
-  Json::Reader reader;
+  
 
   vector<PackageInfo> package_infos;
   try {
-    if (!reader.parse(response, jsonRoot)) {
-      Log::Error("invalid json format");
-      return package_infos;
-    }
 
-    for (size_t i = 0; i < jsonRoot.size(); ++i) {
-      PackageInfo package_info;
-      if (jsonRoot[i]["packageId"].isString())
-        package_info.package_id = jsonRoot[i]["packageId"].asString();
-      if (jsonRoot[i]["url"].isString())
-        package_info.url = jsonRoot[i]["url"].asString();
-      if (jsonRoot[i]["md5"].isString())
-        package_info.MD5 = jsonRoot[i]["md5"].asString();
-      if (jsonRoot[i]["name"].isString())
-        package_info.display_name = jsonRoot[i]["name"].asString();
-      if (jsonRoot[i]["version"].isString())
-        package_info.display_version = jsonRoot[i]["version"].asString();
-      if (jsonRoot[i]["publisher"].isString())
-        package_info.publisher = jsonRoot[i]["publisher"].asString();
-      if (jsonRoot[i]["arch"].isString())
-        package_info.arch = jsonRoot[i]["arch"].asString();
-      std::transform(package_info.MD5.begin(), package_info.MD5.end(),
+	  string errinfo;
+	  auto json = json11::Json::parse(response, errinfo);
+	  if (errinfo != "") {
+		  Log::Error("invalid json format");
+		  return package_infos;
+	  }
+
+	  for ( auto &it : json.array_items() ) {
+        PackageInfo package_info;
+        package_info.package_id = it["packageId"].string_value();
+        package_info.url = it["url"].string_value();
+        package_info.MD5 = it["md5"].string_value();
+		package_info.display_name = it["name"].string_value();;
+		package_info.display_version = it["version"].string_value();
+		package_info.publisher = it["publisher"].string_value();
+		package_info.arch = it["arch"].string_value();
+        std::transform(package_info.MD5.begin(), package_info.MD5.end(),
         package_info.MD5.begin(), ::tolower);
-      package_infos.push_back(package_info);
+        package_infos.push_back(package_info);
     }
   }
   catch (...) {
@@ -540,28 +530,19 @@ bool PackageManager::Download(const std::string& url,
 
 bool PackageManager::CheckMd5(const std::string& path,
     const std::string& md5_string) {
-  std::string md5_str = md5_string;
-  std::transform(md5_str.begin(), md5_str.end(),
-      md5_str.begin(), ::tolower);
-  std::string content;
-  FileUtils::ReadFileToString(path, content);
-  md5 md5_service(content);
-  std::string file_md5;
-  int code = ComputeFileMD5(path, file_md5);
-  if (code == -1) {
-    Log::Error("ComputeFileMD5 failed");
-    return false;
-  }
 
-  std::transform(file_md5.begin(), file_md5.end(),
-    file_md5.begin(), ::tolower);
-  if (md5_str.compare(file_md5) == 0) {
-    return true;
-  } else {
-    Log::Error("CheckMd5 failed, path: %s, file_md5: %s, md5_str: %s",
-      path.c_str(), file_md5.c_str(), md5_str.c_str());
-    return false;
-  }
+	std::string origal = md5_string;
+	transform(origal.begin(), origal.end(), origal.begin(), (int(*)(int))tolower);
+
+	std::string file_md5 = md5file(path.c_str());
+	transform(file_md5.begin(), file_md5.end(), file_md5.begin(), (int(*)(int))tolower);
+
+	if (origal.compare(file_md5) == 0) {
+		return true;
+	}
+	else {
+		return false;
+	}
 }
 
 bool PackageManager::UnZip(const std::string& file_name,
@@ -668,50 +649,7 @@ int PackageManager::ExecuteCmd(char* cmd, char* buff, int size) {
 }
 #endif
 
-int PackageManager::ComputeFileMD5(const std::string& file_path,
-    std::string& md5_str) {
-  md5 md5_service;
 
-  FILE* file = fopen(file_path.c_str(), "rb");
-  if (!file) {
-    Log::Error("fopen failed, file_path: %s", file_path.c_str());
-    return -1;
-  }
-
-  const size_t kBufferSize = 1 << 14;
-  char* buf = new char[kBufferSize];
-  size_t len;
-  size_t size = 0;
-
-  fseek(file, 0, SEEK_END);
-  long totle_len = ftell(file);
-  if (totle_len < 0) {
-    fclose(file);
-    Log::Error("ftell failed, file_path: %s", file_path.c_str());
-    return -1;
-  }
-
-  fseek(file, 0, SEEK_SET);
-  while ((len = fread(buf, sizeof(char), kBufferSize, file)) > 0) {
-    md5_service.update(buf, len);
-    size += len;
-  }
-
-  if (totle_len != size) {
-    fclose(file);
-    Log::Error("fread failed, totle_len: %d, read_size: %d",
-        totle_len, size);
-    return -1;
-  }
-
-  delete[] buf;
-  fclose(file);
-
-  md5_service.finalize();
-  md5_str = md5_service.hexdigest();
-
-  return 0;
-}
 
 bool PackageManager::InstallLatestVersion(
     const std::vector<PackageInfo>& package_infos,

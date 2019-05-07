@@ -4,7 +4,7 @@
 #include <string>
 
 #include "json11/json11.h"
-#include "CheckNet.h"
+#include "host_finder.h"
 #include "AssistPath.h"
 #include "Log.h"
 #include "curl/curl.h"
@@ -13,23 +13,16 @@
 using namespace std;
 using namespace json11;
 
-bool HttpRequest::FindRegion(std::string& host) {
-  string resp;
-  string url = "http://100.100.100.200/latest/meta-data/region-id";
-  Log::Info("Check IP :" + url);
-  bool status = http_request_get(url.c_str(), host);
-  Log::Info("Check IP %d, host:%s", status, host.c_str());
-  return status;
+
+HttpRequest::HttpRequest() {
+	static bool inited = false;
+	if (!inited) {
+		inited = true;
+		curl_global_init(CURL_GLOBAL_ALL);
+	}
 }
 
-bool HttpRequest::DetectHost(const std::string& host) {
-  string resp;
-  string url = "https://" + host + "/luban/api/connection_detect";
-  Log::Info("Check IP :" + url);
-  bool status = https_request_post(url.c_str(), "", resp);
-  Log::Info("Check IP %d", status);
-  return status;
-}
+HttpRequest initialize;
 
 namespace {
 
@@ -89,6 +82,10 @@ bool HttpRequest::http_request(const std::string& url,
        data. */
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
 
+    // Do not use dns cache
+    curl_easy_setopt(curl, CURLOPT_DNS_USE_GLOBAL_CACHE, false);
+    curl_easy_setopt(curl, CURLOPT_DNS_CACHE_TIMEOUT, 2);
+
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 3);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5);
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
@@ -99,6 +96,7 @@ bool HttpRequest::http_request(const std::string& url,
 
     struct curl_slist *headers = NULL;
     headers = curl_slist_append(headers, "Content-Type: application/json");
+	
 
     /* pass our list of custom made headers */
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
@@ -147,6 +145,10 @@ bool HttpRequest::https_request(const std::string& url,
        data. */
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
 
+    // Do not use dns cache
+    curl_easy_setopt(curl, CURLOPT_DNS_USE_GLOBAL_CACHE, false);
+    curl_easy_setopt(curl, CURLOPT_DNS_CACHE_TIMEOUT, 2);
+
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 3);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5);
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
@@ -167,9 +169,9 @@ bool HttpRequest::https_request(const std::string& url,
     /* we pass our 'chunk' struct to the callback function */
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&chunk);
 
-
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+	//curl_easy_setopt(curl, CURLOPT_VERBOSE, 1);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 2L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 1L);
     AssistPath path_service("");
 
     string CfgFile = path_service.GetConfigPath() + FileUtils::separator() + "GlobalSignRootCA.crt";
@@ -204,6 +206,10 @@ bool HttpRequest::download_file(const std::string& url,
        just as well be a https:// URL if that is what should receive the
        data. */
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+
+    // Do not use dns cache
+    curl_easy_setopt(curl, CURLOPT_DNS_USE_GLOBAL_CACHE, false);
+    curl_easy_setopt(curl, CURLOPT_DNS_CACHE_TIMEOUT, 2);
 
     /* send all data to this function  */
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteFileCallback);

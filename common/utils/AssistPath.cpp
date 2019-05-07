@@ -17,10 +17,16 @@ Description: Provide functions to get file path
 #include <sys/stat.h>
 #endif // _WIN32
 
-#include <string.h>
+
 #include "FileUtil.h"
 #include "AssistPath.h"
+#include <string.h>
 
+
+
+
+AssistPath::AssistPath() :AssistPath("") {
+}
 
 /*
 *Summary: this is a constructor func

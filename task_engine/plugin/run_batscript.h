@@ -3,12 +3,13 @@
 #define CLIENT_TASK_ENGINE_PLUGIN_RUN_BATSCRIPT_H_
 
 #include <string>
-#include "../task.h"
+#include "../base_task.h"
 
 namespace task_engine {
-class RunBatTask : public Task {
+class RunBatTask : public BaseTask {
  public:
   explicit RunBatTask(TaskInfo info);
+  virtual ~RunBatTask() {};
   void Run();
  private:
   bool BuildScript(string fileName, std::string content);

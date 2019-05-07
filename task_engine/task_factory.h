@@ -2,7 +2,7 @@
 #ifndef CLIENT_TASK_ENGINE_TASK_FACTORY_H_
 #define CLIENT_TASK_ENGINE_TASK_FACTORY_H_
 
-#include "./task.h"
+#include "base_task.h"
 
 #include <string>
 #include <map>
@@ -11,13 +11,10 @@ namespace task_engine {
 class TaskFactory {
  public:
   TaskFactory();
-  Task* CreateTask(TaskInfo info);
-  Task* CopyTask(TaskInfo info);
-  bool RemoveTask(std::string id);
-  Task* GetTask(std::string id);
+  BaseTask*  CreateTask(TaskInfo& info);
+  void       DeleteTask(BaseTask* task);
  private:
-  std::map<std::string, Task*> task_maps;
-  std::map<std::string, int> history_task_maps;
+  std::map<std::string, BaseTask*> task_history;
   std::mutex mtx;
 };
 }  // namespace task_engine

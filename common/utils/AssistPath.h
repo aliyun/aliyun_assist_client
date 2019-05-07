@@ -18,7 +18,9 @@ using  std::list;
 
 class AssistPath {
  public:
+  AssistPath();
   AssistPath(string relative_path);
+
   ~AssistPath();
   string GetCurrDir();
   bool   GetTmpPath(std::string& path);

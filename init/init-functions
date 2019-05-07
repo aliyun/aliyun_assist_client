@@ -1,0 +1,22 @@
+#!/bin/bash
+
+detect_systemd() {
+    [[ `systemctl` =~ -\.mount ]] 1>/dev/null 2>&1 && return 0
+    strings /sbin/init | grep -q "/lib/systemd" && return 0
+    return 1
+}
+
+
+detect_upstart() {
+    [[ `/sbin/init --version` =~ upstart ]] 1>/dev/null 2>&1 && return 0
+    strings /sbin/init | grep -q "upstart" && return 0
+    return 1
+}
+
+
+detect_sysvinit() {
+    [[ -f /etc/init.d/cron && ! -h /etc/init.d/cron ]] 1>/dev/null 2>&1 && return 0
+    [[ -f /etc/init.d/crond && ! -h /etc/init.d/cron ]] 1>/dev/null 2>&1 && return 0
+    strings /sbin/init | grep -q "sysvinit" && return 0
+    return 1
+}

@@ -3,21 +3,23 @@
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include "windows.h"
+#else
+#include <sys/file.h>
+#include <unistd.h>
 #endif
+
 #include <string>
 
 #include "update_check/updatechecker.h"
 #include "optparse/OptionParser.h"
-#include "utils/SubProcess.h"
+#include "utils/process.h"
 #include "utils/Log.h"
 #include "utils/AssistPath.h"
-#include "utils/CheckNet.h"
+#include "utils/host_finder.h"
 #include "utils/FileUtil.h"
-#include "utils/ProcessUtil.h"
 #include "update_check/appcast.h"
 #include "curl/curl.h"
 #include "../VersionInfo.h"
-#include "utils/dump.h"
 
 using optparse::OptionParser;
 
@@ -29,7 +31,7 @@ OptionParser& initParser() {
       .action("store_true")
       .help("show version and exit");
 
-  parser.add_option("-u", "--check_update")
+  parser.add_option("-c", "--check_update")
       .action("store_true")
       .dest("check_update")
       .help("Check and update if necessary");
@@ -41,27 +43,51 @@ OptionParser& initParser() {
   parser.add_option("-u", "--url")
       .dest("url")
       .action("store");
+
+  parser.add_option("-m", "--md5")
+	  .dest("md5")
+	  .action("store");
+
+  parser.add_option("-d", "--delete")
+    .action("store_true")
+    .dest("delete")
+    .help("Delete older version");
+
   return parser;
 }
 
-bool process_singleton() {
+
+bool process_singleton() { 
 #ifdef _WIN32
-  if (NULL == ::CreateMutex(NULL, FALSE, L"alyun_assist_update")) {
-    if (GetLastError() == ERROR_ALREADY_EXISTS) {
-      return false;
-    }
+  CreateMutex(NULL, FALSE, L"alyun_assist_update");
+  if ( GetLastError() == ERROR_ALREADY_EXISTS ) {
+     return false;
   }
+  else {
+	  return true;
+  }
+  
 #else
-  return ProcessUtils::is_single_proc_inst_running("aliyun_assist_update");
+	static int lockfd = open("/var/tmp/aliyun_assist_update.lock", O_CREAT | O_RDWR, 0644);
+	if ( -1 == lockfd ) {
+		Log::Error("Fail to open lock file. Error: %s\n", strerror(errno));
+		return false;
+	}
+
+	if ( 0 == flock(lockfd, LOCK_EX | LOCK_NB) ) {
+		atexit([] {
+			close(lockfd);
+		});
+		return true;
+	}
+
+	close(lockfd);
+	return false;
 #endif
-  return true;
 }
 
 int main(int argc, char *argv[]) {
-#if defined(_WIN32)
-  SetDllDirectory(TEXT(""));
-  DumpService::InitMinDump("aliyun update");
-#endif
+
   AssistPath path_service("");
   std::string log_path = path_service.GetLogPath();
   log_path += FileUtils::separator();
@@ -89,27 +115,34 @@ int main(int argc, char *argv[]) {
       return -1;
     }
     curl_global_init(CURL_GLOBAL_ALL);
-    HostChooser host_choose;
-    bool found = host_choose.Init(path_service.GetConfigPath());
-    if (!found) {
+    HostFinder host_finder;
+    
+    if ( host_finder.getRegionId().empty() ) {
       Log::Error("could not find a match region host");
+      return -1;
     }
     alyun_assist_update::Appcast update_info;
-    memset(&update_info, 0, sizeof (alyun_assist_update::Appcast));
     alyun_assist_update::UpdateProcess process(update_info);
     bool need_update = process.CheckUpdate();
     // In test mode, we use download url pass form command line.
-    std::string test_force_update_file = cur_dir + FileUtils::separator() + ".." + FileUtils::separator() + "force_update";
-    if(options.is_set("force_update") || FileUtils::fileExists(test_force_update_file.c_str())) {
+    if( options.is_set("force_update") ) {
       need_update = true;
       alyun_assist_update::Appcast cast;
       cast.need_update = 1;
       cast.flag = 0;
       std::string url =  options.get("url");
-      if(url.empty()) {
-        url = "https://repo-aliyun-assist.oss-cn-beijing.aliyuncs.com/download/update.zip";
-      }
-      cast.download_url = url;
+      if( url.empty() ) {
+      Log::Error("url is required");
+      return -1;
+    }
+	  cast.download_url = url;
+
+	  std::string md5 = options.get("md5");
+	  if ( url.empty() ) {
+		  Log::Error("md5 is required");
+		  return -1;
+	  }
+	  cast.md5 = md5;
       process.SetUpdateInfo(cast);
     }
     if (need_update) {
@@ -128,20 +161,19 @@ int main(int argc, char *argv[]) {
 
       bool download_ret = process.Download(update_info.download_url, tmp_path);
       if (!download_ret) {
-        Log::Error("download zip failed,url:%s",
-            update_info.download_url.c_str());
-        return 0;
+        Log::Error("download zip failed,url:%s",update_info.download_url.c_str());
+        return -1;
       }
       if (!process.CheckMd5(tmp_path, update_info.md5)) {
         Log::Error("check file md5 failed");
-        return 0;
+        return -1;
       }
       unzip_dest_dir = tmp_dir;
       unzip_dest_dir += FileUtils::separator();
       unzip_dest_dir += file_dir;
       if (!process.UnZip(tmp_path, unzip_dest_dir)) {
         Log::Error("unzip file failed");
-        return 0;
+        return -1;
       }
 
       std::string cur_dir, install_dir;
@@ -152,18 +184,38 @@ int main(int argc, char *argv[]) {
       char *pPath = strrchr(ctemp, FileUtils::separator());
       if(!pPath) {
         Log::Error("install path errors");
-        return 0;
+        return -1;
       }
       *pPath = '\0';
       install_dir = string(ctemp);
+
+      // Delete all old version, preserve two distributions after installation
+      process.RemoveOldVersion(install_dir);
       Log::Info("install from  %s to %s",
           unzip_dest_dir.c_str(), install_dir.c_str());
       if(!process.InstallFiles(unzip_dest_dir, install_dir)) {
         Log::Error("install files failed");
-        return 0;
+        return -1;
       }
     }
     curl_global_cleanup();
+    return 0;
+  }
+
+  if ( options.is_set("delete") ) {
+   
+    std::string cur_dir = path_service.GetCurrDir();
+    std::string install_dir;
+    char ctemp[1024] = { 0 };
+    strncpy(ctemp, cur_dir.c_str(), cur_dir.length());
+    char *pPath = strrchr(ctemp, FileUtils::separator());
+    if (!pPath) {
+      Log::Error("install path errors");
+      return 0;
+    }
+    *pPath = '\0';
+    install_dir = string(ctemp);
+	alyun_assist_update::UpdateProcess::RemoveOldVersion(install_dir);
     return 0;
   }
 

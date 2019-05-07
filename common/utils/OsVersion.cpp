@@ -5,6 +5,7 @@
 #include <conio.h>
 #else
 #include <sys/utsname.h>
+#include <string.h>
 #endif // _WIN32
 
 #include "OsVersion.h"
@@ -181,7 +182,7 @@ bool OsVersion::LinuxIs64BitOS() {
     return false;
   }
 
-  if (utsn.machine == "x86_64") {
+  if (strcmp(utsn.machine, "x86_64") == 0) {
     return true;
   } else {
     return false;

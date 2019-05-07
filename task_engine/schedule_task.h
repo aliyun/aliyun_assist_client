@@ -6,22 +6,24 @@
 #include <map>
 #include <mutex>
 
-#include "./task.h"
+#include "base_task.h"
 
 namespace task_engine {
 class TaskSchedule {
  public:
   TaskSchedule();
-  void Cancel(TaskInfo task_info);
-  int Fetch(bool from_kick=false);
-#if defined(TEST_MODE)
-  void TestFetch(std::string info);
-#endif
-  void FetchPeriodTask();
-  Task* Schedule(TaskInfo task_info);
- private:
-  std::map<std::string, void*> period_tasks_;
-  std::mutex mtx_;
+
+  void		Cancel(TaskInfo task_info);
+  int		Fetch(bool from_kick=false);
+  void		FetchPeriodTask();
+  void      Schedule(TaskInfo task_info);
+private:
+  void DispatchTask(BaseTask* task);
+  void Execute(BaseTask* task);
+
+private:
+  std::map<std::string, BaseTask*> m_tasklist;
+  std::mutex m_mutex;
 };
 }  // namespace task_engine
 #endif  // CLIENT_TASK_ENGINE_SCHEDULE_TASK_H_

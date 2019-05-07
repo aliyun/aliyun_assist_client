@@ -1,0 +1,13 @@
+[Unit]
+Description=aliyun-assist
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/aliyun-service
+KillMode=process
+Restart=on-failure
+RestartSec=1min
+
+[Install]
+WantedBy=multi-user.target
