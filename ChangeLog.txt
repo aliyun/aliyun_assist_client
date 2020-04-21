@@ -1,3 +1,8 @@
+2020-4
+Linux Version:1.0.1.451
+1 提高稳定性
+2 优化资源占用问题
+
 2017-11-21 
 Linux Version: 1.0.1.168
 Windows Version: 1.0.0.81
