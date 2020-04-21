@@ -27,8 +27,6 @@ endif()
 
 if(WIN32)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /SAFESEH:NO")
-    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
-    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
 else(UNIX)
 	add_compile_options(-std=c++11)
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -m32 -s")

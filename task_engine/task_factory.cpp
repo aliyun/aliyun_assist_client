@@ -17,14 +17,15 @@ namespace task_engine {
 TaskFactory::TaskFactory() {
 }
 
-BaseTask* TaskFactory::CreateTask(TaskInfo& info) {
+BaseTask* TaskFactory::CreateTask(RunTaskInfo& info) {
     BaseTask* task = nullptr;
 
 	if ( !info.cronat.empty() ) {
 		const char* err  = nullptr;
 		cron_expr*  expr = cron_parse_expr(info.cronat.c_str(), &err);
 		if ( err ) {
-			BadTask(info).ReportStatus("failed");
+            Log::Error("invalid cron: %s, error: %s", info.cronat.c_str(), err);
+            BadTask(info).SendInvalidTask("cron", info.cronat);
 			return nullptr;
 		}
 	}
@@ -46,7 +47,7 @@ BaseTask* TaskFactory::CreateTask(TaskInfo& info) {
 	return  task;
   } 
 
-  BadTask(info).ReportStatus("failed");
+  BadTask(info).SendInvalidTask("type", info.command_type);
   return task;
 }
 

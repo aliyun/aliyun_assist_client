@@ -8,7 +8,7 @@
 namespace task_engine {
 class BadTask : public BaseTask {
  public:
-  explicit BadTask(TaskInfo info);
+  explicit BadTask(RunTaskInfo info);
   virtual ~BadTask() {};
   void Run();
 };

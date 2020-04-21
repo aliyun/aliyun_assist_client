@@ -13,32 +13,45 @@ std::string ServiceProvide::GetUpdateService() {
   return url;
 }
 
-std::string ServiceProvide::GetFetchTaskService() {
+//New version 1.0
+std::string ServiceProvide::GetInvalidTaskService() {
   std::string url = "https://" + HostFinder::getServerHost();
-  url += "/luban/api/v1/task/fetch_task";
+  url += "/luban/api/v1/task/invalid";
   return url;
 }
 
-std::string ServiceProvide::GetFetchCanceledTaskService() {
+std::string ServiceProvide::GetFetchTaskListService() {
   std::string url = "https://" + HostFinder::getServerHost();
-  url += "/luban/api/v1/task/fetch_canceled_task";
+  url += "/luban/api/v1/task/list";
   return url;
 }
 
-std::string ServiceProvide::GetFetchPeriondTaskService() {
+std::string ServiceProvide::GetRunningOutputService() {
   std::string url = "https://" + HostFinder::getServerHost();
-  url += "/luban/api/v1/task/fetch_active_period_task";
+  url += "/luban/api/v1/task/running";
   return url;
 }
 
-std::string ServiceProvide::GetReportTaskStatusService() {
+std::string ServiceProvide::GetFinishOutputService() {
   std::string url = "https://" + HostFinder::getServerHost();
-  url += "/luban/api/v1/task/update_status";
+  url += "/luban/api/v1/task/finish";
   return url;
 }
 
-std::string ServiceProvide::GetReportTaskOutputService() {
+std::string ServiceProvide::GetStoppedOutputService() {
   std::string url = "https://" + HostFinder::getServerHost();
-  url += "/luban/api/v1/task/upload_output";
+  url += "/luban/api/v1/task/stopped";
+  return url;
+}
+
+std::string ServiceProvide::GetTimeoutOutputService() {
+  std::string url = "https://" + HostFinder::getServerHost();
+  url += "/luban/api/v1/task/timeout";
+  return url;
+}
+
+std::string ServiceProvide::GetErrorOutputService() {
+  std::string url = "https://" + HostFinder::getServerHost();
+  url += "/luban/api/v1/task/error";
   return url;
 }

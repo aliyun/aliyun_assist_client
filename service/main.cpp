@@ -19,7 +19,7 @@
 #include "utils/process.h"
 
 using optparse::OptionParser;
-
+//for test
 namespace {
 
 	void initLogger() {
@@ -63,6 +63,7 @@ namespace {
 }
 
 int main( int argc, char *argv[] ) {
+
 
 	initLogger();
 	OptionParser& parser = initParser();

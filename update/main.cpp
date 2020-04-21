@@ -68,7 +68,7 @@ bool process_singleton() {
   }
   
 #else
-	static int lockfd = open("/var/tmp/aliyun_assist_update.lock", O_CREAT | O_RDWR, 0644);
+	static int lockfd = open("/var/tmp/aliyun_assist_update.lock", O_CREAT | O_RDWR | O_CLOEXEC, 0644);
 	if ( -1 == lockfd ) {
 		Log::Error("Fail to open lock file. Error: %s\n", strerror(errno));
 		return false;
@@ -107,13 +107,24 @@ int main(int argc, char *argv[]) {
     std::string cur_dir = path_service.GetCurrDir();
     std::string test_file = cur_dir + FileUtils::separator() + "no_update";
     if (FileUtils::fileExists(test_file.c_str())) {
-      Log::Info("in  test mode no need update");
+      Log::Info("in test mode no need update");
       return 0;
     }
-    if (!process_singleton()) {
-      Log::Error("exit by another update process is running");
-      return -1;
+    bool singleton = false; 
+    for (int i = 0; i < 3; i++) {
+        if (process_singleton()) {
+            singleton = true;
+            break; 
+        } else {
+          Log::Error("another update process is running, will try again");
+          std::this_thread::sleep_for(std::chrono::seconds(2));
+        }
     }
+    if (!singleton) {
+        Log::Error("exit by another update process is running");
+        return -1;
+    }
+
     curl_global_init(CURL_GLOBAL_ALL);
     HostFinder host_finder;
     

@@ -13,11 +13,11 @@ class TaskSchedule {
  public:
   TaskSchedule();
 
-  void		Cancel(TaskInfo task_info);
+  void		Cancel(StopTaskInfo task_info);
   int		Fetch(bool from_kick=false);
-  void		FetchPeriodTask();
-  void      Schedule(TaskInfo task_info);
+  void      Schedule(RunTaskInfo task_info);
 private:
+  int FetchTasks(std::string reason);
   void DispatchTask(BaseTask* task);
   void Execute(BaseTask* task);
 

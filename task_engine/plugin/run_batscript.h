@@ -8,7 +8,7 @@
 namespace task_engine {
 class RunBatTask : public BaseTask {
  public:
-  explicit RunBatTask(TaskInfo info);
+  explicit RunBatTask(RunTaskInfo info);
   virtual ~RunBatTask() {};
   void Run();
  private:

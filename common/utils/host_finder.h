@@ -22,7 +22,11 @@ class HostFinder {
  private:
   static string getRegionIdInVpc();
   static string getRegionIdInFile();
-  static bool   connectionDetect(string regionId);
+  static string pollingRegionId();
+  static bool connectionDetect(string regionId);
+
+  // works only on classic network
+  static bool requestRegionId(string regionId);
 };
 
 #endif //PROJECT_CHECKNET_H_

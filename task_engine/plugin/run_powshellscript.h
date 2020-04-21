@@ -9,7 +9,7 @@ using std::string;
 namespace task_engine {
 class RunPowerShellTask : public BaseTask {
  public:
-  explicit RunPowerShellTask(TaskInfo info);
+  explicit RunPowerShellTask(RunTaskInfo info);
   virtual  ~RunPowerShellTask() {};
   void Run();
  private:

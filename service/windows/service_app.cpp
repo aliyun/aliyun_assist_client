@@ -63,7 +63,7 @@ void  ServiceApp::onStart(DWORD argc, TCHAR* argv[]) {
 
 void ServiceApp::onStop() {
 	Singleton<TimerManager>::I().deleteTimer((task_engine::Timer*)m_updateTimer);
-	Singleton<TimerManager>::I().deleteTimer((task_engine::Timer*)m_updateTimer);
+	Singleton<TimerManager>::I().deleteTimer((task_engine::Timer*)m_fetchTimer);
 	Singleton<NotiferFactory>::I().closeNotifer(m_notifer);
 };
 

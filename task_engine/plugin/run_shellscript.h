@@ -8,7 +8,7 @@
 namespace task_engine {
 class RunShellScriptTask : public BaseTask {
  public:
-  explicit RunShellScriptTask(TaskInfo info);
+  explicit RunShellScriptTask(RunTaskInfo info);
   virtual  ~RunShellScriptTask() {};
   void Run();
  private:

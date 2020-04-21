@@ -13,16 +13,16 @@
 
 
 namespace task_engine {
-RunBatTask::RunBatTask(TaskInfo info) : BaseTask(info) {
+RunBatTask::RunBatTask(RunTaskInfo info) : BaseTask(info) {
 }
 
 bool RunBatTask::BuildScript(string fileName, string content) {
 
-  if ( FileUtils::fileExists(fileName.c_str() ) ) {
+  if (FileUtils::fileExists(fileName.c_str())) {
 	  return true;
-  };
+  }
 
-  FILE *fp = fopen(fileName.c_str(), "a+");
+  FILE *fp = fopen(fileName.c_str(), "w+");
   if (!fp) {
     return false;
   }

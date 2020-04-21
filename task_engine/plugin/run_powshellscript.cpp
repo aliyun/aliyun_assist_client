@@ -12,16 +12,16 @@
 #include "utils/FileUtil.h"
 
 namespace task_engine {
-RunPowerShellTask::RunPowerShellTask(TaskInfo info) : BaseTask(info) {
+RunPowerShellTask::RunPowerShellTask(RunTaskInfo info) : BaseTask(info) {
 }
 
 bool RunPowerShellTask::BuildScript(string fileName, string content) {
  
-  if ( FileUtils::fileExists(fileName.c_str()) ) {
+  if (FileUtils::fileExists(fileName.c_str())) {
 	 return true;
-  };
+  }
 
-  FILE* fp = fopen(fileName.c_str(), "a+");
+  FILE* fp = fopen(fileName.c_str(), "w+");
   if (!fp) {
     return false;
   }

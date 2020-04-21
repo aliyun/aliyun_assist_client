@@ -83,7 +83,7 @@ void  ServiceApp::start() {
   /* Change the current working directory */
 
     if ( (chdir("/root") ) < 0 ) {
-       Log::Error("Failed to change working directory for AliYunAssistService: %s", strerror(errno));
+       Log::Error("Failed to change working directory to /root for AliYunAssistService: %s", strerror(errno));
        exit(EXIT_FAILURE);
     }
 	
@@ -98,8 +98,15 @@ void  ServiceApp::start() {
   while ( HostFinder::getServerHost().empty() ) {
     int second = int(pow(2, retryCount));
     std::this_thread::sleep_for(std::chrono::seconds(second));
-    if (retryCount < 10)
-      retryCount++;
+    retryCount++;
+    if (retryCount > 3)
+      break;
+  }
+  
+  if(HostFinder::getServerHost().empty()) {
+    Log::Error("network internal error");
+    // ubuntu18 dns available slowly, try to restart to fix it.
+    Process("systemctl restart aliyun.service").syncRun(10);
   }
 	
 	doUpdate();
@@ -107,7 +114,7 @@ void  ServiceApp::start() {
 
 	m_updateTimer = Singleton<TimerManager>::I().createTimer([this]() {
 		onUpdate();
-	}, 3600);
+	}, 1800);
 
 	m_fetchTimer = Singleton<TimerManager>::I().createTimer([this]() {
 		doFetchTasks(false);

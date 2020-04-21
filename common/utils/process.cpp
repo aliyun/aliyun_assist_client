@@ -3,6 +3,7 @@
 #include <memory>
 #include <time.h>
 #include "utils/Log.h"
+#include "utils/FileUtil.h"
 #ifdef _WIN32
 #include <windows.h>
 #pragma comment(lib, "rpcrt4.lib") 
@@ -87,7 +88,7 @@ VOID CALLBACK completionRoutine(
 
 
 /// function CreatePipe can not work with readfileEx, so impl CreatePipeEx;
-BOOL CreatePipeEx(PHANDLE  hReadPipe, PHANDLE  hWritePipe ) {
+BOOL CreatePipeEx(PHANDLE  hReadPipe, PHANDLE  hWritePipe, int* errorCode) {
 	
 	UUID  uuid    = {0};
 	UuidCreate(&uuid);
@@ -112,6 +113,8 @@ BOOL CreatePipeEx(PHANDLE  hReadPipe, PHANDLE  hWritePipe ) {
 		NULL);
 
 	if ( read == INVALID_HANDLE_VALUE ) {
+    *errorCode = GetLastError();
+    Log::Error("CreateNamedPipeA failed, error: %d", *errorCode);
 		return FALSE;
 	}
 
@@ -122,6 +125,8 @@ BOOL CreatePipeEx(PHANDLE  hReadPipe, PHANDLE  hWritePipe ) {
 
 	HANDLE write = CreateFileA(pipename, GENERIC_ALL, 0, &sa, OPEN_EXISTING, NULL, NULL);
 	if ( write == INVALID_HANDLE_VALUE ) {
+    *errorCode = GetLastError();
+    Log::Error("CreateNamedPipeA failed, error: %d", *errorCode);
 		CloseHandle(read);
 		read = INVALID_HANDLE_VALUE;
 		return FALSE;
@@ -139,6 +144,9 @@ Process::RunResult Process::syncRun(
 		*exitCode = 0;
 	}
 
+	if (m_path.size()>0 && !FileUtils::fileExists(m_path.c_str())) {
+		return RunResult::fail;
+	}
 	Handle stdout_rd, stdout_wr;
 	Handle stderr_rd, stderr_wr;
 
@@ -147,12 +155,18 @@ Process::RunResult Process::syncRun(
 	sa.bInheritHandle = TRUE;
 	sa.lpSecurityDescriptor = nullptr;
 
-
-	if ( fstdout  && !CreatePipeEx(&stdout_rd, &stdout_wr) ) {
+	int tmpExitCode = 0;
+	if ( fstdout  && !CreatePipeEx(&stdout_rd, &stdout_wr, &tmpExitCode) ) {
+		if (exitCode) {
+			*exitCode = tmpExitCode;
+		}
 		return RunResult::fail;
 	}
 
-	if ( fstderr && !CreatePipeEx(&stderr_rd, &stderr_wr) ) {
+	if ( fstderr && !CreatePipeEx(&stderr_rd, &stderr_wr, &tmpExitCode) ) {
+		if (exitCode) {
+			*exitCode = tmpExitCode;
+		}
 		return RunResult::fail;
 	}
 
@@ -251,7 +265,7 @@ Process::RunResult Process::syncRun(
 
 int  doRead(int fd, Process::Callback routine) {
 	auto buffer = std::unique_ptr<char[]>(new char[BUFSIZE + 1]);
-	memset(buffer.get(), 0, BUFSIZE);
+	memset(buffer.get(), 0, BUFSIZE+1);
 	int n = read(fd, buffer.get(), BUFSIZE);
 	if (n > 0 && routine) {
 		routine(buffer.get(), static_cast<size_t>(n));
@@ -267,13 +281,27 @@ Process::RunResult Process::syncRun(
 		*exitCode = 0;
 	}
 
+	if (m_path.size()>0 && !FileUtils::fileExists(m_path.c_str())) {
+		return RunResult::fail;
+	}
 	int  stdout_p[2] = { 0 }, stderr_p[2] = { 0 };
-
+	int  tmpErrCodde = 0;
 	if (  pipe(stdout_p) != 0 ) {
+		tmpErrCodde = errno;
+		if (exitCode)
+			*exitCode = tmpErrCodde;
+		 
+    Log::Error("Call pipe failed, errno: %d, strerror: %s",
+		tmpErrCodde, strerror(tmpErrCodde));
 		return RunResult::fail;
 	}
 	if (  pipe(stderr_p) != 0 ) {
-		 close(stdout_p[0]); close(stdout_p[1]); 
+		 close(stdout_p[0]); close(stdout_p[1]);
+		 tmpErrCodde = errno;
+		if(exitCode)
+			*exitCode = tmpErrCodde;
+    Log::Error("Call pipe failed, errno: %d, strerror: %s",
+		tmpErrCodde, strerror(tmpErrCodde));
 		return RunResult::fail;
 	}
 
@@ -283,8 +311,7 @@ Process::RunResult Process::syncRun(
 		close(stdout_p[0]); close(stdout_p[1]); 
 		close(stderr_p[0]); close(stderr_p[1]); 
 		return RunResult::fail;
-	}
-	else if ( pid == 0 ) {
+	} else if ( pid == 0 ) {
 
 		dup2(stdout_p[1], 1);
 		dup2(stderr_p[1], 2);
@@ -329,7 +356,7 @@ Process::RunResult Process::syncRun(
 
 
 		int ret = select(maxfd, &fdsr, nullptr, nullptr, &tv);
-		if ( ret > 0 ) { //可读
+		if ( ret > 0 ) { // 可读
 			if ( FD_ISSET(stdout_p[0], &fdsr)  &&
 				 doRead(stdout_p[0], fstdout) == 0 ) {
 					break;
@@ -338,26 +365,28 @@ Process::RunResult Process::syncRun(
 				 doRead(stderr_p[0], fstderr) == 0 ) {
 					break;
 			};
-		}
-		else if( ret == 0 ) { //超时
-			kill(pid, SIGKILL);
+		} else if (ret == 0) { // 超时
+			int kill_res = kill(pid, SIGKILL);
+            Log::Info("timeout(select), kill process pid: %d, kill result: %d", pid, kill_res);
 			reuslt = RunResult::timeout;
+            break;
 		} 
 		
 		now = time(0);
-		if ( time(0) - start < timeout ) { //没有超时继续
+		if (time(0) - start < timeout) { // 没有超时继续
 			 surplus = timeout - (now - start);
 			 continue;
-		}
-		else {
-			kill(pid, SIGKILL);
+		} else {
+			int kill_res = kill(pid, SIGKILL);
+            Log::Info("timeout, kill process pid: %d, kill result: %d", pid, kill_res);
 			reuslt = RunResult::timeout;
+            break;
 		}
 	}
 
 	int p = waitpid(pid, &exit_status, 0);
 	if ( p == pid && exitCode ) {
-    getExitCode(exit_status, exitCode);
+        getExitCode(exit_status, exitCode);
 	}
 
 	close( stdout_p[0] );

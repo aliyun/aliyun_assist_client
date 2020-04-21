@@ -54,6 +54,13 @@ stop_service() {
     do
         kill -9 $service_pid
     done
+
+    # in some case, aliyun_assist_update is running, kill it
+    for update_service_pid in `ps axf | grep "aliyun_assist_update" | grep -v grep | awk {'print $1'}`
+    do
+        kill -9 $update_service_pid
+    done
+
 }
 
 start_service() {

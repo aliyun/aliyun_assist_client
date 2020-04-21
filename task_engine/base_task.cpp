@@ -2,6 +2,9 @@
 
 
 #include <string>
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 #include "base_task.h"
 #include "utils/host_finder.h"
@@ -10,7 +13,10 @@
 #include "utils/Log.h"
 #include "utils/service_provide.h"
 #include "utils/singleton.h"
+#include "utils/TimeTool.h"
+#include "utils/MutexLocker.h"
 #include "json11/json11.h"
+#include "timer_manager.h"
 
 #if !defined(_WIN32)
 #include<sys/types.h>
@@ -25,164 +31,387 @@
 
 namespace task_engine {
 
-
-
-BaseTask::BaseTask(TaskInfo info)  {
-  task_info = info;
-  timer = nullptr;
-  canceled = false;
+BaseTask::BaseTask(RunTaskInfo info):task_info(info),
+    timer(nullptr),
+    canceled(false),
+    output_timer(nullptr),
+    received(0),
+    accepted(0),
+    current(0),
+    dropped(0),
+    cmd(""),
+    output(""),
+    running_output(""),
+    exit_code(-1) {
 }
 
-
-
-
-
 void BaseTask::DoWork(std::string cmd, std::string dir, int timeout) {
-	std::string output;
-	auto callback = [&output]( const char* buf, size_t len ) {
-		 output = output + string(buf).substr(0, len);
-		if ( output.size() > MAX_TASK_OUTPUT) {
-			 output.erase(0, output.size() - MAX_TASK_OUTPUT);
+  output_timer = Singleton<TimerManager>::I().createTimer([this]() {
+    SendRunningOutput();
+  }, task_info.output_info.interval / 1000);
+	auto callback = [this]( const char* buf, size_t len ) {
+		if (!buf || 0 == len)
+		{
+			return;
 		}
+	  this->output += buf;
+    {
+      MutexLocker(&m_mutex) {
+        this->running_output += buf;
+      }
+    }
 	};
-	int code;
-	Process::RunResult result = Process(cmd, dir).syncRun(timeout, callback, callback, &code);
+
+  this->cmd = cmd;
+  start_time = TimeTool::GetAccurateTime();
+  Log::Info("start-task %s, %s", task_info.task_id.c_str(), task_info.json_data.c_str());
+  SendTaskStart();
+	Process::RunResult result = Process(cmd, dir).syncRun(timeout, callback, callback, &exit_code);
+  Log::Info("task-result %s, %d", task_info.task_id.c_str(), result);
+  end_time = TimeTool::GetAccurateTime();
+  Log::Info("task-finished: %s, stop runing output", task_info.task_id.c_str());
+  DeleteOutputTimer();
 	if ( result == Process::timeout ) {
-		ReportTimeout(output);
+    SendTimeoutOutput();
 	}
 	else if( result == Process::fail ) {
-		ReportStatus("failed");
+    SendErrorOutput();
 	}
 	else {
-		ReportOutput(output,code);
+    if (canceled == false)
+      SendFinishOutput();
 	}
 };
 
-
 void BaseTask::Cancel() {
-  
   Log::Info("cancel the task:%s", task_info.task_id.c_str());
   canceled = true;
-  ReportStatus("stopped");
+  end_time = TimeTool::GetAccurateTime();
+  SendStoppedOutput();
 }
 
-
-
-
-void BaseTask::ReportStatus(std::string status) {
-
-  Log::Info("report taskid:%s status:%s ", task_info.task_id.c_str(), status.c_str() );
-  std::string response;
-  std::string input;
-
-  json11::Json json = json11::Json::object{
-	  {"taskStatus",status },
-	  {"taskID",task_info.task_id},
-  };
-  
+void BaseTask::SendInvalidTask(std::string param, std::string value) {
   if (HostFinder::getServerHost().empty()) {
-	  return;
+    Log::Error("Get server host failed");
+    return;
   }
 
-  std::string url = ServiceProvide::GetReportTaskStatusService();
-  bool ret = HttpRequest::https_request_post(url, json.dump(), response);
+  std::string url = ServiceProvide::GetInvalidTaskService();
+  Log::Info("invalid-task %s {\"method\": \"POST\", \"url\": \"%s\", \
+\"parameters\": {\"param\": \"%s\", \"value\" : %s}}",
+      task_info.task_id.c_str(), url.c_str(),
+      param.c_str(), value.c_str());
 
-  for (int i = 0; i < 3 && !ret; i++) {
-	  std::this_thread::sleep_for(std::chrono::seconds(3));
-	  ret = HttpRequest::https_request_post(url, json.dump(), response);
-  }
-}
-
-
-
-void BaseTask::ReportOutput(std::string output, int exitcode) {
-
-  if ( HostFinder::getServerHost().empty() ) {
-	return;
-  }
-
-  if ( output.size() > MAX_TASK_OUTPUT ) {
-	   output.erase(0, output.size() - MAX_TASK_OUTPUT);
-  }
-
-  std::string status_ = "finished";
+  url = url + "?" + "taskId=" + task_info.task_id +
+      "&param=" + param + "&value=" + value;
   std::string response;
-  Encoder     encoder;
-#if defined(_WIN32)
-  std::string utf8_data = encoder.Gbk2Utf(output);
-  char* pencodedata = encoder.B64Encode(
-              (const unsigned char *)utf8_data.c_str(), utf8_data.size());
-#else
-  char* pencodedata = encoder.B64Encode(
-               (const unsigned char *)output.c_str(),output.size());
-#endif
-  
-  json11::Json json = json11::Json::object{
-	 { "taskID",task_info.task_id },
-	 { "taskStatus",status_ },
-	 { "taskOutput",json11::Json::object{  {"taskInstanceOutput",pencodedata},{"errNo",exitcode } } }
-  };
-
-  free(pencodedata);
-
-  std::string url = ServiceProvide::GetReportTaskOutputService();
-  bool ret = HttpRequest::https_request_post(url, json.dump(), response);
-
-  Log::Info("report taskid:%s output:%s exitcode:%d response:%s",
-      task_info.task_id.c_str(), output.c_str(),exitcode, response.c_str());
-
-  for (int i = 0; i < 3 && !ret; i++) {
-	  std::this_thread::sleep_for(std::chrono::seconds(3));
-	  ret = HttpRequest::https_request_post(url, json.dump(), response);
+  bool ret = HttpRequest::https_request_post_text(url, "", response);
+  if (!ret) {
+    Log::Error("task-output %s response:%s",
+        task_info.task_id.c_str(), response.c_str());
+    return;
   }
+
+  Log::Info("task-output %s %s", task_info.task_id.c_str(), response.c_str());
 }
 
+void BaseTask::SendTaskStart() {
+  if (task_info.output_info.send_start == false)
+    return;
 
-	
-void BaseTask::ReportTimeout(std::string output) {
-  
-  Log::Info("Report timeout");
   if (HostFinder::getServerHost().empty()) {
-	  return;
+    Log::Error("Get server host failed");
+    return;
   }
 
-  if (output.size() > MAX_TASK_OUTPUT) {
-	  output.erase(0, output.size() - MAX_TASK_OUTPUT);
-  }
+  std::string url = ServiceProvide::GetRunningOutputService();
+  Log::Info("send-output %s {\"method\": \"POST\", \"url\": \"%s\", \
+\"parameters\": {\"taskId\": \"%s\", \"start\" : %lld}}",
+task_info.task_id.c_str(), url.c_str(),
+task_info.task_id.c_str(), start_time);
 
+  char time[25];
+  sprintf(time, "%lld", start_time);
+  url = url + "?" + "taskId=" + task_info.task_id + "&start=" + time;
   std::string response;
-  std::string input;
-
-  Encoder encoder;
-#if defined(_WIN32)
-	std::string utf8_data = encoder.Gbk2Utf(output);
-	char* pencodedata = encoder.B64Encode(
-	            (const unsigned char *)utf8_data.c_str(),utf8_data.size());
-#else
-	char* pencodedata = encoder.B64Encode(
-	             (const unsigned char *)output.c_str(),output.size());
-#endif
- 
- 
-  json11::Json json = json11::Json::object{
-	  {"taskID",task_info.task_id},
-	  {"taskStatus","failed"},
-	  {"taskOutput",json11::Json::object{{"taskInstanceOutput",pencodedata},{"errNo",-1}} }
-  };
-  
-  free(pencodedata);
-  std::string url = ServiceProvide::GetReportTaskOutputService();
-  bool ret = HttpRequest::https_request_post(url, json.dump(), response);
-
-  Log::Info("Report taskid:%s task_output:%s error_code:%d %s:response",
-      task_info.task_id.c_str(), output.c_str(),
-      -1, response.c_str());
-
-  for (int i = 0; i < 3 && !ret; i++) {
-	  std::this_thread::sleep_for(std::chrono::seconds(3));
-	  ret = HttpRequest::https_request_post(url, json.dump(), response);
+  bool ret = HttpRequest::https_request_post_text(url, "", response);
+  if (!ret) {
+    Log::Error("task-output %s response:%s",
+      task_info.task_id.c_str(), response.c_str());
+    return;
   }
-   
+
+  Log::Info("task-output %s %s", task_info.task_id.c_str(), response.c_str());
+}
+
+void BaseTask::SendRunningOutput() {
+  if (HostFinder::getServerHost().empty()) {
+    Log::Error("Get server host failed");
+    return;
+  }
+
+  MutexLocker(&m_mutex) {
+    if (task_info.output_info.skip_empty && running_output.empty()) {
+      Log::Info("The runnint output is empty, skipped.");
+      return;
+    }
+
+    if (accepted < received) {
+      Log::Info("The running output reach quota: %s, stop uploading output, running_output: %s", task_info.task_id.c_str(), running_output.c_str());
+      return;
+    }
+
+    std::string url = ServiceProvide::GetRunningOutputService();
+    Log::Info("send-output %s {\"method\": \"POST\", \"url\": \"%s\", \
+\"parameters\": {\"taskId\": \"%s\", \"start\" : %lld}}, content:\n%s",
+task_info.task_id.c_str(), url.c_str(),
+task_info.task_id.c_str(), start_time, running_output.c_str());
+
+    char time[25];
+    sprintf(time, "%lld", start_time);
+    url = url + "?" + "taskId=" + task_info.task_id + "&start=" + time;
+    std::string response;
+    bool ret = HttpRequest::https_request_post_text(url, running_output, response);
+    if (!ret) {
+      Log::Error("task-output %s response:%s",
+        task_info.task_id.c_str(), response.c_str());
+      return;
+    }
+
+    Log::Info("task-output %s %s", task_info.task_id.c_str(), response.c_str());
+    running_output = "";
+
+    try {
+      string errinfo;
+      auto json = json11::Json::parse(response, errinfo);
+      if (errinfo != "") {
+        Log::Error("Invalid json format:%s", errinfo.c_str());
+        return;
+      }
+
+      received = json["received"].int_value();
+      accepted = json["accepted"].int_value();
+      current = json["current"].int_value();
+    }
+    catch (...) {
+      Log::Error("Response is invalid: %s", response.c_str());
+    }
+    
+  }
+}
+
+void BaseTask::SendFinishOutput() {
+  if (HostFinder::getServerHost().empty()) {
+    Log::Error("Get server host failed");
+    return;
+  }
+
+  MutexLocker(&m_mutex) {
+    int available_quota = task_info.output_info.log_quota - current;
+    if (output.size() - current > available_quota)
+      dropped = output.size() - current - available_quota;
+    else
+      dropped = 0;
+
+    std::string url = ServiceProvide::GetFinishOutputService();
+    Log::Info("finish-task %s {\"method\": \"POST\", \"url\": \"%s\", \
+\"parameters\": {\"taskId\": \"%s\", \"start\" : %lld, \"end\" : %lld, \
+\"exitCode\" : %d, \"dropped\" : %lld}}, content:\n%s",
+task_info.task_id.c_str(), url.c_str(),
+task_info.task_id.c_str(), start_time, end_time,
+exit_code, dropped, output.c_str());
+
+    if (current + dropped > 0) {
+      output.erase(0, current + dropped);
+    }
+
+    char param[512];
+    sprintf(param, "?taskId=%s&start=%lld&end=%lld&exitCode=%d&dropped=%d",
+      task_info.task_id.c_str(), start_time, end_time, exit_code, dropped);
+    url += param;
+    std::string response;
+    bool ret = HttpRequest::https_request_post_text(url, output, response);
+    if (!ret) {
+      Log::Error("task-output %s %s",
+        task_info.task_id.c_str(), response.c_str());
+    }
+
+    for (int i = 0; i < 10 && !ret; i++) {
+      int second = int(pow(2, i));
+      std::this_thread::sleep_for(std::chrono::seconds(second));
+      ret = HttpRequest::https_request_post(url, output, response);
+      if (!ret) {
+        Log::Error("task-output %s %s", task_info.task_id.c_str(), response.c_str());
+      }
+    }
+
+    if (!ret)
+      return;
+
+    Log::Info("task-output %s %s", task_info.task_id.c_str(), response.c_str());
+  }
+}
+
+void BaseTask::SendStoppedOutput() {
+  if (HostFinder::getServerHost().empty()) {
+    Log::Error("Get server host failed");
+    return;
+  }
+
+  MutexLocker(&m_mutex) {
+    int available_quota = task_info.output_info.log_quota - current;
+    if (output.size() - current > available_quota)
+      dropped = output.size() - current - available_quota;
+    else
+      dropped = 0;
+
+    std::string url = ServiceProvide::GetStoppedOutputService();
+    Log::Info("stop-done %s {\"method\": \"POST\", \"url\": \"%s\", \
+\"parameters\": {\"taskId\": \"%s\", \"start\" : %lld, \"end\" : %lld, \
+\"result\": \"killed\", \"dropped\": \"%lld\"}}, content:\n%s",
+task_info.task_id.c_str(), url.c_str(),
+task_info.task_id.c_str(), start_time, end_time,
+dropped, output.c_str());
+
+    if (current + dropped > 0) {
+      output.erase(0, current + dropped);
+    }
+
+    char param[512];
+    sprintf(param, "?taskId=%s&start=%lld&end=%lld&dropped=%d&result=killed",
+      task_info.task_id.c_str(), start_time, end_time, dropped);
+    url += param;
+    std::string response;
+    bool ret = HttpRequest::https_request_post_text(url, output, response);
+    if (!ret) {
+      Log::Error("task-output %s %s",
+        task_info.task_id.c_str(), response.c_str());
+    }
+
+    for (int i = 0; i < 10 && !ret; i++) {
+      int second = int(pow(2, i));
+      std::this_thread::sleep_for(std::chrono::seconds(second));
+      ret = HttpRequest::https_request_post(url, output, response);
+      if (!ret) {
+        Log::Error("task-output %s %s", task_info.task_id.c_str(), response.c_str());
+      }
+    }
+
+    if (!ret)
+      return;
+
+    Log::Info("task-output %s %s", task_info.task_id.c_str(), response.c_str());
+  }
+}
+
+void BaseTask::SendTimeoutOutput() {
+  if (HostFinder::getServerHost().empty()) {
+    Log::Error("Get server host failed");
+    return;
+  }
+
+  MutexLocker(&m_mutex) {
+    int available_quota = task_info.output_info.log_quota - current;
+    if (output.size() - current > available_quota)
+      dropped = output.size() - current - available_quota;
+    else
+      dropped = 0;
+    std::string url = ServiceProvide::GetTimeoutOutputService();
+    Log::Info("timeout-task %s {\"method\": \"POST\", \"url\": \"%s\", \
+\"parameters\": {\"taskId\": \"%s\", \"start\" : %lld, \"end\" : %lld, \
+\"dropped\": \"%lld\"}}, content:\n%s",
+task_info.task_id.c_str(), url.c_str(),
+task_info.task_id.c_str(), start_time, end_time,
+dropped, output.c_str());
+
+    if (current + dropped > 0) {
+      output.erase(0, current + dropped);
+    }
+
+    char param[512];
+    sprintf(param, "?taskId=%s&start=%lld&end=%lld&dropped=%d",
+      task_info.task_id.c_str(), start_time, end_time, dropped);
+    url += param;
+    std::string response;
+    bool ret = HttpRequest::https_request_post_text(url, output, response);
+    if (!ret) {
+      Log::Error("task-output %s %s",
+        task_info.task_id.c_str(), response.c_str());
+    }
+
+    for (int i = 0; i < 10 && !ret; i++) {
+      int second = int(pow(2, i));
+      std::this_thread::sleep_for(std::chrono::seconds(second));
+      ret = HttpRequest::https_request_post(url, output, response);
+      if (!ret) {
+        Log::Error("task-output %s %s", task_info.task_id.c_str(), response.c_str());
+      }
+    }
+
+    if (!ret)
+      return;
+
+    Log::Info("task-output %s %s", task_info.task_id.c_str(), response.c_str());
+  }
+}
+
+void BaseTask::SendErrorOutput() {
+  if (HostFinder::getServerHost().empty()) {
+    Log::Error("BaseTask::SendOutput, Get server host failed");
+    return;
+  }
+
+  MutexLocker(&m_mutex) {
+
+  }int available_quota = task_info.output_info.log_quota - current;
+  if (output.size() - current > available_quota)
+    dropped = output.size() - current - available_quota;
+  else
+    dropped = 0;
+
+  std::string url = ServiceProvide::GetErrorOutputService();
+  Log::Info("error-task %s {\"method\": \"POST\", \"url\": \"%s\", \
+\"parameters\": {\"taskId\": \"%s\", \"start\" : %lld, \"end\" : %lld, \
+\"exitCode\" : %d, \"dropped\": \"%lld\"}}, content:\n%s",
+      task_info.task_id.c_str(), url.c_str(),
+      task_info.task_id.c_str(), start_time, end_time,
+      exit_code, dropped, output.c_str());
+
+  if (current + dropped > 0) {
+    output.erase(0, current + dropped);
+  }
+
+  char param[512];
+  sprintf(param, "?taskId=%s&start=%lld&end=%lld&exitCode=%d&dropped=%d",
+    task_info.task_id.c_str(), start_time, end_time, exit_code, dropped);
+  url += param;
+  std::string response;
+  bool ret = HttpRequest::https_request_post_text(url, output, response);
+  if (!ret) {
+    Log::Error("task-output %s %s",
+      task_info.task_id.c_str(), response.c_str());
+  }
+
+  for (int i = 0; i < 10 && !ret; i++) {
+    int second = int(pow(2, i));
+    std::this_thread::sleep_for(std::chrono::seconds(second));
+    ret = HttpRequest::https_request_post(url, output, response);
+    if (!ret) {
+      Log::Error("task-output %s %s", task_info.task_id.c_str(), response.c_str());
+    }
+  }
+
+  if (!ret)
+    return;
+
+  Log::Info("task-output %s %s", task_info.task_id.c_str(), response.c_str());
+}
+
+void BaseTask::DeleteOutputTimer() {
+  if (output_timer) {
+    Singleton<TimerManager>::I().deleteTimer(output_timer);
+    output_timer = nullptr;
+  }
 }
 
 }  // namespace task_engine

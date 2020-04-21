@@ -9,10 +9,12 @@
 #include "Log.h"
 #include "curl/curl.h"
 #include "FileUtil.h"
+#include "SystemInfo.h"
 
 using namespace std;
 using namespace json11;
 
+#define DOWNLOAD_FILE_TIME_OUT 30
 
 HttpRequest::HttpRequest() {
 	static bool inited = false;
@@ -67,6 +69,11 @@ bool HttpRequest::https_request_post(const std::string& url,
   return https_request(url, post_content, response, true);
 }
 
+bool HttpRequest::https_request_post_text(const std::string& url,
+  const std::string& post_content, std::string& response) {
+  return https_request(url, post_content, response, true, ContentType::text);
+}
+
 bool HttpRequest::http_request(const std::string& url,
                                     const std::string& post_content, std::string& response, bool is_post) {
   CURL *curl;
@@ -81,11 +88,6 @@ bool HttpRequest::http_request(const std::string& url,
        just as well be a https:// URL if that is what should receive the
        data. */
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-
-    // Do not use dns cache
-    curl_easy_setopt(curl, CURLOPT_DNS_USE_GLOBAL_CACHE, false);
-    curl_easy_setopt(curl, CURLOPT_DNS_CACHE_TIMEOUT, 2);
-
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 3);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5);
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
@@ -95,7 +97,7 @@ bool HttpRequest::http_request(const std::string& url,
     }
 
     struct curl_slist *headers = NULL;
-    headers = curl_slist_append(headers, "Content-Type: application/json");
+    headers = curl_slist_append(headers, "Content-Type: application/json; charset=utf-8");
 	
 
     /* pass our list of custom made headers */
@@ -131,7 +133,10 @@ bool HttpRequest::http_request(const std::string& url,
 
 
 bool HttpRequest::https_request(const std::string& url,
-                                    const std::string& post_content, std::string& response, bool is_post) {
+    const std::string& post_content,
+    std::string& response,
+    bool is_post,
+    ContentType content_type) {
   CURL *curl;
   CURLcode res = CURLE_OK;
 
@@ -144,11 +149,6 @@ bool HttpRequest::https_request(const std::string& url,
        just as well be a https:// URL if that is what should receive the
        data. */
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-
-    // Do not use dns cache
-    curl_easy_setopt(curl, CURLOPT_DNS_USE_GLOBAL_CACHE, false);
-    curl_easy_setopt(curl, CURLOPT_DNS_CACHE_TIMEOUT, 2);
-
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 3);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5);
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
@@ -158,7 +158,21 @@ bool HttpRequest::https_request(const std::string& url,
     }
 
     struct curl_slist *headers = NULL;
-    headers = curl_slist_append(headers, "Content-Type: application/json");
+
+    if(content_type == ContentType::json) {
+      headers = curl_slist_append(headers, "Content-Type: application/json; charset=utf-8");
+    } else if(content_type == ContentType::text) {
+      headers = curl_slist_append(headers, "Content-Type: text/plain; charset=utf-8");
+    } else {
+      Log::Error("Wrong Content-Type: %d\n", content_type);
+      return false;
+    }
+    std::string all_ips = SystemInfo::GetAllIPs();
+    if (!all_ips.empty()) {
+      char client_ip[512];
+      sprintf(client_ip, "X-Client-IP: %s", all_ips.c_str());
+      headers = curl_slist_append(headers, client_ip);
+    }
 
     /* pass our list of custom made headers */
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
@@ -207,15 +221,11 @@ bool HttpRequest::download_file(const std::string& url,
        data. */
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
 
-    // Do not use dns cache
-    curl_easy_setopt(curl, CURLOPT_DNS_USE_GLOBAL_CACHE, false);
-    curl_easy_setopt(curl, CURLOPT_DNS_CACHE_TIMEOUT, 2);
-
     /* send all data to this function  */
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteFileCallback);
 
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, DOWNLOAD_FILE_TIME_OUT);
 
     /* we pass our 'chunk' struct to the callback function */
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)fp);

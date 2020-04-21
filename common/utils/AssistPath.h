@@ -36,8 +36,8 @@ class AssistPath {
   string GetRootPath();
   string GetCommonPath(string filedirname);
   bool   MakeSurePath(string path);
-  bool   IsFileExist(string filename);
   bool   CreateFolder(string filename);
+  bool   IsFileExist(string filename);
 };
 
 #endif // PROJECT_ASSISTPATH_H_

@@ -11,7 +11,7 @@ namespace task_engine {
 class TaskFactory {
  public:
   TaskFactory();
-  BaseTask*  CreateTask(TaskInfo& info);
+  BaseTask*  CreateTask(RunTaskInfo& info);
   void       DeleteTask(BaseTask* task);
  private:
   std::map<std::string, BaseTask*> task_history;

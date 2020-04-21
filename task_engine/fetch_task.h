@@ -10,11 +10,11 @@ namespace task_engine {
 class TaskFetch {
  public:
   TaskFetch();
-  void FetchTasks(std::vector<TaskInfo>& task_info);
-  void FetchCancledTasks(std::vector<TaskInfo>& task_info);
-  //void FetchPeriodTasks(std::vector<TaskInfo>& task_info);
+  void FetchTaskList(std::vector<task_engine::StopTaskInfo>& stop_task_info,
+      std::vector<task_engine::RunTaskInfo>& run_task_info,
+      std::string reason);
 #if defined(TEST_MODE)
-  void TestFetchTasks(std::string res, std::vector<TaskInfo>& task_info);
+  //void TestFetchTasks(std::string res, std::vector<TaskInfo>& task_info);
 #endif
 };
 }  // namespace task_engine

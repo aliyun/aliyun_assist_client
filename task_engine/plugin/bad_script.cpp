@@ -7,7 +7,7 @@
 #include "utils/AssistPath.h"
 
 namespace task_engine {
-BadTask::BadTask(TaskInfo info) : BaseTask(info) {
+BadTask::BadTask(RunTaskInfo info) : BaseTask(info) {
 }
 
 void BadTask::Run() {

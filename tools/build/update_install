@@ -18,8 +18,9 @@ stop_service() {
             return
         fi
     fi
-    
-    for service_pid in `ps axf | grep "$aliyun_service_bin" | grep -v grep | awk {'print $1'}`
+   
+    # coreos, binary file is not in path: $aliyun_service_bin
+    for service_pid in `ps axf | grep "$aliyun_service_name" | grep -v grep | awk {'print $1'}`
     do
         kill -9 $service_pid
     done
@@ -30,6 +31,12 @@ clean() {
     [ -e "/usr/lib/systemd/system/aliyun.service" ] && rm -rf /usr/lib/systemd/system/aliyun.service
     
     [ -e "/var/lock/agentwatch" ] && rm -f "/var/lock/agentwatch"
+
+    # This file will be occupied by aliyun-service on some other case
+    # just rm it, next update process will create it
+    if [ -e /var/tmp/aliyun_assist_update.lock ]; then
+        rm -f /var/tmp/aliyun_assist_update.lock
+    fi
     
     #remove old agentwatch first
     if [ -e /etc/init.d/agentwatch ]; then
@@ -51,17 +58,19 @@ clean() {
 }
 
 clean
+
 if [ -e /usr/sbin/aliyun-service ]; then
     if [ -e $FILE ]; then
         rm $FILE
         touch $FILE
         echo "[Unit]" >> $FILE
-        echo "Description=auto run aliyunservice or agent" >> $FILE
+        echo "Description=aliyun-assist" >> $FILE
+        echo "After=network-online.target" >> $FILE
         echo "[Service]" >> $FILE
         echo "Type=simple" >> $FILE
         echo "ExecStart=/usr/sbin/aliyun-service" >> $FILE
-        echo "Restart=always " >> $FILE
-        echo "KillMode=on-failure" >> $FILE
+        echo "KillMode=process" >> $FILE
+        echo "Restart=on-failure" >> $FILE
         echo "RestartSec=1min" >> $FILE
         echo "[Install]" >> $FILE
         echo "WantedBy=multi-user.target" >> $FILE
@@ -83,7 +92,14 @@ if [ -e /usr/sbin/aliyun-service ]; then
     rc=$?
     if [ ${rc} -eq 0 ] ;then
         echo $cmd
-        exit 0
+        # make sure enable auto start when restart vm
+        cmd="systemctl enable aliyun.service"
+        $cmd
+        rc=$?
+        if [ ${rc} -eq 0 ] ;then
+            echo $cmd
+            exit 0
+        fi
     fi
   
     if [ -f /etc/init.d/aliyun-service ]; then

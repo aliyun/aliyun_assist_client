@@ -41,41 +41,22 @@ void TaskSchedule::TestFetch(std::string info) {
 }
 #endif
 
-void TaskSchedule::FetchPeriodTask() {
-  std::vector<TaskInfo> tasks;
-  task_engine::TaskFetch task_fetch;
-  //task_fetch.FetchPeriodTasks(tasks);
-  for (size_t i = 0; i < tasks.size(); i++) {
-    Schedule(tasks[i]);
-  }
-}
-
 int TaskSchedule::Fetch(bool from_kick) {
+  int task_size = 0;
 
-  std::vector<TaskInfo>  tasks;
-  std::vector<TaskInfo>  canceled_tasks;
-  task_engine::TaskFetch task_fetch;
-  
-  task_fetch.FetchTasks(tasks);
-  task_fetch.FetchCancledTasks(canceled_tasks);
-
-  for ( size_t i = 0; i < tasks.size(); i++ ) {
-    Schedule(tasks[i]);
-  }
-
-  for (size_t i = 0; i < canceled_tasks.size(); i++) {
-    Cancel(canceled_tasks[i]);
-  }
-  int task_size = tasks.size() + canceled_tasks.size();
+  if (from_kick)
+    task_size = FetchTasks("kickoff");
+  else
+    task_size = FetchTasks("period");
 
   for (int i =  0; i < 3 &&  from_kick  && task_size == 0 ;i++ ) {
 	  std::this_thread::sleep_for(std::chrono::seconds(3));
-	  task_size = Fetch(false);
+    task_size = FetchTasks("kickoff");
   }
   return task_size;
 }
 
-void TaskSchedule::Schedule(TaskInfo task_info) {
+void TaskSchedule::Schedule(RunTaskInfo task_info) {
 
 	MutexLocker( &m_mutex ) {
 		if ( m_tasklist.find(task_info.task_id) != m_tasklist.end() ) {
@@ -98,8 +79,8 @@ void TaskSchedule::Schedule(TaskInfo task_info) {
 	}
 }
 
-void TaskSchedule::Cancel(TaskInfo task_info) {
-  Log::Error("cancel task taskid:%s", task_info.task_id.c_str());
+void TaskSchedule::Cancel(StopTaskInfo task_info) {
+  Log::Info("stop-task %s", task_info.task_id.c_str());
   BaseTask* task = nullptr;
   MutexLocker( &m_mutex ) {
 	  std::map<std::string, BaseTask*>::iterator it;
@@ -114,8 +95,6 @@ void TaskSchedule::Cancel(TaskInfo task_info) {
 
 
 void TaskSchedule::Execute( BaseTask* task ) {
-	
-
 	if ( !task->canceled ) {
 		task->Run();
 		MutexLocker(&m_mutex) {
@@ -128,6 +107,7 @@ void TaskSchedule::Execute( BaseTask* task ) {
 	}
 	//任务被取消
 	MutexLocker( &m_mutex ) {
+    Log::Info("stop-task %s", task->task_info.task_id.c_str());
 		if (task->timer) {
 			Singleton<TimerManager>::I().deleteTimer((task_engine::Timer*)task->timer);
 		}
@@ -163,5 +143,21 @@ void TaskSchedule::DispatchTask(BaseTask* task) {
 #endif
 };
 
+int TaskSchedule::FetchTasks(std::string reason) {
+  std::vector<StopTaskInfo> stop_tasks;
+  std::vector<RunTaskInfo> run_tasks;
+  task_engine::TaskFetch task_fetch;
+  task_fetch.FetchTaskList(stop_tasks, run_tasks, reason);
+
+  for (size_t i = 0; i < run_tasks.size(); i++) {
+    Schedule(run_tasks[i]);
+  }
+
+  for (size_t i = 0; i < stop_tasks.size(); i++) {
+    Cancel(stop_tasks[i]);
+  }
+
+  return run_tasks.size() + stop_tasks.size();
+}
 
 }  // namespace task_engine
