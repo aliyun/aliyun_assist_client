@@ -91,6 +91,7 @@ bool HttpRequest::http_request(const std::string& url,
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 3);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5);
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+	curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
     /* Now specify the POST data */
     if(is_post) {
       curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post_content.c_str());
@@ -152,6 +153,7 @@ bool HttpRequest::https_request(const std::string& url,
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 3);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5);
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+	curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
     /* Now specify the POST data */
     if(is_post) {
       curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post_content.c_str());
@@ -251,5 +253,26 @@ bool HttpRequest::download_file(const std::string& url,
   }
   fclose(fp);
   return res == CURLE_OK;
+}
+
+bool HttpRequest::url_encode(const std::string& str, std::string& result) {
+    if (str.length() == 0) {
+        return 1; // empty str encode return success
+    }
+    CURL * curl = curl_easy_init();
+    bool success = 0;
+    if (curl) {
+        char * output = curl_easy_escape(curl, str.c_str(), str.length());
+        if (output) {
+            result = std::string(output);
+            curl_free(output);
+            success = 1;
+        }
+        curl_easy_cleanup(curl);
+    }
+    if (success == 0) {
+        Log::Error("url_encode() failed, encode str: %s", str.c_str());
+    }
+    return success;
 }
 

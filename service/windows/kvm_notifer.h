@@ -8,6 +8,8 @@
 
 #include "../task_notifer.h"
 #include "json11/json11.h"
+#include <mutex>
+#include "utils/MutexLocker.h"
 
 using std::string;
 using std::thread;
@@ -19,6 +21,8 @@ class KvmNotifer :public TaskNotifer {
 
 	bool init(function<void(const char*)> callback);
 	void unit();
+  bool is_stopped();
+  void set_stop();
 
  private:
   bool  poll();
@@ -32,6 +36,7 @@ class KvmNotifer :public TaskNotifer {
   HANDLE	m_hFile;
   bool      m_stop;
   thread*   m_worker;
+  std::mutex m_mutex;
   function<void(const char*)>    m_callback;
 };
 #endif  // CLIENT_SERVICE_GSHELL_H_

@@ -49,6 +49,7 @@ Section "MainSection" SEC01
   File "output\aliyun_assist_update.exe"
   File "output\aliyun_installer.exe"
   File "output\aliyun_assist_service.exe"
+  File "output\acs-plugin-manager.exe"
   File "output\install.bat"
   SetOutPath "$INSTDIR\config"
   File "output\config\host.conf"

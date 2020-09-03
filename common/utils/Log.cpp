@@ -18,6 +18,26 @@
 
 INITIALIZE_EASYLOGGINGPP
 
+#if !defined(_WIN32)
+#include <signal.h>
+#include "utils/backtrace.h"
+
+static void unwindingCrashHandler(int sig) {
+    // Restore default signal handler
+#if defined(ELPP_HANDLE_SIGABRT)
+    int i = 0;  // SIGABRT is at base::consts::kCrashSignals[0]
+#else
+    int i = 1;
+#endif  // defined(ELPP_HANDLE_SIGABRT)
+    for (; i < el::base::consts::kCrashSignalsCount; ++i) {
+        signal(el::base::consts::kCrashSignals[i].numb, SIG_DFL);
+    }
+    el::Helpers::logCrashReason(sig, false);
+    LOG(FATAL) << "======= Backtrace: =========" << std::endl << StackUnwind();
+    el::Helpers::crashAbort(sig);
+}
+#endif
+
 const char* Log::TypeToString( const Type& type ) {
   switch( type ) {
   case LOG_TYPE_FATAL:
@@ -50,6 +70,9 @@ bool Log::Initialise(const std::string& fileName, int preserveDays) {
     el::Loggers::reconfigureAllLoggers(el::ConfigurationType::Filename, log.m_fileName);
     el::Loggers::reconfigureAllLoggers(el::ConfigurationType::LogFileRollingTime, "day");
     el::Helpers::installPreRollOutCallback(RolloutHandler);
+#if !defined(_WIN32)
+    el::Helpers::setCrashHandler(unwindingCrashHandler);
+#endif
 
     log.m_initialised = true;
     Info( "LOG INITIALISED" );
@@ -144,10 +167,10 @@ void Log::RolloutHandler(const char* filename, std::size_t size, el::base::Rolli
   switch (rollingbasis)
   {
   case el::base::RollingLogFileBasis::RollLog_FileSize:
-    /// °´´óÐ¡¹ö¶¯ÈÕÖ¾ÎÄ¼þ
+    /// ï¿½ï¿½ï¿½ï¿½Ð¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö¾ï¿½Ä¼ï¿½
     break;
   case el::base::RollingLogFileBasis::RollLog_DateTime:
-    /// °´Ê±¼ä¹ö¶¯ÈÕÖ¾ÎÄ¼þ
+    /// ï¿½ï¿½Ê±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö¾ï¿½Ä¼ï¿½
   {
     time_t currenttime = time(NULL);
     currenttime -= 24 * 3600;
@@ -183,7 +206,7 @@ void Log::RolloutHandler(const char* filename, std::size_t size, el::base::Rolli
       oneDayAgo.tm_min);
 #endif
 
-    /// ×Ô¶¨ÒåÈÕÖ¾±¸·Ý
+    /// ï¿½Ô¶ï¿½ï¿½ï¿½ï¿½ï¿½Ö¾ï¿½ï¿½ï¿½ï¿½
     Log::copyFile(filename, backupFile);
   }
   break;
@@ -234,25 +257,11 @@ void Log::copyFile(const char* src, const char* dest) {
   std::ifstream inputFile(src, std::ios::binary);
   std::ofstream outputFile(dest, std::ios::binary | std::ios::trunc);
 
-  if (!inputFile.good()) {
-    Log::Error("copy file failed");
-  }
-  if (!outputFile.good()) {
-    Log::Error("copy file failed");
-  }
 
   outputFile << inputFile.rdbuf();
 
-  if (inputFile.bad()) {
-    Log::Error("copy file failed");
-  }
-  if (outputFile.bad()) {
-    Log::Error("copy file failed");
-  }
 #else
-  if (!CopyFileA(src, dest, FALSE)) {
-    Log::Error("copy file failed");
-  }
+  CopyFileA(src, dest, FALSE);
 #endif
 }
 

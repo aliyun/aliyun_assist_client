@@ -9,6 +9,7 @@
 #include <stdarg.h>
 #define  ELPP_THREAD_SAFE
 #define  ELPP_NO_DEFAULT_LOG_FILE
+#define  ELPP_HANDLE_SIGABRT
 #include "easyloggingpp/easylogging++.h"
 
 class Log {

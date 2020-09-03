@@ -18,6 +18,7 @@
 #endif
 #include "utils/process.h"
 
+
 using optparse::OptionParser;
 //for test
 namespace {
@@ -62,6 +63,7 @@ namespace {
 	}
 }
 
+
 int main( int argc, char *argv[] ) {
 
 
@@ -85,3 +87,4 @@ int main( int argc, char *argv[] ) {
 	Singleton<ServiceApp>::I().runService();
 	return 0;
 }
+

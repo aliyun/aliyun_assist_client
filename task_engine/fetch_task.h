@@ -12,6 +12,7 @@ class TaskFetch {
   TaskFetch();
   void FetchTaskList(std::vector<task_engine::StopTaskInfo>& stop_task_info,
       std::vector<task_engine::RunTaskInfo>& run_task_info,
+	  std::vector<task_engine::SendFile>& sendfile_task_info,
       std::string reason);
 #if defined(TEST_MODE)
   //void TestFetchTasks(std::string res, std::vector<TaskInfo>& task_info);

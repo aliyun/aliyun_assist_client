@@ -23,6 +23,8 @@ class HttpRequest {
                                       const std::string& post_content, std::string& response);
   static bool download_file(const std::string& url,
                             const std::string& file_path);
+  static bool url_encode(const std::string& str, std::string& result);
+
   HttpRequest();
  private:
   static bool https_request(const std::string& url,

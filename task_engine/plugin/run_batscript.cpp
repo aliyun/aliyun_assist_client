@@ -19,7 +19,7 @@ RunBatTask::RunBatTask(RunTaskInfo info) : BaseTask(info) {
 bool RunBatTask::BuildScript(string fileName, string content) {
 
   if (FileUtils::fileExists(fileName.c_str())) {
-	  return true;
+	  return false;
   }
 
   FILE *fp = fopen(fileName.c_str(), "w+");
@@ -40,7 +40,12 @@ void RunBatTask::Run() {
   string scriptPath = assistPath.GetWorkPath("script");
  
   string filename = scriptPath + "\\" + task_info.task_id + ".bat";
-  BuildScript(filename, task_info.content);
+  if (BuildScript(filename, task_info.content) == false) {
+    if (task_info.cronat.empty()) {
+      Log::Info("duplicate task ignore:%s", task_info.task_id.c_str());
+      return;
+    }
+  }
 
   
   string cmd  = filename;

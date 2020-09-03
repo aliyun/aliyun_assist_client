@@ -133,4 +133,12 @@ bool SystemInfo::InitWSA() {
 void SystemInfo::ReleaseWSA() {
   WSACleanup();
 }
+
+unsigned long SystemInfo::GetWindowsDefaultLang() {
+	static LCID s_lcid = 0;
+	if (0 == s_lcid) {
+		s_lcid = GetSystemDefaultLCID();
+	}
+	return s_lcid;
+}
 #endif // _WIN32

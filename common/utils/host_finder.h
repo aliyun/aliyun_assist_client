@@ -18,7 +18,7 @@ class HostFinder {
  public:
   static string getRegionId();
   static string getServerHost();
-
+  static void setStopPolling(bool flag);
  private:
   static string getRegionIdInVpc();
   static string getRegionIdInFile();
@@ -27,6 +27,7 @@ class HostFinder {
 
   // works only on classic network
   static bool requestRegionId(string regionId);
+  static bool stopPolling;
 };
 
 #endif //PROJECT_CHECKNET_H_

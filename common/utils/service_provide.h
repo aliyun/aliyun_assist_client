@@ -10,11 +10,15 @@ class ServiceProvide {
 
   // New version 1.0
   static std::string GetInvalidTaskService();
+  static std::string GetConnectDetectService();
   static std::string GetFetchTaskListService();
   static std::string GetRunningOutputService();
   static std::string GetFinishOutputService();
   static std::string GetStoppedOutputService();
   static std::string GetTimeoutOutputService();
   static std::string GetErrorOutputService();
+  static std::string GetPingService();
+  static std::string GetGshellCheckService();
+  static std::string GetPluginListService();
 };
 #endif  // COMMON_UTILS_SERVICE_PROVIDE_H_

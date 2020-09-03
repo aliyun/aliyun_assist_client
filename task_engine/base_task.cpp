@@ -17,6 +17,8 @@
 #include "utils/MutexLocker.h"
 #include "json11/json11.h"
 #include "timer_manager.h"
+#include "utils/SystemInfo.h"
+
 
 #if !defined(_WIN32)
 #include<sys/types.h>
@@ -25,6 +27,7 @@
 #include <unistd.h>
 #else
 #include <windows.h>
+#include "utils\CStringUtil.h"
 #endif
 
 
@@ -54,7 +57,20 @@ void BaseTask::DoWork(std::string cmd, std::string dir, int timeout) {
 		{
 			return;
 		}
-	  this->output += buf;
+#ifdef _WIN32
+		LCID lcid = SystemInfo::GetWindowsDefaultLang();
+		if (lcid != 0x409) {//非英文环境才转换
+			std::string tmp = buf;
+			this->output += CStringUtil::AsciiToUtf8(tmp);
+		}
+		else {
+			//英文环境不用转换
+			this->output += buf;
+		}
+#else
+		this->output += buf;
+#endif
+	  
     {
       MutexLocker(&m_mutex) {
         this->running_output += buf;
@@ -236,15 +252,17 @@ exit_code, dropped, output.c_str());
         task_info.task_id.c_str(), response.c_str());
     }
 
-    for (int i = 0; i < 10 && !ret; i++) {
+    for (int i = 0; i < 3 && !ret; i++) {
       int second = int(pow(2, i));
       std::this_thread::sleep_for(std::chrono::seconds(second));
-      ret = HttpRequest::https_request_post(url, output, response);
+      ret = HttpRequest::https_request_post_text(url, output, response);
       if (!ret) {
         Log::Error("task-output %s %s", task_info.task_id.c_str(), response.c_str());
       }
     }
 
+	//一个命令已经成功执行完成，output应该清空，否则周期性命令输出会重叠
+	output = "";
     if (!ret)
       return;
 
@@ -288,10 +306,10 @@ dropped, output.c_str());
         task_info.task_id.c_str(), response.c_str());
     }
 
-    for (int i = 0; i < 10 && !ret; i++) {
+    for (int i = 0; i < 3 && !ret; i++) {
       int second = int(pow(2, i));
       std::this_thread::sleep_for(std::chrono::seconds(second));
-      ret = HttpRequest::https_request_post(url, output, response);
+      ret = HttpRequest::https_request_post_text(url, output, response);
       if (!ret) {
         Log::Error("task-output %s %s", task_info.task_id.c_str(), response.c_str());
       }
@@ -339,10 +357,10 @@ dropped, output.c_str());
         task_info.task_id.c_str(), response.c_str());
     }
 
-    for (int i = 0; i < 10 && !ret; i++) {
+    for (int i = 0; i < 3 && !ret; i++) {
       int second = int(pow(2, i));
       std::this_thread::sleep_for(std::chrono::seconds(second));
-      ret = HttpRequest::https_request_post(url, output, response);
+      ret = HttpRequest::https_request_post_text(url, output, response);
       if (!ret) {
         Log::Error("task-output %s %s", task_info.task_id.c_str(), response.c_str());
       }
@@ -392,10 +410,10 @@ void BaseTask::SendErrorOutput() {
       task_info.task_id.c_str(), response.c_str());
   }
 
-  for (int i = 0; i < 10 && !ret; i++) {
+  for (int i = 0; i < 3 && !ret; i++) {
     int second = int(pow(2, i));
     std::this_thread::sleep_for(std::chrono::seconds(second));
-    ret = HttpRequest::https_request_post(url, output, response);
+    ret = HttpRequest::https_request_post_text(url, output, response);
     if (!ret) {
       Log::Error("task-output %s %s", task_info.task_id.c_str(), response.c_str());
     }

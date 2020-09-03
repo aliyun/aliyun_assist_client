@@ -18,10 +18,11 @@ private:
 	void    doUpdate();
 	void    doShutdown();
 	void    doReboot();
+    void    ping();
 
 private:
 	void*   m_updateTimer;
 	void*   m_fetchTimer;
-	void*   m_notifer;
 	bool    m_updateFinish;
+    void*   m_pingTimer;
 };

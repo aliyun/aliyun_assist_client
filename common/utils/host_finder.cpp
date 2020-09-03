@@ -39,6 +39,7 @@ std::vector<std::string> region_ids = { "cn-qingdao",
 "cn-north-2-gov-1",
 "cn-qingdao-nebula"};
 
+bool HostFinder::stopPolling = false;
 bool HostFinder::connectionDetect(string regionId) {
 	std::string host = regionId + ".axt.aliyun.com";
 	string url = "https://" + host + "/luban/api/connection_detect";
@@ -133,9 +134,16 @@ string HostFinder::getRegionId()  {
 	return "";
 }
 
+void HostFinder::setStopPolling(bool flag){
+	stopPolling = flag;
+}
+
 string HostFinder::pollingRegionId() {
   auto iter = region_ids.begin();
   for (; iter != region_ids.end(); ++iter) {
+	if (stopPolling) {
+		break;
+	}
     if (requestRegionId(*iter)) {
       return *iter;
     }

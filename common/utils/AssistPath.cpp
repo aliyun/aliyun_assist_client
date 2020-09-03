@@ -21,6 +21,7 @@ Description: Provide functions to get file path
 #include "FileUtil.h"
 #include "AssistPath.h"
 #include <string.h>
+#include "utils/Log.h"
 
 
 
@@ -217,6 +218,44 @@ string AssistPath::GetCommonPath(string filedirname) {
   return path;
 }
 
+string AssistPath::GetPluginPath() {
+  string path = _root_path + FileUtils::separator() + ".." + FileUtils::separator() +"plugin";
+  MakeSurePath(path);
+  return path;
+}
+
+string AssistPath::GetCrossVersionWorkPath() {
+  string path = _root_path + FileUtils::separator() + ".." + FileUtils::separator() + "work";
+  MakeSurePath(path);
+  return path;
+}
+
+string AssistPath::GetScriptPath() {
+  MakeSurePath(_root_path + FileUtils::separator() + ".." + FileUtils::separator() + "work");
+  string path = _root_path + FileUtils::separator() + ".." + FileUtils::separator() +"work" + FileUtils::separator() + "script";
+  MakeSurePath(path);
+  return path;
+}
+
+#if defined _WIN32
+bool AssistPath::SetCurrentEnvPath()  
+{  
+  char chBuf[4096];
+ 
+   DWORD dwSize =GetEnvironmentVariableA("PATH", chBuf, 4096);
+   if(dwSize > 4096) {
+     return false;
+   }
+
+   int error = GetLastError();
+   std::string strEnvPaths(chBuf);  
+
+   strEnvPaths += ";" + _root_path;
+   Log::Info("set env:%s",strEnvPaths.c_str());
+   bool bRet = SetEnvironmentVariableA("Path",strEnvPaths.c_str());  
+   return bRet;  
+}
+#endif
 /*
 *Summary: to make sure path
 *Parameters: (string) filename
@@ -270,7 +309,41 @@ bool AssistPath::CreateFolder(string filename) {
 
 }
 
+#define MAX_PATH_LEN 256
 
+#ifdef WIN32
+#define ACCESS(fileName,accessMode) _access(fileName,accessMode)
+#define MKDIR(path) _mkdir(path)
+#else
+#define ACCESS(fileName,accessMode) access(fileName,accessMode)
+#define MKDIR(path) mkdir(path,S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)
+#endif
+
+int AssistPath::CreateDirRecursive(const std::string &directoryPath)
+{
+	uint32_t dirPathLen = directoryPath.length();
+	if (dirPathLen > MAX_PATH_LEN)
+	{
+		return -1;
+	}
+	char tmpDirPath[MAX_PATH_LEN] = { 0 };
+	for (uint32_t i = 0; i < dirPathLen; ++i)
+	{
+		tmpDirPath[i] = directoryPath[i];
+		if (tmpDirPath[i] == '\\' || tmpDirPath[i] == '/')
+		{
+			if (ACCESS(tmpDirPath, 0) != 0)
+			{
+				int32_t ret = MKDIR(tmpDirPath);
+				if (ret != 0)
+				{
+					return ret;
+				}
+			}
+		}
+	}
+	return 0;
+}
 
 
 

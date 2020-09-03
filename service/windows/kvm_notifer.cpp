@@ -37,6 +37,22 @@ private:
 	string  m_decs;
 };
 
+bool KvmNotifer::is_stopped() 
+{
+  MutexLocker(&m_mutex)
+  {
+    return  m_stop;
+  }
+}
+
+void KvmNotifer::set_stop()
+{
+  MutexLocker(&m_mutex)
+  {
+    m_stop = true ;
+  }
+}
+
 
 KvmNotifer::KvmNotifer() {
 	m_hFile  = INVALID_HANDLE_VALUE;
@@ -70,9 +86,9 @@ bool KvmNotifer::init(function<void(const char*)> callback) {
 }
 
 void KvmNotifer::unit() {
-  m_stop = true;
+  set_stop();
   if (m_worker) {
-	  m_worker->join();
+    m_worker->join();
   }
 
   if ( m_hFile != INVALID_HANDLE_VALUE ) {
@@ -86,7 +102,7 @@ void KvmNotifer::unit() {
 
 bool  KvmNotifer::poll() {
 
-	while ( !m_stop ) {
+	while ( !is_stopped() ) {
 		char  buffer[0x1000] = { 0 };
 		DWORD len = 0;
 		BOOL  ret = FALSE;

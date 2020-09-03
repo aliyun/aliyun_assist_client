@@ -30,12 +30,19 @@ class AssistPath {
   string GetLogPath(string subpath = "");
   string GetSetupPath(string subpath = "");
   string GetBackupPath(string subpath = "");
+  string GetPluginPath();
+  string GetCrossVersionWorkPath();
+  string GetScriptPath();
+  bool   MakeSurePath(string path);
+  int CreateDirRecursive(const std::string &directoryPath);
+#if defined _WIN32
+  bool SetCurrentEnvPath();
+#endif
 
  private:
   string _root_path;
   string GetRootPath();
   string GetCommonPath(string filedirname);
-  bool   MakeSurePath(string path);
   bool   CreateFolder(string filename);
   bool   IsFileExist(string filename);
 };

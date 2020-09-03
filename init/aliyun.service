@@ -1,7 +1,6 @@
 [Unit]
 Description=aliyun-assist
 After=network-online.target
-After=nss-lookup.target
 
 [Service]
 Type=simple

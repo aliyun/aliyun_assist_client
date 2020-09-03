@@ -2,8 +2,12 @@
 
 [ -e "/usr/sbin/aliyun-service" ] && rm -rf /usr/sbin/aliyun-service
 [ -e "/usr/sbin/aliyun_installer" ] && rm -rf /usr/sbin/aliyun_installer
-rm -rf /usr/local/share/aliyun-assist
 
+ps aux | grep "dpkg -i" | grep -v grep > /dev/null
+if [ $? != 0 ]; then
+    rm -rf  /usr/local/share/aliyun-assist/
+fi
+ 
 if [ -e /etc/systemd/system/aliyun.service ]; then
     cmd="systemctl stop aliyun.service"
     $cmd
@@ -34,7 +38,17 @@ if [ -f /etc/init.d/aliyun-service ]; then
         chkconfig aliyun-service off
         chkconfig --del aliyun-service
     fi
+    /etc/init.d/aliyun-service stop
     rm -f /etc/init.d/aliyun-service
 fi
 
+uninstall_assist_daemon(){
+	if [ -e /usr/local/share/assist-daemon/assist_daemon ]; then
+		echo "need to uninstall assist_daemon"
+		/usr/local/share/assist-daemon/assist_daemon --stop
+		/usr/local/share/assist-daemon/assist_daemon --delete
+		rm -rf /usr/local/share/assist-daemon
+	fi
+}
+uninstall_assist_daemon
 echo "0:success"

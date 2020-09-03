@@ -20,6 +20,7 @@ private:
   int FetchTasks(std::string reason);
   void DispatchTask(BaseTask* task);
   void Execute(BaseTask* task);
+  void CleanTasks();
 
 private:
   std::map<std::string, BaseTask*> m_tasklist;

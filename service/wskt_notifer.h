@@ -4,9 +4,13 @@
 #include <string>
 #include <functional>
 #include <thread>
+#include <mutex>
 
 #include "json11/json11.h"
 #include "task_notifer.h"
+#if !defined(_WIN32)
+#include <pthread.h>
+#endif
 
 
 class WsktNotifer :public TaskNotifer {
@@ -16,16 +20,23 @@ class WsktNotifer :public TaskNotifer {
 
 	bool init(function<void(const char*)> callback);
 	void unit();
+  bool is_stopped();
+  void set_stop();
 
  private:
 
-	void  poll();  
+  static void* poll(void* args);
 	void  handle_message(const std::string & message);
 
  private:
   function<void(char*)>    m_callback;
   bool                m_stop;
   char*               m_path;
+  std::mutex m_mutex;
+#if defined(_WIN32)
   std::thread*        m_worker;
+#else
+  pthread_t m_worker;
+#endif
 };
 #endif  // CLIENT_SERVICE_GSHELL_H_

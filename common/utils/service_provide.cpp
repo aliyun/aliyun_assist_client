@@ -13,6 +13,12 @@ std::string ServiceProvide::GetUpdateService() {
   return url;
 }
 
+std::string ServiceProvide::GetConnectDetectService() {
+  std::string url = "https://" + HostFinder::getServerHost();
+  url += "/luban/api/connection_detect";
+  return url;
+}
+
 //New version 1.0
 std::string ServiceProvide::GetInvalidTaskService() {
   std::string url = "https://" + HostFinder::getServerHost();
@@ -53,5 +59,23 @@ std::string ServiceProvide::GetTimeoutOutputService() {
 std::string ServiceProvide::GetErrorOutputService() {
   std::string url = "https://" + HostFinder::getServerHost();
   url += "/luban/api/v1/task/error";
+  return url;
+}
+
+std::string ServiceProvide::GetPingService() {
+  std::string url = "https://" + HostFinder::getServerHost();
+  url += "/luban/api/heart-beat";
+  return url;
+}
+
+std::string ServiceProvide::GetGshellCheckService() {
+  std::string url = "https://" + HostFinder::getServerHost();
+  url += "/luban/api/gshell";
+  return url;
+}
+
+std::string ServiceProvide::GetPluginListService() {
+  std::string url = "https://" + HostFinder::getServerHost();
+  url += "/luban/api/v1/plugin/list";
   return url;
 }

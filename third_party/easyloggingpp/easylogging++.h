@@ -5745,12 +5745,21 @@ static void logCrashReason(int sig, bool stackTraceIfAvailable, Level level, con
     ELPP_WRITE_LOG(el::base::Writer, level, base::DispatchAction::NormalLog, logger) << ss.str();
 }
 static inline void crashAbort(int sig) {
-    base::utils::abort(sig);
+    // base::utils::abort(sig);
+    exit(1);
 }
 /// @brief Default application crash handler
 ///
 /// @detail This function writes log using 'default' logger, prints stack trace for GCC based compilers and aborts program.
 static inline void defaultCrashHandler(int sig) {
+  #if defined(ELPP_HANDLE_SIGABRT)
+            int i = 0;  // SIGABRT is at base::consts::kCrashSignals[0]
+#else
+            int i = 1;
+#endif  // defined(ELPP_HANDLE_SIGABRT)
+        for (; i < base::consts::kCrashSignalsCount; ++i) {
+            signal(base::consts::kCrashSignals[i].numb, SIG_DFL);
+        }
     base::debug::logCrashReason(sig, true, Level::Fatal, base::consts::kDefaultLoggerId);
     base::debug::crashAbort(sig);
 }

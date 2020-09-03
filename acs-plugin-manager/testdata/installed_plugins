@@ -1,0 +1,17 @@
+[{
+		"pluginId": "12345",
+  "name": "ecs_tool",
+  "publisher": "aliyun",
+  "osType": "windows",
+  "arch": "x86",
+  "runPath": "ecs_tools.bat",
+		"version": "1.1"
+	},
+	{
+		"pluginId": "12346",
+		"name": "ecs_config_net",
+    "version": "2.1",
+  "publisher": "aliyun",
+  "osType": "windows"
+	}
+]

@@ -1,7 +1,7 @@
-# CMake ×îµÍ°æ±¾ÒªÇó
+# CMake ï¿½ï¿½Í°æ±¾Òªï¿½ï¿½
 # CMake_minimum_required (VERSION 2.8)
 
-# ÏîÄ¿ÐÅÏ¢
+# ï¿½ï¿½Ä¿ï¿½ï¿½Ï¢
 project (aliyun-assist)
 
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
@@ -22,16 +22,23 @@ if(WIN32)
     include_directories(./windows)
     aux_source_directory(./windows DIR_SRCS)
     link_libraries(shlwapi Psapi version)
-    link_libraries(ws2_32 Wldap32 libcurl libeay32 ssleay32 PowrProf)
+    link_libraries(ws2_32 Wldap32 libcurl libeay32 ssleay32 PowrProf websockets_static)
     include_directories(../third_party/libcurl/windows/include)
+    include_directories(../third_party/libwebsockets/win32/include)
+    link_directories(../third_party/libwebsockets/win32/lib)
     link_directories(../third_party/libcurl/windows/lib)
     add_executable(aliyun_assist_service ${DIR_SRCS}  ../VersionResource.rc)
     SET_TARGET_PROPERTIES(aliyun_assist_service PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG   ${CMAKE_CURRENT_SOURCE_DIR}/../output/)
     SET_TARGET_PROPERTIES(aliyun_assist_service PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_CURRENT_SOURCE_DIR}/../output/)
 else(UNIX)
     include_directories(../third_party/libcurl/linux/include)
+    include_directories(../third_party/libwebsockets/include)
     link_directories(../third_party/libcurl/linux/lib)
-	link_libraries(curl ssl crypto)
+    link_directories(../third_party/libwebsockets/lib)
+	link_libraries(curl ssl crypto websockets)
+    include_directories(../third_party/libunwind/include)
+    link_directories(../third_party/libunwind/lib)
+	link_libraries(unwind)
     include_directories(./linux)
 	include_directories(./linux/xs)
     aux_source_directory(./linux DIR_SRCS)

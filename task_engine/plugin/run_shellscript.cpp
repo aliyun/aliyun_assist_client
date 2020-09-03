@@ -17,7 +17,7 @@ RunShellScriptTask::RunShellScriptTask(RunTaskInfo info) : BaseTask(info) {
 bool RunShellScriptTask::BuildScript(string fileName, string content) {
   
   if ( FileUtils::fileExists(fileName.c_str()) ) {
-	 return true;
+	 return false;
   };
   
   FILE *fp = fopen(fileName.c_str(), "w+");
@@ -34,11 +34,20 @@ bool RunShellScriptTask::BuildScript(string fileName, string content) {
 void RunShellScriptTask::Run() {
   string cmd  = task_info.content;
   // just back up to local file 
-  string filename = "/tmp/" + task_info.task_id + ".sh";
-  BuildScript(filename, task_info.content);
+  AssistPath assistPath("");
+  string scriptPath = assistPath.GetScriptPath();
+  string filename = scriptPath + "/"  + task_info.task_id + ".sh";
+
+  if (BuildScript(filename, task_info.content) == false) {
+    if (task_info.cronat.empty()) {
+      Log::Info("duplicate task ignore:%s", task_info.task_id.c_str());
+      return;
+    }
+  }
+  Process("chmod +x " + filename).syncRun(10);
 
   string  dir = task_info.working_dir;
   int timeout = atoi(task_info.time_out.c_str());
-  DoWork(cmd, dir, timeout);
+  DoWork(filename, dir, timeout);
 }
 }  // namespace task_engine

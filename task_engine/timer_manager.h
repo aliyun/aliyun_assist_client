@@ -9,6 +9,7 @@
 #include <condition_variable>
 #include <functional>
 #include "utils/singleton.h"
+#include "ccronexpr/ccronexpr.h"
 
 #if !defined(_WIN32)
 #include <pthread.h>
@@ -16,8 +17,27 @@
 
 namespace task_engine {
 
-struct  Timer;
 typedef std::function<void()> Callback;
+
+struct Timer {
+	time_t         time;
+	Callback	   notifier;
+	void*          context;
+	cron_expr*	   expr;
+	int            interval;
+	Timer() {
+		time = 0;
+		notifier = nullptr;
+		context = nullptr;
+		expr = nullptr;
+		interval = 0;
+	}
+	~Timer() {
+		if (expr) {
+			cron_expr_free(expr);
+		}
+	}
+};
 
 class TimerManager {
   friend Singleton<TimerManager>;
@@ -27,9 +47,9 @@ class TimerManager {
   Timer*  createTimer(Callback callback, std::string cronat);
   Timer*  createTimer(Callback callback, int interval);
   void    deleteTimer(Timer* timer);
+  void    updateTime(Timer* timer);
 
  private:
-  void            updateTime(Timer* timer);
   void            checkTimer();
   void            wait();
   void            notifty();
@@ -38,6 +58,7 @@ class TimerManager {
 
  private:
   TimerManager();
+  ~TimerManager();
   std::mutex			m_mutex;
   bool					m_stop;
   std::vector<Timer*>   m_queue;

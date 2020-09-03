@@ -23,6 +23,9 @@ BaseTask* TaskFactory::CreateTask(RunTaskInfo& info) {
 	if ( !info.cronat.empty() ) {
 		const char* err  = nullptr;
 		cron_expr*  expr = cron_parse_expr(info.cronat.c_str(), &err);
+		if (expr) {
+			cron_expr_free(expr);
+		}
 		if ( err ) {
             Log::Error("invalid cron: %s, error: %s", info.cronat.c_str(), err);
             BadTask(info).SendInvalidTask("cron", info.cronat);

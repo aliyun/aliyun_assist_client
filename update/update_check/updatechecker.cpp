@@ -229,10 +229,18 @@ bool UpdateProcess::RemoveOldVersion(std::string dir) {
       continue;
 
     //Filter the sub dir which name is not like 1.0.0.130
-    regex reg("\\d+(.\\d+){3}");
-    smatch str_match;
-    if (!regex_match(name, str_match, reg))
-      continue;
+
+	try {
+		regex reg("\\d+(.\\d+){3}");
+		smatch str_match;
+		if (!regex_match(name, str_match, reg))
+			continue;
+	}
+	catch (...) {
+		Log::Error("invalid name %s", name.c_str());
+		continue;
+	}
+    
 
     if (VersionComparator::CompareVersions(name, current_version) < 0) {
       std::string outdated_dir = dir + FileUtils::separator() + name;

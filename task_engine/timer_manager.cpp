@@ -21,20 +21,9 @@
 
 namespace task_engine {
 
-	
-struct Timer {
-	time_t         time;
-	Callback	   notifier;
-	void*          context;
-	cron_expr*	   expr;
-	int            interval;
-};
-
 bool comprator(Timer* a, Timer* b) {
 	return a->time > b->time;
 }
-
-
 
 TimerManager::TimerManager() {
   m_stop = false;
@@ -44,7 +33,13 @@ TimerManager::TimerManager() {
 #endif
 }
 
-	
+TimerManager::~TimerManager() {
+#if !defined(_WIN32)
+	pthread_mutex_destroy(&mutex);
+	pthread_cond_destroy(&cond);
+#endif
+}
+
 bool  TimerManager::start() {
 	
 #ifdef _WIN32
@@ -151,8 +146,10 @@ void  TimerManager::checkTimer() {
   std::vector<Timer*> notifyList;
 
   MutexLocker( &m_mutex ) {
- 
-    while ( !m_queue.empty() && now > m_queue.back()->time ) {
+    // CRITICAL!!! Condition here MUST be aligned with corresponding condition
+    // in below TimerManager::wait(), otherwise would cause empty loops as many
+    // as possible in the window period caused by the difference.
+    while ( !m_queue.empty() && now >= m_queue.back()->time ) {
 		notifyList.push_back( m_queue.back() );
 		m_queue.pop_back();
     }
@@ -178,7 +175,9 @@ void TimerManager::wait() {
        minus = m_queue.back()->time - now;
     }
   }
-
+  // CRITICAL!!! Condition here MUST be aligned with corresponding condition in
+  // above TimerManager::checkTimer(), otherwise would cause empty loops as many
+  // as possible in the window period caused by the difference.
   if( minus <= 0 ) {
     return;
   };

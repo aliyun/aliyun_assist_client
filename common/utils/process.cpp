@@ -189,7 +189,10 @@ Process::RunResult Process::syncRun(
 	wow64Check(true);
 
 	if (!bSuccess)
+	{
+		Log::Error("CreateProcessA faild! error code=%d\n", GetLastError());
 		return fail;
+	}
 	
 	//为了自动关闭;	
 	Handle hthread(process_info.hThread);
@@ -263,12 +266,15 @@ Process::RunResult Process::syncRun(
 
 
 
-int  doRead(int fd, Process::Callback routine) {
+int  doRead(int fd, Process::Callback routine, bool& read_done) {
 	auto buffer = std::unique_ptr<char[]>(new char[BUFSIZE + 1]);
 	memset(buffer.get(), 0, BUFSIZE+1);
 	int n = read(fd, buffer.get(), BUFSIZE);
 	if (n > 0 && routine) {
 		routine(buffer.get(), static_cast<size_t>(n));
+	}
+	if (n == 0){
+		read_done = true;
 	}
 	return n;
 }
@@ -354,17 +360,22 @@ Process::RunResult Process::syncRun(
 		FD_SET(stderr_p[0], &fdsr);
 		tv.tv_sec = surplus;
 
-
+		bool stdout_read_done = false;
+		bool stderr_read_done = false;
 		int ret = select(maxfd, &fdsr, nullptr, nullptr, &tv);
 		if ( ret > 0 ) { // 可读
 			if ( FD_ISSET(stdout_p[0], &fdsr)  &&
-				 doRead(stdout_p[0], fstdout) == 0 ) {
+				 doRead(stdout_p[0], fstdout, stdout_read_done) == 0 ) {
 					break;
 			};
 			if ( FD_ISSET(stderr_p[0], &fdsr) && 
-				 doRead(stderr_p[0], fstderr) == 0 ) {
+				 doRead(stderr_p[0], fstderr, stderr_read_done) == 0 ) {
 					break;
 			};
+			//stdout和stderr都读完才break,否则会有截断
+			if (stdout_read_done && stderr_read_done){
+				;
+			}
 		} else if (ret == 0) { // 超时
 			int kill_res = kill(pid, SIGKILL);
             Log::Info("timeout(select), kill process pid: %d, kill result: %d", pid, kill_res);

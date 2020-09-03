@@ -78,6 +78,22 @@ namespace task_engine {
     //std::string command_signature;
   };
 
+  struct SendFile
+  {
+	  std::string name;
+	  //std::string contentType;
+	  std::string content;
+	  std::string signature;
+	  std::string invokeId;
+	  std::string timeout;
+	  std::string destination;
+	  std::string fileType;
+	  std::string owner;
+	  std::string group;
+	  std::string mode;
+	  bool overwrite;
+  };
+
 class BaseTask {
  public:
   virtual ~BaseTask() {
