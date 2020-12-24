@@ -1,4 +1,0 @@
-#!/bin/bash
-
-assist_version=$(cat /usr/local/share/aliyun-assist/version)
-. "/usr/local/share/aliyun-assist/$assist_version/init/install_service"
