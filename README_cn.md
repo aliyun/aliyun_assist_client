@@ -26,14 +26,7 @@
 
 ### 如何编译
 
-#### Windows：  
-    1) cmake .  
-    2) 用vs打开sln文件编译  
-
-#### Linux：  
-    1) cmake .  
-    2) make  
-
+  go build
 
 ### [如何使用](https://help.aliyun.com/document_detail/64741.html)
 
@@ -41,7 +34,3 @@
 ### Contributing
 
     欢迎使用Github的pull requests机制给我们提交代码.  
-
-## License
-
-    阿里云助手 is licensed under the GPL V3 License.  

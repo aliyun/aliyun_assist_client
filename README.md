@@ -29,13 +29,7 @@ For example, you can create a command using aliyun openapi, then select some vir
 
 ### How to compile
 
-#### Windows:  
-    1) cmake .  
-    2) open .sln using vs  
-
-#### Linux:  
-    1) cmake .  
-    2) make  
+  go build
 
 
 ### How to use
@@ -46,6 +40,3 @@ For example, you can create a command using aliyun openapi, then select some vir
 
     Welcome use Github pull requests to commit.  
 
-## License
-
-    aliyun assist is licensed under the GPL V3 License.  
