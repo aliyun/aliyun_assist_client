@@ -193,3 +193,25 @@ func HttpDownlod(url string, FilePath string) error {
 	_, err = io.Copy(f, res.Body)
 	return err
 }
+
+// HttpDownloadWithTimeout downloads a file from url to filePath with specified
+// timeout. Check if returned error is of type *url.Error and whether url.Error.Timeout
+// method returns true for timeout request.
+func HttpDownloadWithTimeout(url string, filePath string, timeout time.Duration) error {
+	client := http.Client{
+		Timeout: timeout,
+	}
+	res, err := client.Get(url)
+	if err != nil {
+		return err
+	}
+
+	f, err := os.Create(filePath)
+	defer f.Close()
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(f, res.Body)
+	return err
+}

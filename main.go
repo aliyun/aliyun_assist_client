@@ -59,7 +59,6 @@ func (p *program) Start(s service.Service) error {
 }
 
 func (p *program) run() {
-
 	log.GetLogger().Info("Starting ......version:", version.AssistVersion, "githash:", version.GitCommitHash)
 	SingleAppLock = single.New("AliyunAssistClientSingleLock")
 	if err := SingleAppLock.CheckLock(); err != nil && err == single.ErrAlreadyRunning {
@@ -105,10 +104,15 @@ func (p *program) run() {
 		}
 	}()
 
-	// Check in main goroutine and update as soon as possible
-	if err := update.SafeUpdate(); err != nil {
+	// Check in main goroutine and update as soon as possible, which use stricter
+	// timeout limitation. NOTE: The preparation phase timeout parameter should
+	// be considered as the whole timeout toleration minus minimum sleeping time
+	// for safe updating (5s) minus normal execution time of updating script
+	// (usually less than 5s), e.g., 50s - 5s - 5s = 40s.
+	if err := update.SafeUpdate(time.Duration(40) * time.Second); err != nil {
 		log.GetLogger().Errorln("Failed to check update when starting: " + err.Error())
-		return
+		// Failed to update at starting phase would not terminate agent
+		// return
 	}
 
 	if err := timermanager.InitTimerManager(); err != nil {
@@ -207,7 +211,10 @@ func parseOptions() Options {
 
 func main() {
 	log.InitLog("aliyun_assist_main.log")
-
+	e := PatchGolang()
+	if e != nil {
+		log.GetLogger().Fatal("PatchGolang failed :", e.Error())
+	}
 	version.AssistVersion = assistVer
 	version.GitCommitHash = gitHash
 	// User-Agent header value MUST be manually initialized since version

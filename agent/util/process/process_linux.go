@@ -1,10 +1,21 @@
 package process
 
-import "syscall"
-
 import (
+	"syscall"
+
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 )
+
+func (p *ProcessCmd) prepareProcess() error {
+	if p.command.SysProcAttr == nil {
+		p.command.SysProcAttr = &syscall.SysProcAttr{
+			Setpgid: true,
+			Pgid: 0,
+		}
+	}
+
+	return nil
+}
 
 func (p *ProcessCmd)  addCredential () error {
 	log.GetLogger().Infoln("addCredential")
@@ -12,7 +23,10 @@ func (p *ProcessCmd)  addCredential () error {
 	if err != nil {
 		return err
 	}
-	p.command.SysProcAttr = &syscall.SysProcAttr{}
+
+	if p.command.SysProcAttr == nil {
+		p.command.SysProcAttr = &syscall.SysProcAttr{}
+	}
 	p.command.SysProcAttr.Credential = &syscall.Credential{Uid: uid, Gid: gid, Groups: groups, NoSetGroups: false}
 
 	// Setting home environment variable for RunAs user

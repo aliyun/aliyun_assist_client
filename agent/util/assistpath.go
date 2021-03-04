@@ -39,7 +39,8 @@ func GetScriptPath() (string, error) {
 	var err error
   	cur, err = GetCurrentPath()
 
-  	path := cur + "../work/" + "script"
+	path := cur + "../work/" + "script"
+	// TODO: MakeSurePath would not alwyas succeed, retrieve its error and return
 	MakeSurePath(path)
   	return path, err
 }

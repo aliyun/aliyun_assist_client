@@ -18,6 +18,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/agent/taskengine/scriptmanager"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/util/langutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/process"
@@ -104,17 +105,6 @@ const (
 	wrapErrExecuteScriptFailed
 )
 
-func (task *Task) buildPath(fileName string, content string) bool {
-	if ret := util.CheckFileIsExist(fileName); ret == true {
-		return false
-	}
-
-	if err := util.WriteStringToFile(fileName, content); err != nil {
-		return false
-	}
-	return true
-}
-
 func tryRead(stdoutWrite, stderrWrite io.Reader, out *bytes.Buffer) {
 	buf_stdout := make([]byte, 1024)
 	n, _ := stdoutWrite.Read(buf_stdout)
@@ -139,34 +129,33 @@ func tryReadAll(stdoutWrite, stderrWrite io.Reader, out *bytes.Buffer) {
 }
 
 func (task *Task) Run() error {
+	// Reuse specified logger across whole task running phase
+	taskLogger := log.GetLogger().WithFields(logrus.Fields{
+		"TaskId": task.taskInfo.TaskId,
+		"Phase":  "Running",
+	})
+	taskLogger.Info("Run task")
+
 	if len(task.taskInfo.Username) > 0 {
 		if runtime.GOOS == "linux" {
 			_, _, _, err := process.GetUserCredentials(task.taskInfo.Username)
 			if err != nil {
 				info := "UserInvalid_"+task.taskInfo.Username
 				task.SendInvalidTask("UsernameOrPasswordInvalid", info)
-				log.GetLogger().Errorln("UsernameOrPasswordInvalid", info)
+				taskLogger.Errorln("UsernameOrPasswordInvalid", info)
 				return err
 			}
-			return err
 		} else if runtime.GOOS == "windows" {
 			err := process.IsUserValid(task.taskInfo.Username, task.taskInfo.Password)
 			if err != nil {
 				info := "UsernameOrPasswordInvalid_"+task.taskInfo.Username
 				task.SendInvalidTask(err.Error(), info)
-				log.GetLogger().Errorln("UsernameOrPasswordInvalid", err.Error(), info)
+				taskLogger.Errorln("UsernameOrPasswordInvalid", err.Error(), info)
 				return err
 			}
 		}
 	}
 
-	// Reuse specified logger across whole task running phase
-	taskLogger := log.GetLogger().WithFields(logrus.Fields{
-		"TaskId": task.taskInfo.TaskId,
-		"Phase":  "Running",
-	})
-
-	taskLogger.Info("Run task")
 	taskLogger.Info("Prepare script file of task")
 	var fileName string
 	var err error
@@ -212,12 +201,17 @@ func (task *Task) Run() error {
 		}
 	}
 
-	writeScriptFileSuccess := task.buildPath(fileName, content)
-	// Only non-periodic tasks need to check whether command script file exists.
-	if !writeScriptFileSuccess && task.taskInfo.Cronat == "" {
-		log.GetLogger().Errorln("build path is error")
-		task.SendError("", wrapErrSaveScriptFileFailed, "build path is error")
-		return errors.New("build path is error")
+	if err := scriptmanager.SaveScriptFile(fileName, content); err != nil {
+		// NOTE: Only non-periodic tasks need to check whether command script
+		// file exists.
+		if task.taskInfo.Cronat == "" || !errors.Is(err, scriptmanager.ErrScriptFileExists) {
+			wrapErr := fmt.Errorf("Saving script to %s failed: %w", fileName, err)
+			taskLogger.WithError(wrapErr).Errorln("Saving script file failed")
+			// NOTE: Due to some utility functions, report error message may not
+			// be so precise as expected.
+			task.SendError("", wrapErrSaveScriptFileFailed, wrapErr.Error())
+			return wrapErr
+		}
 	}
 
 	// Set executable permission bit of shell script file
@@ -339,10 +333,14 @@ func (task *Task) Run() error {
 			task.sendOutput("finished", task.getReportString(task.output))
 		}
 	}
-	taskLogger.Info("Sent final output and state")
+	endTaskLogger := log.GetLogger().WithFields(logrus.Fields{
+		"TaskId": task.taskInfo.TaskId,
+		"Phase":  "Ending",
+	})
+	endTaskLogger.Info("Sent final output and state")
 
 	task.output.Reset()
-	taskLogger.Info("Clean task output")
+	endTaskLogger.Info("Clean task output")
 
 	return nil
 }

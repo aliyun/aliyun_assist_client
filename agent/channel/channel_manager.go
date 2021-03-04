@@ -35,27 +35,27 @@ var G_ChannelMgr *ChannelMgr = &ChannelMgr{
 }
 
 // try to switch from non-gshell channel to gshell channel
-func (m *ChannelMgr) checkChannelWorker() {
+func (m *ChannelMgr) checkChannelWorker() bool {
+	log.GetLogger().Infoln("checkChannelWorker")
 	m.ChannelSetLock.Lock()
 	defer m.ChannelSetLock.Unlock()
-	if m.AllChannel[0].IsWorking() {
-		return
-	}
-	if !m.AllChannel[0].IsSupported() {
-		return
-	}
-	if m.AllChannel[0].StartChannel() == nil {
-		m.ActiveChannel.StopChannel()
+	if m.AllChannel[0].IsSupported() && m.AllChannel[0].IsWorking() {
+		if m.AllChannel[1].IsWorking() {
+			m.AllChannel[1].StopChannel()
+		}
 		m.ActiveChannel = m.AllChannel[0]
+		return true
 	}
+	return false
 }
 
 func (m *ChannelMgr) SelectAvailableChannel() error {
+	log.GetLogger().Infoln("SelectAvailableChannel")
 	m.ChannelSetLock.Lock()
 	defer m.ChannelSetLock.Unlock()
 
 	for _, item := range m.AllChannel {
-		if item.IsWorking() {
+		if item.IsSupported() && item.IsWorking() {
 			return nil
 		}
 	}
@@ -81,18 +81,15 @@ func (m *ChannelMgr) Init(CallBack OnReceiveMsg) error {
 			case <-m.StopChanelEvent:
 				return
 			case <-tick.C:
-				m.checkChannelWorker()
-				m.SelectAvailableChannel()
+				if m.checkChannelWorker() == false {
+					m.SelectAvailableChannel()
+				}
 			}
 		}
 	}()
 	m.ChannelSetLock.Lock()
 	defer m.ChannelSetLock.Unlock()
 	m.AllChannel = append(m.AllChannel, _gshellChannel, NewWebsocketChannel(CallBack))
-	if _gshellChannel.IsWorking() {
-		m.ActiveChannel = _gshellChannel
-		return nil
-	}
 	for _, item := range m.AllChannel {
 		if item.IsSupported() {
 			if e := item.StartChannel(); e == nil {

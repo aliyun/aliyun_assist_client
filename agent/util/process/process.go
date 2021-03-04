@@ -117,6 +117,9 @@ func (p *ProcessCmd)  SyncRun(
 	p.command.Stderr = stderrWriter
 	p.command.Dir = workingDir
 
+	if err := p.prepareProcess(); err != nil {
+		return 0, Fail, err
+	}
 	if p.user_name != "" {
 		if err := p.addCredential(); err != nil {
 			return 0, Fail, err

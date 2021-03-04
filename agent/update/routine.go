@@ -1,7 +1,9 @@
 package update
 
 import (
+	"errors"
 	"fmt"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"time"
@@ -18,6 +20,10 @@ import (
 const (
 	// MaximumCheckUpdateRetries is the maximum retry count for checking update
 	MaximumCheckUpdateRetries = 3
+)
+
+var (
+	ErrPreparationTimeout = errors.New("Updating preparation phase timeout")
 )
 
 func ExecuteUpdator() {
@@ -47,7 +53,11 @@ func ExecuteUpdateScriptRunner(updateScriptPath string) {
 }
 
 // SafeUpdate checks update information and running tasks before invoking updator
-func SafeUpdate() error {
+func SafeUpdate(preparationTimeout time.Duration) error {
+	// golang's runtime promised time.Time.Sub() method works like a monotonic
+	// clock, so it's safe for timeout calculation.
+	startTime := time.Now()
+
 	// 1. Check whether update package is avialable
 	updateInfo, err := func () (*UpdateCheckResp, error) {
 		var lastErr error = nil
@@ -72,29 +82,54 @@ func SafeUpdate() error {
 		return nil
 	}
 
+	// WARNING: Loose timeout limit: only breaks preparation phase after action finished
+	if preparationTimeout > 0 && time.Now().Sub(startTime) >= preparationTimeout {
+		return ErrPreparationTimeout
+	}
+
 	// 2. Download update package into temporary directory
 	tempDir, err := util.GetTempPath()
 	if err != nil {
 		return err
 	}
 	tempSavePath := filepath.Join(tempDir, fmt.Sprintf("aliyun_assist_%s.zip", updateInfo.UpdateInfo.Md5))
-	if err := DownloadPackage(updateInfo.UpdateInfo.URL, tempSavePath); err != nil {
-		log.GetLogger().WithFields(logrus.Fields{
-			"updateInfo": updateInfo,
-			"targetSavePath": tempSavePath,
-		}).WithError(err).Errorln("Failed to download update package")
 
-		_, _ = clientreport.ReportUpdateFailure("DownloadPackageFailed", clientreport.UpdateFailure{
-			UpdateInfo: updateInfo,
-			FailureContext: map[string]interface{}{
+	downloadTimeout := time.Duration(0)
+	if preparationTimeout > 0 {
+		elapsedTime := time.Now().Sub(startTime)
+		if elapsedTime >= preparationTimeout {
+			return ErrPreparationTimeout
+		} else {
+			downloadTimeout = preparationTimeout - elapsedTime
+		}
+	}
+	err = DownloadPackage(updateInfo.UpdateInfo.URL, tempSavePath, downloadTimeout)
+	if err != nil {
+		if timeoutURLErr, ok := err.(*url.Error); ok && timeoutURLErr.Timeout() {
+			return ErrPreparationTimeout
+		} else {
+			log.GetLogger().WithFields(logrus.Fields{
+				"updateInfo": updateInfo,
 				"targetSavePath": tempSavePath,
-			},
-			ErrorMessage: err.Error(),
-		})
+			}).WithError(err).Errorln("Failed to download update package")
 
-		return err
+			_, _ = clientreport.ReportUpdateFailure("DownloadPackageFailed", clientreport.UpdateFailure{
+				UpdateInfo: updateInfo,
+				FailureContext: map[string]interface{}{
+					"targetSavePath": tempSavePath,
+				},
+				ErrorMessage: err.Error(),
+			})
+
+			return err
+		}
 	}
 	log.GetLogger().Infof("Package downloaded from %s to %s", updateInfo.UpdateInfo.URL, tempSavePath)
+
+	// WARNING: Loose timeout limit: only breaks preparation phase after action finished
+	if preparationTimeout > 0 && time.Now().Sub(startTime) >= preparationTimeout {
+		return ErrPreparationTimeout
+	}
 
 	// Actions contained in below function may occupy much CPU, so criticalActionRunning
 	// flag is set to indicate perfmon module and would be unset automatically
@@ -137,12 +172,22 @@ func SafeUpdate() error {
 		}
 		log.GetLogger().Infof("Package checksum matched with %s", updateInfo.UpdateInfo.Md5)
 
+		// WARNING: Loose timeout limit: only breaks preparation phase after action finished
+		if preparationTimeout > 0 && time.Now().Sub(startTime) >= preparationTimeout {
+			return ErrPreparationTimeout
+		}
+
 		// 4. Remove old versions, only preserving no more than two versions after installation
 		destinationDir := GetInstallDir()
 		if err := RemoveOldVersion(destinationDir); err != nil {
 			log.GetLogger().WithFields(logrus.Fields{
 				"destinationDir": destinationDir,
 			}).WithError(err).Warnln("Failed to clean old versions, but not abort updating process")
+		}
+
+		// WARNING: Loose timeout limit: only breaks preparation phase after action finished
+		if preparationTimeout > 0 && time.Now().Sub(startTime) >= preparationTimeout {
+			return ErrPreparationTimeout
 		}
 
 		// 5. Extract downloaded update package directly to install directory
@@ -166,10 +211,20 @@ func SafeUpdate() error {
 		}
 		log.GetLogger().Infof("Package extracted to %s", destinationDir)
 
+		// WARNING: Loose timeout limit: only breaks preparation phase after action finished
+		if preparationTimeout > 0 && time.Now().Sub(startTime) >= preparationTimeout {
+			return ErrPreparationTimeout
+		}
+
 		return nil
 	}()
 	if err != nil {
 		return err
+	}
+
+	// WARNING: Loose timeout limit: only breaks preparation phase after action finished
+	if preparationTimeout > 0 && time.Now().Sub(startTime) >= preparationTimeout {
+		return ErrPreparationTimeout
 	}
 
 	// 6. Prepare path of update script to be executed
@@ -222,6 +277,10 @@ func SafeUpdate() error {
 				}
 
 				// ENSURE: Mutex lock acquired and no running tasks
+				// NOTE: No strict timeout should be set for updating script
+				// execution, preventing updating script is killed after stopping
+				// service action is issued, which would cause agent of new version
+				// cannot be started correctly.
 				ExecuteUpdateScriptRunner(updateScriptPath)
 				// Agent process would be killed and code below would never be executed
 				return true

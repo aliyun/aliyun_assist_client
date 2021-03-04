@@ -2,11 +2,12 @@ package process
 
 import (
 	"errors"
+	"syscall"
+	"unsafe"
+
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"golang.org/x/sys/windows"
-	"syscall"
-	"unsafe"
 )
 
 var (
@@ -21,6 +22,14 @@ const (
 	logon32LOGONINTERACTIVE    = uintptr(2)
 	logon32ProviderDefault       = uintptr(0)
 )
+
+func (p *ProcessCmd) prepareProcess() error {
+	// if p.command.SysProcAttr == nil {
+	// 	p.command.SysProcAttr = &windows.SysProcAttr{}
+	// }
+
+	return nil
+}
 
 func (p *ProcessCmd)  addCredential () error {
 	log.GetLogger().Infoln("addCredential")

@@ -27,10 +27,6 @@ For example, you can create a command using aliyun openapi, then select some vir
 - [English Version](https://www.alibabacloud.com/help/doc-detail/64921.htm)
 - [Chinese Version](https://help.aliyun.com/document_detail/64921.html)
 
-### How to compile
-
-  go build
-
 
 ### How to use
 - [English Version](https://help.aliyun.com/document_detail/64741.html)
@@ -39,4 +35,3 @@ For example, you can create a command using aliyun openapi, then select some vir
 ### Contributing
 
     Welcome use Github pull requests to commit.  
-

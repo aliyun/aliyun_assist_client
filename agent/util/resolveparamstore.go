@@ -7,7 +7,7 @@ import (
 )
 
 //{{oos-secret:db_password}}
-var oosParamPattern = regexp.MustCompile("{{\\s*(oos-secret\\s*:\\s*[\\w-.]+)\\s*}}")
+var oosParamPattern = regexp.MustCompile("{{\\s*((?U:oos-secret|oos)\\s*:\\s*[\\w-.]+)\\s*}}")
 
 func isValidParameterStore(param string) bool {
 	return oosParamPattern.MatchString(param)
@@ -40,7 +40,14 @@ func getParameterStoreValue(matchGroups []string) (string, error) {
 		return "", errors.New("Invalid matchGroups[1]")
 	}
 	paraName := strings.TrimSpace(parts[1])
-	return GetSecretParam(paraName)
+	ParamType := strings.TrimSpace(parts[0])
+	if ParamType == "oos-secret" {
+		return GetSecretParam(paraName)
+	} else if ParamType == "oos" {
+		return GetParam(paraName)
+	} else {
+		return "", errors.New("Invalid ParamType")
+	}
 }
 
 func replaceParameterStoreValue(param string, matchGroups []string) (string, error) {

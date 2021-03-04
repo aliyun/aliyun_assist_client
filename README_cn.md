@@ -24,9 +24,6 @@
 ### [安装方法](https://help.aliyun.com/document_detail/64921.html)
 
 
-### 如何编译
-
-  go build
 
 ### [如何使用](https://help.aliyun.com/document_detail/64741.html)
 

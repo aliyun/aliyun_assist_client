@@ -185,12 +185,27 @@ func changeFileOwner(filePath string, User string, Group string) int {
 	if G_IsWindows {
 		return ESuccess
 	}
+
+	if User == "" && Group == "" {
+		return ESuccess
+	}
+
+	if User == "root" && Group == "root" {
+		return ESuccess
+	}
+
+	if User == "" {
+		User = "root"
+	}
 	lu, err := user.Lookup(User)
 	if err != nil {
 		log.GetLogger().Printf("Lookup uid %s error:%s ", User, err.Error())
 		return EInalidUID
 	}
 	uid, _ := strconv.Atoi(lu.Uid)
+	if Group == "" {
+		Group = "root"
+	}
 	lg, err := user.LookupGroup(Group)
 	if err != nil {
 		log.GetLogger().Printf("Lookup gid %s error:%s ", Group, err.Error())

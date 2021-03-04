@@ -20,7 +20,11 @@ type GshellChannel struct {
 }
 
 type gshellStatus struct {
-	gshellSupport string `json:"gshellSupport"`
+	Code          int64  `json:"code"`
+	GshellSupport string `json:"gshellSupport"`
+	InstanceID    string `json:"instanceId"`
+	RequestID     string `json:"requestId"`
+	Retry         int64  `json:"retry"`
 }
 
 func (c *GshellChannel) IsSupported() bool {
@@ -47,7 +51,7 @@ func (c *GshellChannel) IsSupported() bool {
 	if err := json.Unmarshal([]byte(resp), &gstatus); err != nil {
 		return false
 	}
-	if gstatus.gshellSupport == "true" {
+	if gstatus.GshellSupport == "true" {
 		return true
 	}
 	return false

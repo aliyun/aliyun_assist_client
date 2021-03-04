@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
@@ -36,8 +37,8 @@ func ExtractVersionStringFromURL(url string) (string, error) {
 }
 
 
-func DownloadPackage(url string, savePath string) error {
-	return util.HttpDownlod(url, savePath)
+func DownloadPackage(url string, savePath string, timeout time.Duration) error {
+	return util.HttpDownloadWithTimeout(url, savePath, timeout)
 }
 
 

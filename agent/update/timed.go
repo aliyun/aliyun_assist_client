@@ -3,6 +3,7 @@ package update
 import (
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/timermanager"
@@ -21,7 +22,8 @@ var (
 )
 
 func doCheck() {
-	if err := SafeUpdate(); err != nil {
+	// Periodic checking update uses loose timeout limitation
+	if err := SafeUpdate(time.Duration(120) * time.Second); err != nil {
 		log.GetLogger().WithError(err).Errorln("Failed to check update periodically")
 	}
 }
