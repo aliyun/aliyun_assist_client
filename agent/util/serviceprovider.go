@@ -48,13 +48,13 @@ func GetRunningOutputService() string {
 func GetFinishOutputService() string {
 	url := "https://" + GetServerHost()
 	url += "/luban/api/v1/task/finish"
-	return url;
+	return url
 }
 
 func GetSessionStatusService() string {
 	url := "https://" + GetServerHost()
 	url += "/luban/api/v1/session/status"
-	return url;
+	return url
 }
 
 func GetStoppedOutputService() string {
@@ -76,12 +76,12 @@ func GetErrorOutputService() string {
 }
 
 func GetPingService() string {
-    url := "https://" + GetServerHost()
-    url += "/luban/api/heart-beat"
-    return url
+	url := "https://" + GetServerHost()
+	url += "/luban/api/heart-beat"
+	return url
 }
 
-func  GetGshellCheckService() string {
+func GetGshellCheckService() string {
 	url := "https://" + GetServerHost()
 	url += "/luban/api/gshell"
 	return url
@@ -120,5 +120,16 @@ func GetPutInventoryService() string {
 func GetPutInstanceStateReportService() string {
 	url := "https://" + GetServerHost()
 	url += "/luban/api/instance/put_instance_state_report"
+	return url
+}
+func GetRegisterService() string {
+	url := "https://" + GetServerHost()
+	url += "/luban/api/instance/register"
+	return url
+}
+
+func GetDeRegisterService() string {
+	url := "https://" + GetServerHost()
+	url += "/luban/api/instance/register"
 	return url
 }

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"strings"
 	"sync"
 
@@ -29,16 +30,15 @@ var region_ids []string = []string{
 	"eu-west-1"}
 
 var (
-	g_regionId string = ""
-	g_domainId = ""
-	g_azoneId = ""
-	g_instanceId = ""
-	g_regionIdInitLock sync.Mutex
-	g_domainIdInitLock sync.Mutex
-	g_azoneIdInitLock sync.Mutex
+	g_regionId           string = ""
+	g_domainId                  = ""
+	g_azoneId                   = ""
+	g_instanceId                = ""
+	g_regionIdInitLock   sync.Mutex
+	g_domainIdInitLock   sync.Mutex
+	g_azoneIdInitLock    sync.Mutex
 	g_instanceIdInitLock sync.Mutex
 )
-
 
 func connectionDetect(regionId string) error {
 	host := regionId + ".axt.aliyun.com"
@@ -80,7 +80,7 @@ func GetAzoneId() string {
 		g_azoneId = "unknown"
 		return g_azoneId
 	}
-	g_azoneId= azoneId
+	g_azoneId = azoneId
 	return g_azoneId
 }
 
@@ -96,7 +96,7 @@ func GetInstanceId() string {
 		g_instanceId = "unknown"
 		return g_instanceId
 	}
-	g_instanceId= instanceId
+	g_instanceId = instanceId
 	return g_instanceId
 }
 
@@ -128,11 +128,11 @@ func pollingRegionId() string {
 }
 
 func getRegionIdInHybrid() string {
-	path,_ := GetHybridPath()
-	path +=  "/region-id"
+	path, _ := GetHybridPath()
+	path += "/region-id"
 	if CheckFileIsExist(path) {
-		raw,err := ioutil.ReadFile(path)
-		if(err == nil) {
+		raw, err := ioutil.ReadFile(path)
+		if err == nil {
 			content := string(raw)
 			content = strings.Trim(content, "\r")
 			content = strings.Trim(content, "\n")
@@ -140,19 +140,22 @@ func getRegionIdInHybrid() string {
 			return strings.TrimSpace(content)
 		}
 	}
-	return "";
+	return ""
 }
 
 func IsHybrid() bool {
-	path,_ := GetHybridPath()
-	path +=  "/instance-id"
+	path, _ := GetHybridPath()
+	path += "/instance-id"
 	if CheckFileIsExist(path) {
-		return true;
+		return true
 	} else {
-		return false;
+		return false
 	}
 }
 
+func IsSelfHosted() bool {
+	return true
+}
 
 func getRegionIdInFile() string {
 	cur, _ := GetCurrentPath()
@@ -160,8 +163,8 @@ func getRegionIdInFile() string {
 	if CheckFileIsExist(path) == false {
 		return ""
 	}
-	raw,err := ioutil.ReadFile(path)
-	if(err == nil) {
+	raw, err := ioutil.ReadFile(path)
+	if err == nil {
 		content := string(raw)
 		content = strings.Trim(content, "\r")
 		content = strings.Trim(content, "\n")
@@ -213,8 +216,8 @@ func initRegionId() error {
 }
 
 func getDomainbyMetaServer() string {
-	url  := "http://100.100.100.200/latest/global-config/aliyun-assist-server-url"
-	err,domain := HttpGet(url)
+	url := "http://100.100.100.200/latest/global-config/aliyun-assist-server-url"
+	err, domain := HttpGet(url)
 
 	if err != nil {
 		return ""
@@ -223,7 +226,7 @@ func getDomainbyMetaServer() string {
 	g_domainIdInitLock.Lock()
 	defer g_domainIdInitLock.Unlock()
 
-	if strings.Contains(domain, "https://")   {
+	if strings.Contains(domain, "https://") {
 		url = domain + "/luban/api/connection_detect"
 		err, _ = HttpGet(url)
 		if err != nil {
@@ -264,13 +267,16 @@ func GetServerHost() string {
 	if g_domainId != "" {
 		return g_domainId
 	}
+	if IsSelfHosted() {
+		return os.Getenv("SERVER_HOST")
+	}
 	regionId := GetRegionId()
 	if regionId != "" {
 		if IsHybrid() {
 			return regionId + HYBRID_DOMAIN
 		}
 		return regionId + ".axt.aliyun.com"
-	}  else {
+	} else {
 		return ""
 	}
 
@@ -287,5 +293,3 @@ func MockMetaServer(region_id string) {
 	httpmock.RegisterResponder("GET", fmt.Sprintf("https://%s.axt.aliyun.com/luban/api/connection_detect", region_id),
 		httpmock.NewStringResponder(200, "ok"))
 }
-
-

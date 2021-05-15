@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-var scriptPath =""
+var scriptPath = ""
 
 func MakeSurePath(path string) error {
 	return os.MkdirAll(path, os.ModePerm)
@@ -15,9 +15,9 @@ func MakeSurePath(path string) error {
 
 func SetCurrentEnvPath() bool {
 	path := os.Getenv("path")
-    path += ";"
-	cur_path,_ := GetCurrentPath()
-    path += cur_path
+	path += ";"
+	cur_path, _ := GetCurrentPath()
+	path += cur_path
 	os.Setenv("path", path)
 	return true
 }
@@ -37,21 +37,21 @@ func GetCurrentPath() (string, error) {
 	return string(path[0 : i+1]), nil
 }
 
-func SetScriptPath(path string) () {
+func SetScriptPath(path string) {
 	scriptPath = path
 }
 
 func GetScriptPath() (string, error) {
 	if scriptPath != "" {
-		return scriptPath,nil
+		return scriptPath, nil
 	}
 	var cur string
 	var err error
-  	cur, err = GetCurrentPath()
+	cur, err = GetCurrentPath()
 
 	path := cur + "../work/" + "script"
 	err = MakeSurePath(path)
-  	return path, err
+	return path, err
 }
 
 func GetHybridPath() (string, error) {
@@ -90,6 +90,16 @@ func GetCrossVersionConfigPath() (string, error) {
 	}
 
 	return crossVersionConfigDir, nil
+}
+
+func GetSelfhostedPath() (string, error) {
+	var cur string
+	var err error
+	cur, err = GetCurrentPath()
+
+	path := cur + "../selfhosted"
+	MakeSurePath(path)
+	return path, err
 }
 
 func GetTempPath() (string, error) {
