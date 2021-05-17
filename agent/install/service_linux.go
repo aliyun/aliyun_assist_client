@@ -169,7 +169,7 @@ func ServiceConfig() *service.Config {
 		// 服务名称
 		DisplayName: "Aliyun Assist Service",
 		// 服务描述
-		Description: "阿里云助手",
+		Description: "Aliyun Assist",
 		// TODO: Use symbolic link for shorter path needs more adaption
 		// Executable: "/usr/sbin/aliyun-service",
 		Dependencies: depends, //云助手依赖网络
