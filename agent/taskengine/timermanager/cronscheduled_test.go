@@ -30,7 +30,7 @@ func TestNextRunFrom(t *testing.T) {
 	scheduled, _ := NewCronScheduled(CronExpression)
 	testTime := time.Now()
 	expectedDuration := expectedSchedule.Next(testTime).Sub(testTime)
-	next, err := scheduled.nextRunFrom(testTime)
+	next, err := scheduled.NextRunFrom(testTime)
 	assert.NoError(t, err, "nextRunFrom should not return error")
 	assert.Exactly(t, expectedDuration, next, "nextRunFrom should returns same time of next schedule from same timestamp for same cron expression")
 }

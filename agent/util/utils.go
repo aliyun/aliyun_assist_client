@@ -18,6 +18,7 @@ import (
 )
 
 var G_IsWindows bool
+var verbose_mode = false
 
 func init() {
 	if runtime.GOOS == "windows" {
@@ -27,6 +28,14 @@ func init() {
 	} else {
 
 	}
+}
+
+func IsVerboseMode() bool {
+	return verbose_mode
+}
+
+func SetVerboseMode(mode bool)  {
+	verbose_mode = mode
 }
 
 func GetMachineID() (string, error) {

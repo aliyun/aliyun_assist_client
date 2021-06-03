@@ -3,11 +3,14 @@ package util
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
-func MakeSurePath(path string) {
-	os.MkdirAll(path, os.ModePerm)
+var scriptPath =""
+
+func MakeSurePath(path string) error {
+	return os.MkdirAll(path, os.ModePerm)
 }
 
 func SetCurrentEnvPath() bool {
@@ -34,14 +37,20 @@ func GetCurrentPath() (string, error) {
 	return string(path[0 : i+1]), nil
 }
 
+func SetScriptPath(path string) () {
+	scriptPath = path
+}
+
 func GetScriptPath() (string, error) {
+	if scriptPath != "" {
+		return scriptPath,nil
+	}
 	var cur string
 	var err error
   	cur, err = GetCurrentPath()
 
 	path := cur + "../work/" + "script"
-	// TODO: MakeSurePath would not alwyas succeed, retrieve its error and return
-	MakeSurePath(path)
+	err = MakeSurePath(path)
   	return path, err
 }
 
@@ -51,8 +60,36 @@ func GetHybridPath() (string, error) {
 	cur, err = GetCurrentPath()
 
 	path := cur + "../hybrid"
-	MakeSurePath(path)
+	err = MakeSurePath(path)
 	return path, err
+}
+
+func GetConfigPath() (string, error) {
+	currentVersionDir, err := GetCurrentPath()
+	if err != nil {
+		return "", err
+	}
+
+	currentVersionConfigDir := filepath.Join(currentVersionDir, "config")
+	if err := MakeSurePath(currentVersionConfigDir); err != nil {
+		return "", err
+	}
+
+	return currentVersionConfigDir, nil
+}
+
+func GetCrossVersionConfigPath() (string, error) {
+	crossVersionDir, err := getCrossVersionDir()
+	if err != nil {
+		return "", err
+	}
+
+	crossVersionConfigDir := filepath.Join(crossVersionDir, "config")
+	if err := MakeSurePath(crossVersionConfigDir); err != nil {
+		return "", err
+	}
+
+	return crossVersionConfigDir, nil
 }
 
 func GetTempPath() (string, error) {
@@ -61,7 +98,32 @@ func GetTempPath() (string, error) {
 	// According to https://pkg.go.dev/os#TempDir, path returned from os.TempDir()
 	// is neither guaranteed to exist nor have accessible permissions. Therefore
 	// we need to make sure such path accessible manually.
-	MakeSurePath(goTempDir)
+	err := MakeSurePath(goTempDir)
 
-	return goTempDir, nil
+	return goTempDir, err
+}
+
+func getCrossVersionDir() (string, error) {
+	currentVersionDir, err := GetCurrentPath()
+	if err != nil {
+		return "", err
+	}
+
+	absoluteCurrentVersionDir, err := filepath.Abs(currentVersionDir)
+	if err != nil {
+		return "", err
+	}
+	// Although filepath.Dir method would call filepath.Clean internally, here
+	// explicitly call the method to guarantee no trailing slash in path
+	cleanedCurrentVersionDir := filepath.Clean(absoluteCurrentVersionDir)
+
+	multiVersionDir := filepath.Dir(cleanedCurrentVersionDir)
+	return multiVersionDir, nil
+}
+
+func GetCachePath() (string, error) {
+	cur, err := GetCurrentPath()
+	path := filepath.Join(cur, "..", "cache")
+	MakeSurePath((path))
+	return path, err
 }

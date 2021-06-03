@@ -27,6 +27,18 @@ func GetFetchTaskListService() string {
 	return url
 }
 
+func GetVerifiedTaskService() string {
+	url := "https://" + GetServerHost()
+	url += "/luban/api/v1/task/verified"
+	return url
+}
+
+func GetFetchSessionTaskListService() string {
+	url := "https://" + GetServerHost()
+	url += "/luban/api/v1/session/list"
+	return url
+}
+
 func GetRunningOutputService() string {
 	url := "https://" + GetServerHost()
 	url += "/luban/api/v1/task/running"
@@ -36,6 +48,12 @@ func GetRunningOutputService() string {
 func GetFinishOutputService() string {
 	url := "https://" + GetServerHost()
 	url += "/luban/api/v1/task/finish"
+	return url;
+}
+
+func GetSessionStatusService() string {
+	url := "https://" + GetServerHost()
+	url += "/luban/api/v1/session/status"
 	return url;
 }
 
@@ -78,5 +96,29 @@ func GetPluginListService() string {
 func GetClientReportService() string {
 	url := "https://" + GetServerHost()
 	url += "/luban/api/v1/exception/client_report"
+	return url
+}
+
+func GetStateConfigService() string {
+	url := "https://" + GetServerHost()
+	url += "/luban/api/instance/list_instance_state_configurations"
+	return url
+}
+
+func GetTemplateService() string {
+	url := "https://" + GetServerHost()
+	url += "/luban/api/instance/get_template"
+	return url
+}
+
+func GetPutInventoryService() string {
+	url := "https://" + GetServerHost()
+	url += "/luban/api/instance/put_inventory"
+	return url
+}
+
+func GetPutInstanceStateReportService() string {
+	url := "https://" + GetServerHost()
+	url += "/luban/api/instance/put_instance_state_report"
 	return url
 }

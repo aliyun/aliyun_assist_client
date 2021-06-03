@@ -3,7 +3,6 @@ package main
 import (
 	"time"
 
-	"github.com/aliyun/aliyun_assist_client/agent/clientreport"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	libupdate "github.com/aliyun/aliyun_assist_client/agent/update"
 )
@@ -74,12 +73,8 @@ func doInstall(updateScriptPath string) error {
 
 	err := libupdate.ExecuteUpdateScript(updateScriptPath)
 	if err != nil {
-		_, _ = clientreport.ReportUpdateFailure("ExecuteUpdateScriptFailed", clientreport.UpdateFailure{
-			UpdateInfo: nil,
-			FailureContext: map[string]interface{}{
-				"updateScriptPath": updateScriptPath,
-			},
-			ErrorMessage: err.Error(),
+		libupdate.ReportExecuteUpdateScriptFailed(err, nil, map[string]interface{}{
+			"updateScriptPath": updateScriptPath,
 		})
 
 		return err

@@ -1,6 +1,7 @@
 package channel
 
 const (
+	ChannelNone          = 0
 	ChannelGshellType    = 1
 	ChannelWebsocketType = 2
 )

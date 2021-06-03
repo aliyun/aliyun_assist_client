@@ -23,7 +23,7 @@ var (
 
 func doCheck() {
 	// Periodic checking update uses loose timeout limitation
-	if err := SafeUpdate(time.Duration(120) * time.Second); err != nil {
+	if err := SafeUpdate(time.Duration(60) * time.Second, time.Duration(30) * time.Second); err != nil {
 		log.GetLogger().WithError(err).Errorln("Failed to check update periodically")
 	}
 }

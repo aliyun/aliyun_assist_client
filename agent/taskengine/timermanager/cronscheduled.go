@@ -30,12 +30,12 @@ func NewCronScheduled(cronat string) (*CronScheduled, error) {
 	return &CronScheduled{schedule: schedule}, nil
 }
 
-func (c *CronScheduled) nextRunFrom(t time.Time) (time.Duration, error) {
+func (c *CronScheduled) NextRunFrom(t time.Time) (time.Duration, error) {
 	nextRunTime := c.schedule.Next(t)
 	return nextRunTime.Sub(t), nil
 }
 
 func (c *CronScheduled) nextRun() (time.Duration, error) {
 	now := time.Now()
-	return c.nextRunFrom(now)
+	return c.NextRunFrom(now)
 }

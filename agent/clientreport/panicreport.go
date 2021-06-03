@@ -13,7 +13,13 @@ type panicInfo struct {
 	Stacktrace string `json:"stacktrace"`
 }
 
+// LogAndReportPanic reports panic to server and log to file then exit
 func LogAndReportPanic(payload interface{}, stacktrace []byte) {
+	ReportPanic(payload, stacktrace, true)
+}
+
+// ReportPanic reports panic to server and log to file, exit program or ignore according to exit parameter
+func ReportPanic(payload interface{}, stacktrace []byte, exit bool) {
 	info := panicInfo{
 		Panic:      fmt.Sprint(payload),
 		Stacktrace: string(stacktrace),
@@ -33,6 +39,9 @@ func LogAndReportPanic(payload interface{}, stacktrace []byte) {
 			}).WithError(err).Errorln("Failed to send panic report")
 		}
 	}
-
-	log.GetLogger().Fatalf("panic: %v\n\n%s", payload, stacktrace)
+	if exit {
+		log.GetLogger().Fatalf("panic: %v\n\n%s", payload, stacktrace)
+	} else {
+		log.GetLogger().Errorf("panic ignored: %v\n\n%s", payload, stacktrace)
+	}
 }

@@ -5,11 +5,13 @@ import "sync"
 const maxPendingTasks  = 50
 const maxRunningTasks  = 10
 
+type TaskFunction func()
+
 var poolTask *taskPool
 var lockPool    sync.Mutex
 
 type taskPool struct {
-	taskQueue   chan *Task
+	taskQueue   chan TaskFunction
 }
 
 func GetPool() *taskPool {
@@ -17,15 +19,19 @@ func GetPool() *taskPool {
 	defer lockPool.Unlock()
 
 	if poolTask == nil {
-		poolTask = &taskPool {
-			taskQueue: make(chan *Task, maxPendingTasks),
-		}
-		poolTask.start()
+		poolTask = newTaskPool()
 	}
 
 	return poolTask
 }
 
+func newTaskPool() *taskPool {
+	pool := &taskPool {
+		taskQueue: make(chan TaskFunction, maxPendingTasks),
+	}
+	pool.start()
+	return pool
+}
 
 func (p *taskPool) start() {
 	for i := 0; i < maxRunningTasks; i++ {
@@ -37,16 +43,29 @@ func (p *taskPool) start() {
 
 func (p *taskPool) slave() {
 	for task := range p.taskQueue {
-		task.Run()
-		taskFactory := GetTaskFactory()
-		taskFactory.RemoveTaskByName(task.taskInfo.TaskId)
+		task()
 	}
 }
 
-func (pool *taskPool) RunTask(task *Task) {
+func (pool *taskPool) RunTask(task TaskFunction) {
 	pool.taskQueue <- task
 }
 
+// Another global task pool for pre-checking tasks with limited concurrency
+var (
+	_precheckPool *taskPool
+	_precheckPoolLock sync.Mutex
+)
 
+func GetPrecheckPool() *taskPool {
+	if _precheckPool == nil {
+		_precheckPoolLock.Lock()
+		defer _precheckPoolLock.Unlock()
 
+		if _precheckPool == nil {
+			_precheckPool = newTaskPool()
+		}
+	}
 
+	return _precheckPool
+}

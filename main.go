@@ -10,14 +10,17 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/aliyun/aliyun_assist_client/thirdparty/service"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/single"
 
 	"github.com/aliyun/aliyun_assist_client/agent/channel"
 	"github.com/aliyun/aliyun_assist_client/agent/clientreport"
+	"github.com/aliyun/aliyun_assist_client/agent/flagging"
 	"github.com/aliyun/aliyun_assist_client/agent/heartbeat"
 	"github.com/aliyun/aliyun_assist_client/agent/hybrid"
 	"github.com/aliyun/aliyun_assist_client/agent/install"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/perfmon"
+	"github.com/aliyun/aliyun_assist_client/agent/statemanager"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/timermanager"
 	"github.com/aliyun/aliyun_assist_client/agent/update"
@@ -25,7 +28,6 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/util/daemon"
 	"github.com/aliyun/aliyun_assist_client/agent/util/wrapgo"
 	"github.com/aliyun/aliyun_assist_client/agent/version"
-	"github.com/aliyun/aliyun_assist_client/thirdparty/single"
 )
 
 var G_Running bool = true
@@ -59,7 +61,7 @@ func (p *program) Start(s service.Service) error {
 }
 
 func (p *program) run() {
-	log.GetLogger().Info("Starting ......version:", version.AssistVersion, "githash:", version.GitCommitHash)
+	log.GetLogger().Infof("Starting...... version: %s githash: %s", version.AssistVersion, version.GitCommitHash)
 	SingleAppLock = single.New("AliyunAssistClientSingleLock")
 	if err := SingleAppLock.CheckLock(); err != nil && err == single.ErrAlreadyRunning {
 		log.GetLogger().Fatal("another instance of the app is already running, exiting")
@@ -70,11 +72,12 @@ func (p *program) run() {
 
 	if runtime.GOOS == "windows" {
 		util.SetCurrentEnvPath()
+	}
+	// Logging current working directory information
+	if currentWorkingDirectory, err := os.Getwd(); err == nil {
+		log.GetLogger().Infof("Current working directory is: %s", currentWorkingDirectory)
 	} else {
-		if err := os.Chdir("/root"); err != nil {
-			log.GetLogger().Errorln("Failed to change working directory to /root for AliYunAssistService: " + err.Error())
-			return
-		}
+		log.GetLogger().WithError(err).Errorln("Failed to obtain current working directory")
 	}
 
 	sleep_internals_seconds := 3
@@ -109,7 +112,7 @@ func (p *program) run() {
 	// be considered as the whole timeout toleration minus minimum sleeping time
 	// for safe updating (5s) minus normal execution time of updating script
 	// (usually less than 5s), e.g., 50s - 5s - 5s = 40s.
-	if err := update.SafeUpdate(time.Duration(40) * time.Second); err != nil {
+	if err := update.SafeBootstrapUpdate(time.Duration(40) * time.Second, time.Duration(30) * time.Second); err != nil {
 		log.GetLogger().Errorln("Failed to check update when starting: " + err.Error())
 		// Failed to update at starting phase would not terminate agent
 		// return
@@ -132,17 +135,32 @@ func (p *program) run() {
 		return
 	}
 
+	// TODO: First heart-beat may fail and be failed to indicate agent is ready.
+	// Retrying should be tried here.
+	heartbeat.PingwithRetries(3)
+
+	if err := statemanager.InitStateManagerTimer(); err != nil {
+		log.GetLogger().Errorln("Failed to initialize statemanager: " + err.Error())
+	}
+
 	// Finally, fetching tasks could be allowed and agent starts to run normally.
 	taskengine.EnableFetchingTask()
 	log.GetLogger().Infoln("Started successfully")
+	// And also log to stdout, which would be written to systemd-journal as well
+	// as console via systemd
+	fmt.Println("Started successfully")
 
 	// Periodic tasks are retrieved only once at startup
 	wrapgo.GoWithDefaultPanicHandler(func() {
-		taskengine.Fetch(false)
-	})
+		isColdstart, err := flagging.IsColdstart()
+		if err != nil {
+			log.GetLogger().WithError(err).Errorln("Error encountered when detecting cold-start flag")
+		}
+
+		taskengine.Fetch(false, "", taskengine.NormalTaskType, isColdstart)	})
 
 	time.Sleep(time.Duration(3*60) * time.Second)
-	log.GetLogger().Infoln("Start SelfKillMon ......")
+	log.GetLogger().Infoln("Start PerfMon ......")
 	perfmon.StartSelfKillMon()
 }
 
@@ -174,6 +192,8 @@ type Options struct {
 	InstanceName   string
 	RunAsCommon    bool
 	RunAsDaemon    bool
+    LogPath   string
+    IsVerbose     bool
 }
 
 func parseOptions() Options {
@@ -185,6 +205,7 @@ func parseOptions() Options {
 	pflag.BoolVar(&options.Remove, "remove", false, "remove assist")
 	pflag.BoolVar(&options.Start, "start", false, "start assist")
 	pflag.BoolVar(&options.Stop, "stop", false, "stop assist")
+	pflag.BoolVarP(&options.IsVerbose, "verbose", "V", false, "enable verbose")
 
 	pflag.BoolVarP(&options.Register, "register", "r", false, "register as aliyun managed instance")
 	pflag.BoolVarP(&options.DeRegister, "deregister", "u", false, "unregister as aliyun managed instance")
@@ -192,6 +213,8 @@ func parseOptions() Options {
 	pflag.StringVarP(&options.ActivationCode, "ActivationCode", "C", "", "used in register mode")
 	pflag.StringVarP(&options.ActivationId, "ActivationId", "I", "", "used in register mode")
 	pflag.StringVarP(&options.InstanceName, "InstanceName", "N", "", "used in register mode")
+
+	pflag.StringVarP(&options.LogPath, "LogPath", "L", "", "log path")
 
 	pflag.BoolVarP(&options.RunAsCommon, "common", "c", false, "run as common")
 	pflag.BoolVarP(&options.RunAsDaemon, "daemon", "d", false, "start as daemon")
@@ -210,7 +233,11 @@ func parseOptions() Options {
 }
 
 func main() {
-	log.InitLog("aliyun_assist_main.log")
+	options := parseOptions()
+	log.InitLog("aliyun_assist_main.log", options.LogPath)
+	if options.LogPath != "" {
+		util.SetScriptPath(options.LogPath)
+	}
 	e := PatchGolang()
 	if e != nil {
 		log.GetLogger().Fatal("PatchGolang failed :", e.Error())
@@ -221,7 +248,9 @@ func main() {
 	// information in version package is manually passed in as above
 	util.InitUserAgentValue()
 
-	options := parseOptions()
+	if options.IsVerbose {
+		util.SetVerboseMode(true)
+	}
 
 	if options.GetHelp {
 		pflag.Usage()

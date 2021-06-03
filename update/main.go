@@ -88,8 +88,8 @@ func main() {
 		return
 	}
 
-	log.InitLog("aliyun_assist_update.log")
-	log.GetLogger().Info("Starting ......version:", version.AssistVersion, "githash:", version.GitCommitHash)
+	log.InitLog("aliyun_assist_update.log","")
+	log.GetLogger().Infof("Starting...... version: %s githash: %s", version.AssistVersion, version.GitCommitHash)
 	SingleAppLock = single.New("AliyunAssistUpdateSingleLock")
 	if err := SingleAppLock.CheckLock(); err != nil && err == single.ErrAlreadyRunning {
 		log.GetLogger().Fatal("another instance of the app is already running, exiting")

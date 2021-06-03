@@ -1,7 +1,9 @@
 package channel
 
 import (
+	"crypto/tls"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"runtime/debug"
@@ -12,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 
+	"github.com/aliyun/aliyun_assist_client/agent/clientreport"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/util/timetool"
@@ -42,11 +45,13 @@ func (c *WebSocketChannel) StartChannel() error {
 	if host == "" {
 		return errors.New("No available host")
 	}
+
 	url := "wss://" + host + WEBSOCKET_SERVER
 
 	header := http.Header{
 		util.UserAgentHeader: []string{util.UserAgentValue},
 	}
+
 	if util.IsHybrid() {
 		u4 := uuid.New()
 		str_request_id := u4.String()
@@ -72,7 +77,15 @@ func (c *WebSocketChannel) StartChannel() error {
 		header.Add("x-acs-request-id", str_request_id)
 		header.Add("x-acs-signature", output)
 	}
-	conn, _, err := websocket.DefaultDialer.Dial(url, header)
+
+	var MyDialer = &websocket.Dialer{
+		Proxy: util.GetProxyFunc(),
+		HandshakeTimeout: 45 * time.Second,
+		TLSClientConfig: &tls.Config{
+			RootCAs: util.CaCertPool,
+		},
+	}
+	conn, _, err := MyDialer.Dial(url, header)
 	log.GetLogger().Infoln(url)
 	if err != nil {
 		log.GetLogger().Errorln(err)
@@ -105,10 +118,12 @@ func (c *WebSocketChannel) StartChannel() error {
 					c.wskConn.Close()
 					c.Working = false
 					log.GetLogger().Errorln("Reach the retry limit for receive messages. Error: %v", err.Error())
-					go func() {
-						time.Sleep(time.Duration(3) * time.Second)
-						G_ChannelMgr.SelectAvailableChannel()
-					}()
+					report := clientreport.ClientReport{
+						ReportType: "switch_channel_in_wsk",
+						Info:       fmt.Sprintf("start:" + err.Error()),
+					}
+					clientreport.SendReport(report)
+					go c.SwitchChannel()
 					break
 				}
 				log.GetLogger().Errorln(
@@ -121,12 +136,38 @@ func (c *WebSocketChannel) StartChannel() error {
 
 			} else {
 				log.GetLogger().Infoln("wsk recv: %s", string(message))
-				c.CallBack(string(message), ChannelWebsocketType)
+
+				content := c.CallBack(string(message), ChannelWebsocketType)
+				if content != "" {
+					c.wskConn.WriteMessage(websocket.TextMessage, []byte(content))
+				}
+
 				retryCount = 0
 			}
 		}
 	}()
 	return nil
+}
+
+func (c *WebSocketChannel) SwitchChannel() error {
+	time.Sleep(time.Duration(1) * time.Second)
+	for i := 0; i < 5; i++ {
+		if G_ChannelMgr.SelectAvailableChannel(ChannelNone) == nil {
+			report := clientreport.ClientReport{
+				ReportType: "switch_channel_in_wsk",
+				Info:       fmt.Sprintf("success: Current channel is %d", G_ChannelMgr.GetCurrentChannelType()),
+			}
+			clientreport.SendReport(report)
+			return nil
+		}
+		time.Sleep(time.Duration(5) * time.Second)
+	}
+	report := clientreport.ClientReport{
+		ReportType: "switch_channel_in_wsk",
+		Info:       fmt.Sprintf("fail: no available channel"),
+	}
+	clientreport.SendReport(report)
+	return errors.New("no available channel")
 }
 
 func (c *WebSocketChannel) StopChannel() error {

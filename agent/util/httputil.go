@@ -3,6 +3,7 @@ package util
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -13,10 +14,13 @@ import (
 	"path"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/kirinlabs/HttpRequest"
+	"github.com/sirupsen/logrus"
+	"github.com/tidwall/gjson"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
@@ -32,8 +36,10 @@ var (
 	UserAgentValue string
 	CrtPath        string
 	CaCertPool     *x509.CertPool
+
+	_transport *http.Transport
+	_initializeHTTPTransportOnce sync.Once
 )
-var transport *http.Transport
 
 func init() {
 	cpath, _ := os.Executable()
@@ -46,28 +52,46 @@ func init() {
 	}
 	CaCertPool = x509.NewCertPool()
 	CaCertPool.AppendCertsFromPEM(caCert)
-
-	transport = &http.Transport{
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-			DualStack: true,
-		}).DialContext,
-		ForceAttemptHTTP2:     true,
-		MaxIdleConns:          100,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-	}
 }
+
 func InitUserAgentValue() {
 	UserAgentValue = fmt.Sprintf("%s_%s/%s", osutil.GetOsType(), osutil.GetOsArch(), version.AssistVersion)
 }
 
+func GetHTTPTransport() *http.Transport {
+	_initializeHTTPTransportOnce.Do(func() {
+		_transport = &http.Transport{
+			Proxy: GetProxyFunc(),
+			DialContext: (&net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
+				DualStack: true,
+			}).DialContext,
+			// TLSClientConfig specifies the TLS configuration, which uses custom
+			// Root CA for assist server
+			TLSClientConfig: &tls.Config{
+				RootCAs: CaCertPool,
+			},
+			// Enabled HTTP/2 protocol when `TLSClientConfig` is not nil
+			ForceAttemptHTTP2:     true,
+			MaxIdleConns:          100,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+		}
+	})
+
+	return _transport
+}
+
 func HttpGet(url string) (error, string) {
-	req := HttpRequest.Transport(transport)
+	return HttpGetWithTimeout(url, 5, false)
+}
+
+func HttpGetWithTimeout(url string, timeout time.Duration, noLog bool) (error, string) {
+	req := HttpRequest.Transport(GetHTTPTransport())
 	// 设置超时时间，不设置时，默认30s
-	req.SetTimeout(5)
+	req.SetTimeout(timeout)
 	req.SetTLSClient(&tls.Config{
 		RootCAs: CaCertPool,
 	})
@@ -92,7 +116,12 @@ func HttpGet(url string) (error, string) {
 		err = errors.New("http code error")
 	}
 
-	log.GetLogger().Infoln(url, content, err)
+	if noLog {
+		// API消息体过大默认不打日志
+		log.GetLogger().Debugln(url, content, err)
+	} else {
+		log.GetLogger().Infoln(url, content, err)
+	}
 	return err, content
 }
 
@@ -138,9 +167,13 @@ func addHttpHeads(req *HttpRequest.Request) {
 }
 
 func HttpPost(url string, data string, contentType string) (string, error) {
-	req := HttpRequest.Transport(transport)
+	return HttpPostWithTimeout(url, data, contentType, 5, false)
+}
+
+func HttpPostWithTimeout(url string, data string, contentType string, timeout time.Duration, noLog bool) (string, error) {
+	req := HttpRequest.Transport(GetHTTPTransport())
 	// 设置超时时间，不设置时，默认30s
-	req.SetTimeout(5)
+	req.SetTimeout(timeout)
 	req.SetTLSClient(&tls.Config{
 		RootCAs: CaCertPool,
 	})
@@ -172,16 +205,27 @@ func HttpPost(url string, data string, contentType string) (string, error) {
 	content, _ := res.Content()
 
 	if err == nil && res.StatusCode() > 400 {
-		err = errors.New("http code error")
+		err = errors.New(fmt.Sprintf("http code error: %d", res.StatusCode()))
 	}
 
-	log.GetLogger().Infoln(url, content, data, err)
+	if noLog {
+		// API消息体过大默认不打INFO日志
+		log.GetLogger().Debugln(url, content, data, err)
+	} else {
+		log.GetLogger().Infoln(url, content, data, err)
+	}
 	return content, err
 
 }
 
 func HttpDownlod(url string, FilePath string) error {
-	res, err := http.Get(url)
+	client := http.Client{
+		// NOTE: `transport` variable would be nil when init function fails, and
+		// DefaultTransport will be used instead, thus it's safe to directly
+		// reference `transport` variable.
+		Transport: GetHTTPTransport(),
+	}
+	res, err := client.Get(url)
 	if err != nil {
 		return err
 	}
@@ -199,6 +243,10 @@ func HttpDownlod(url string, FilePath string) error {
 // method returns true for timeout request.
 func HttpDownloadWithTimeout(url string, filePath string, timeout time.Duration) error {
 	client := http.Client{
+		// NOTE: `transport` variable would be nil when init function fails, and
+		// DefaultTransport will be used instead, thus it's safe to directly
+		// reference `transport` variable.
+		Transport: GetHTTPTransport(),
 		Timeout: timeout,
 	}
 	res, err := client.Get(url)
@@ -213,5 +261,55 @@ func HttpDownloadWithTimeout(url string, filePath string, timeout time.Duration)
 	}
 
 	_, err = io.Copy(f, res.Body)
+	return err
+}
+
+func CallApi(httpMethod, url string, parameters map[string]interface{}, respObj interface{}, apiTimeout time.Duration, noLog bool) error {
+	var response string
+	var err error
+	if httpMethod == http.MethodGet {
+		// for HTTP GET, parameter map values should be string
+		if len(parameters) > 0 {
+			url += "?"
+			var first = true
+			for k, v := range parameters {
+				if first {
+					url += fmt.Sprintf("%s=%v", k, v)
+					first = false
+				} else {
+					url += fmt.Sprintf("&%s=%v", k, v)
+				}
+			}
+		}
+		err, response = HttpGetWithTimeout(url, apiTimeout, noLog)
+	} else {
+		data, err := json.Marshal(parameters)
+		if err != nil {
+			log.GetLogger().WithFields(logrus.Fields{
+				"parameters": parameters,
+			}).WithError(err).Errorln("marshal error")
+			return err
+		}
+		response, err = HttpPostWithTimeout(url, string(data), "", apiTimeout, noLog)
+	}
+	if err != nil {
+		log.GetLogger().WithFields(logrus.Fields{
+			"url": url,
+		}).WithError(err).Errorln("Failed to invoke api request")
+		return err
+	}
+	if !gjson.Valid(response) {
+		log.GetLogger().WithFields(logrus.Fields{
+			"url":      url,
+			"response": response,
+		}).Errorln("Invalid json response")
+		if err == nil {
+			err = fmt.Errorf("invalid json response: %s", response)
+		}
+		return err
+	}
+	if err := json.Unmarshal([]byte(response), respObj); err != nil {
+		return err
+	}
 	return err
 }

@@ -12,10 +12,16 @@ import (
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/timermanager"
+	"github.com/aliyun/aliyun_assist_client/agent/util/atomicutil"
 )
 
 const (
 	ErrUpdatingProcedureRunning = -7
+)
+
+const (
+	NormalTaskType = 0
+	SessionTaskType = 1
 )
 
 // PeriodicTaskSchedule consists of timer and reusable invocation data structure
@@ -28,6 +34,8 @@ type PeriodicTaskSchedule struct {
 var (
 	// FetchingTaskLock indicates whether one goroutine is fetching tasks
 	FetchingTaskLock heavylock.CASMutex
+	// FetchingTaskCounter indicates how many goroutines are fetching tasks
+	FetchingTaskCounter atomicutil.AtomicInt32
 
 	// Indicating whether is enabled to fetch tasks, ONLY operated by atomic operation
 	_neverDirectWrite_Atomic_FetchingTaskEnabled int32 = 0
@@ -52,7 +60,7 @@ func isEnabledFetchingTask() bool {
 	return state != 0
 }
 
-func Fetch(from_kick bool) int {
+func Fetch(from_kick bool, taskId string, taskType int, isColdstart bool) int {
 	// Fetching task should be allowed before all core components of agent have
 	// been correctly initialized. This critical indicator would be set at the
 	// end of program.run method
@@ -78,109 +86,175 @@ func Fetch(from_kick bool) int {
 		}).Infoln("Fetching tasks is canceled due to another running fetching or updating process.")
 		return ErrUpdatingProcedureRunning
 	}
-	defer FetchingTaskLock.Unlock()
+	// Immediately release fetchingTaskLock to let other goroutine fetching
+	// tasks go, but keep updating safe
+	FetchingTaskLock.Unlock()
+
+	// Increase fetchingTaskCounter to indicate there is a goroutine fetching
+	// tasks, which the updating goroutine MUST notice and decrease it to let
+	// updating goroutine go.
+	FetchingTaskCounter.Add(1)
+	defer FetchingTaskCounter.Add(-1)
 
 	var task_size int
-
 	if from_kick {
-		task_size = fetchTasks("kickoff")
+		task_size = fetchTasks(FetchOnKickoff, taskId, taskType,false)
 	} else {
-		task_size = fetchTasks("startup")
+		task_size = fetchTasks(FetchOnStartup, taskId, taskType, isColdstart)
 	}
 
 	for i := 0; i < 1 && from_kick && task_size == 0; i++ {
 		time.Sleep(time.Duration(3) * time.Second)
-		task_size = fetchTasks("kickoff")
+		task_size = fetchTasks(FetchOnKickoff, taskId, taskType, false)
 	}
 
 	return task_size
 }
 
-func fetchTasks(reason string) int {
-	runInfo, stopInfo, sendFileInfo := FetchTaskList(reason)
-	SendFiles(sendFileInfo)
+func fetchTasks(reason FetchReason, taskId string, taskType int, isColdstart bool) int {
+	taskInfos := FetchTaskList(reason, taskId, taskType, isColdstart)
+	SendFiles(taskInfos.sendFiles)
+	DoSessionTask(taskInfos.sessionInfos)
+	for _, v := range taskInfos.runInfos {
+		dispatchRunTask(v)
+	}
 
-	// NOTE:
-	// * Non-periodic tasks are managed by TaskFactory
-	// * Periodic tasks are managed by _periodicTaskSchedules
+	for _, v := range taskInfos.stopInfos {
+		dispatchStopTask(v)
+	}
+
+	for _, v := range taskInfos.testInfos {
+		dispatchTestTask(v)
+	}
+
+	return len(taskInfos.runInfos) + len(taskInfos.stopInfos) + len(taskInfos.sessionInfos) + len(taskInfos.sendFiles)
+}
+
+func dispatchRunTask(taskInfo RunTaskInfo) {
+	fetchLogger := log.GetLogger().WithFields(logrus.Fields{
+		"TaskId": taskInfo.TaskId,
+		"Phase":  "Fetched",
+	})
+	fetchLogger.Info("Fetched to be run")
+
 	taskFactory := GetTaskFactory()
-	for _, v := range runInfo {
-		fetchLogger := log.GetLogger().WithFields(logrus.Fields{
-			"TaskId": v.TaskId,
-			"Phase":  "Fetched",
+	// Tasks should not be duplicately handled
+	if taskFactory.ContainsTaskByName(taskInfo.TaskId) {
+		fetchLogger.Warning("Ignored duplicately fetched task")
+		return
+	}
+
+	// Reuse specified logger across task scheduling phase
+	scheduleLogger := log.GetLogger().WithFields(logrus.Fields{
+		"TaskId": taskInfo.TaskId,
+		"Phase":  "Scheduling",
+	})
+	switch taskInfo.Repeat {
+	case RunTaskOnce, RunTaskNextRebootOnly, RunTaskEveryReboot:
+		t := NewTask(taskInfo)
+
+		scheduleLogger.Info("Schedule non-periodic task")
+		// Non-periodic tasks are managed by TaskFactory
+		taskFactory.AddTask(t)
+		pool := GetPool()
+		pool.RunTask(func ()  {
+			t.Run()
+			taskFactory := GetTaskFactory()
+			taskFactory.RemoveTaskByName(t.taskInfo.TaskId)
 		})
-		fetchLogger.Info("Fetched to be run")
-
-		// Tasks should not be duplicately handled
-		if taskFactory.ContainsTaskByName(v.TaskId) {
-			fetchLogger.Warning("Ignored duplicately fetched task")
-			continue
-		}
-
-		if v.Cronat == "" {
-			// Reuse specified logger across task scheduling phase
-			scheduleLogger := log.GetLogger().WithFields(logrus.Fields{
-				"TaskId": v.TaskId,
-				"Phase":  "Scheduling",
-			})
-			t := NewTask(v)
-
-			scheduleLogger.Info("Schedule non-periodic task")
-			taskFactory.AddTask(t)
-			pool := GetPool()
-			pool.RunTask(t)
-			scheduleLogger.Info("Scheduled for pending or running")
+		scheduleLogger.Info("Scheduled for pending or running")
+	case RunTaskPeriod:
+		// Periodic tasks are managed by _periodicTaskSchedules
+		err := schedulePeriodicTask(taskInfo)
+		if err != nil {
+			scheduleLogger.WithFields(logrus.Fields{
+				"taskInfo": taskInfo,
+			}).WithError(err).Errorln("Failed to schedule periodic task")
 		} else {
-			err := schedulePeriodicTask(v)
-			if err != nil {
-				log.GetLogger().WithFields(logrus.Fields{
-					"taskInfo": v,
-				}).WithError(err).Errorln("Failed to schedule periodic task")
-			} else {
-				log.GetLogger().WithFields(logrus.Fields{
-					"taskInfo": v,
-				}).Infoln("Succeed to schedule periodic task")
-			}
+			scheduleLogger.Infoln("Succeed to schedule periodic task")
 		}
+	default:
+		scheduleLogger.WithFields(logrus.Fields{
+			"taskInfo": taskInfo,
+		}).Errorln("Unknown repeat type")
+	}
+}
+
+func dispatchStopTask(taskInfo RunTaskInfo) {
+	log.GetLogger().WithFields(logrus.Fields{
+		"TaskId": taskInfo.TaskId,
+		"Phase":  "Fetched",
+	}).Info("Fetched to be canceled")
+
+	cancelLogger := log.GetLogger().WithFields(logrus.Fields{
+		"TaskId": taskInfo.TaskId,
+		"Phase":  "Cancelling",
+	})
+	taskFactory := GetTaskFactory()
+	switch taskInfo.Repeat {
+	case RunTaskOnce, RunTaskNextRebootOnly, RunTaskEveryReboot:
+		// NOTE: Non-periodic tasks are managed by TaskFactory. Those tasks
+		// does not exist in TaskFactory need not to be canceled.
+		if !taskFactory.ContainsTaskByName(taskInfo.TaskId) {
+			cancelLogger.Warning("Ignore task not found due to finished or error")
+			return
+		}
+
+		cancelLogger.Info("Cancel task and invocation")
+		scheduledTask, _ := taskFactory.GetTask(taskInfo.TaskId)
+		scheduledTask.Cancel()
+		cancelLogger.Info("Canceled task and invocation")
+	case RunTaskPeriod:
+		// Periodic tasks are managed by _periodicTaskSchedules
+		err := cancelPeriodicTask(taskInfo)
+		if err != nil {
+			cancelLogger.WithFields(logrus.Fields{
+				"taskInfo": taskInfo,
+			}).WithError(err).Errorln("Failed to cancel periodic task")
+		} else {
+			cancelLogger.Infoln("Succeed to cancel periodic task")
+		}
+	default:
+		cancelLogger.WithFields(logrus.Fields{
+			"taskInfo": taskInfo,
+		}).Errorln("Unknown repeat type")
+	}
+}
+
+func dispatchTestTask(taskInfo RunTaskInfo) {
+	fetchLogger := log.GetLogger().WithFields(logrus.Fields{
+		"TaskId": taskInfo.TaskId,
+		"Phase":  "Fetched",
+	})
+	fetchLogger.Info("Fetched to be run")
+
+	taskFactory := GetTaskFactory()
+	// Tasks should not be duplicately handled
+	if taskFactory.ContainsTaskByName(taskInfo.TaskId) {
+		fetchLogger.Warning("Ignored duplicately fetched task")
+		return
 	}
 
-	for _, v := range stopInfo {
-		log.GetLogger().WithFields(logrus.Fields{
-			"TaskId": v.TaskId,
-			"Phase":  "Fetched",
-		}).Info("Fetched to be canceled")
+	// Reuse specified logger across task scheduling phase
+	scheduleLogger := log.GetLogger().WithFields(logrus.Fields{
+		"TaskId": taskInfo.TaskId,
+		"Phase":  "Scheduling",
+	})
+	switch taskInfo.Repeat {
+	case RunTaskOnce, RunTaskPeriod, RunTaskNextRebootOnly, RunTaskEveryReboot:
+		t := NewTask(taskInfo)
 
-		if v.Cronat == "" {
-			cancelLogger := log.GetLogger().WithFields(logrus.Fields{
-				"TaskId": v.TaskId,
-				"Phase":  "Cancelling",
-			})
-			// NOTE: Non-periodic tasks are managed by TaskFactory. Those tasks
-			// does not exist in TaskFactory need not to be canceled.
-			if !taskFactory.ContainsTaskByName(v.TaskId) {
-				cancelLogger.Warning("Ignore task not found due to finished or error")
-				continue
-			}
-
-			cancelLogger.Info("Cancel task and invocation")
-			v, _ := taskFactory.GetTask(v.TaskId)
-			v.Cancel()
-			cancelLogger.Info("Canceled task and invocation")
-		} else {
-			err := cancelPeriodicTask(v)
-			if err != nil {
-				log.GetLogger().WithFields(logrus.Fields{
-					"taskInfo": v,
-				}).WithError(err).Errorf("Failed to cancel periodic task %s", v.TaskId)
-			} else {
-				log.GetLogger().WithFields(logrus.Fields{
-					"taskInfo": v,
-				}).Infof("Succeed to cancel periodic task %s", v.TaskId)
-			}
-		}
+		scheduleLogger.Info("Schedule testing task to be pre-checked")
+		pool := GetPrecheckPool()
+		pool.RunTask(func () {
+			t.PreCheck(true)
+		})
+		scheduleLogger.Info("Scheduled testing task to be pre-checked")
+	default:
+		scheduleLogger.WithFields(logrus.Fields{
+			"taskInfo": taskInfo,
+		}).Errorln("Unknown repeat type")
 	}
-
-	return len(runInfo) + len(stopInfo)
 }
 
 func (s *PeriodicTaskSchedule) startExclusiveInvocation() {
@@ -202,8 +276,11 @@ func (s *PeriodicTaskSchedule) startExclusiveInvocation() {
 	// (2) Every time of invocation need to add itself into TaskFactory at first.
 	taskFactory.AddTask(s.reusableInvocation)
 	pool := GetPool()
-	// (1) TaskPool.RunTask would remove task from TaskFactory.tasks map when finished.
-	pool.RunTask(s.reusableInvocation)
+	pool.RunTask(func ()  {
+		s.reusableInvocation.Run()
+		taskFactory := GetTaskFactory()
+		taskFactory.RemoveTaskByName(s.reusableInvocation.taskInfo.TaskId)
+	})
 	invocateLogger.Info("Scheduled new pending or running invocation")
 }
 

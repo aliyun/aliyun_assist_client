@@ -3,19 +3,21 @@ package channel
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"runtime"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/aliyun/aliyun_assist_client/agent/hybrid"
-
-	"github.com/aliyun/aliyun_assist_client/agent/log"
-
-	"github.com/aliyun/aliyun_assist_client/agent/taskengine"
-
-	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/tidwall/gjson"
+
+	"github.com/aliyun/aliyun_assist_client/agent/clientreport"
+	"github.com/aliyun/aliyun_assist_client/agent/hybrid"
+	"github.com/aliyun/aliyun_assist_client/agent/kickvmhandle"
+	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/agent/taskengine"
+	"github.com/aliyun/aliyun_assist_client/agent/update"
+	"github.com/aliyun/aliyun_assist_client/agent/util"
 )
 
 var _gshellChannel IChannel = nil
@@ -49,17 +51,23 @@ func (m *ChannelMgr) checkChannelWorker() bool {
 	return false
 }
 
-func (m *ChannelMgr) SelectAvailableChannel() error {
+func (m *ChannelMgr) SelectAvailableChannel(currentChannel int) error {
 	log.GetLogger().Infoln("SelectAvailableChannel")
 	m.ChannelSetLock.Lock()
 	defer m.ChannelSetLock.Unlock()
 
 	for _, item := range m.AllChannel {
+		if currentChannel == item.GetChannelType() {
+			continue
+		}
 		if item.IsSupported() && item.IsWorking() {
 			return nil
 		}
 	}
 	for _, item := range m.AllChannel {
+		if currentChannel == item.GetChannelType() {
+			continue
+		}
 		if item.IsSupported() {
 			if e := item.StartChannel(); e == nil {
 				m.ActiveChannel = item
@@ -82,7 +90,20 @@ func (m *ChannelMgr) Init(CallBack OnReceiveMsg) error {
 				return
 			case <-tick.C:
 				if m.checkChannelWorker() == false {
-					m.SelectAvailableChannel()
+					err := m.SelectAvailableChannel(ChannelNone)
+					var report clientreport.ClientReport
+					if err == nil {
+						report = clientreport.ClientReport{
+							ReportType: "switch_channel_in_timer",
+							Info:       fmt.Sprintf("success: Current channel is %d", m.GetCurrentChannelType()),
+						}
+					} else {
+						report = clientreport.ClientReport{
+							ReportType: "switch_channel_in_timer",
+							Info:       fmt.Sprintf("fail:" + err.Error()),
+						}
+					}
+					clientreport.SendReport(report)
 				}
 			}
 		}
@@ -210,17 +231,42 @@ func onReboot() {
 }
 
 func OnRecvMsg(Msg string, ChannelType int) string {
+	log.GetLogger().Infoln("kick msg:", Msg)
+
+	// legacy code for websocket kick data proc.
 	if ChannelType == ChannelWebsocketType {
+		if update.IsCriticalActionRunning() {
+			return "reject:" + Msg
+		}
 		if Msg == "kick_vm" {
 			go func() {
-				taskengine.Fetch(true)
-			}()
+				taskengine.Fetch(true, "", taskengine.NormalTaskType, false)			}()
+			return "accept:" + Msg
 		} else if strings.Contains(Msg, "kick_vm agent deregister") {
 			hybrid.UnRegister(true)
+		} else if Msg == "kick_vm start_session debug" {
+			// for debug.
+			taskengine.DoDebugSessionTask()
 		}
-		return ""
+
+		handle := kickvmhandle.ParseOption(Msg)
+		valid_cmd := false
+		if handle != nil {
+			if handle.CheckAction() == true {
+				valid_cmd = true
+				go func() {
+					handle.DoAction()
+				}()
+			}
+		}
+		if valid_cmd == false {
+			return "unknow:" + Msg
+		} else {
+			return "accept:" + Msg
+		}
+
 	}
-	log.GetLogger().Infoln("kick msg:", Msg)
+
 	if !gjson.Valid(Msg) {
 		return BuildInvalidRet("invalid json1")
 	}
@@ -242,16 +288,47 @@ func OnRecvMsg(Msg string, ChannelType int) string {
 		if err != nil {
 			return BuildInvalidRet("invalid guest-command json: " + err.Error())
 		}
+		if update.IsCriticalActionRunning() {
+			gshellCmdReply := GshellCmdReply{}
+			gshellCmdReply.Return.Result = 7
+			gshellCmdReply.Return.CmdOutput = "agent is busy"
+			retStr, _ := json.Marshal(gshellCmdReply)
+			return string(retStr)
+		}
 		if gshellCmd.Arguments.Cmd == "kick_vm" {
 			go func() {
-				taskengine.Fetch(true)
-			}()
+				taskengine.Fetch(true, "", taskengine.NormalTaskType, false)			}()
+			gshellCmdReply := GshellCmdReply{}
+			gshellCmdReply.Return.Result = 8
+			gshellCmdReply.Return.CmdOutput = "execute kick_vm success"
+			retStr, _ := json.Marshal(gshellCmdReply)
+			return string(retStr)
+		} else {
+			handle := kickvmhandle.ParseOption(gshellCmd.Arguments.Cmd)
+			valid_cmd := false
+			if handle != nil {
+				if handle.CheckAction() == true {
+					valid_cmd = true
+					go func() {
+						handle.DoAction()
+					}()
+				}
+			}
+			if valid_cmd == false {
+				gshellCmdReply := GshellCmdReply{}
+				gshellCmdReply.Return.Result = 6
+				gshellCmdReply.Return.CmdOutput = "invalid command"
+				retStr, _ := json.Marshal(gshellCmdReply)
+				return string(retStr)
+			} else {
+				gshellCmdReply := GshellCmdReply{}
+				gshellCmdReply.Return.Result = 8
+				gshellCmdReply.Return.CmdOutput = "execute kick_vm success"
+				retStr, _ := json.Marshal(gshellCmdReply)
+				return string(retStr)
+			}
 		}
-		gshellCmdReply := GshellCmdReply{}
-		gshellCmdReply.Return.Result = 8
-		gshellCmdReply.Return.CmdOutput = "execute kick_vm success"
-		retStr, _ := json.Marshal(gshellCmdReply)
-		return string(retStr)
+
 	} else if execute == "guest-shutdown" {
 		gshellShutdown := GshellShutdown{}
 		err := json.Unmarshal([]byte(Msg), &gshellShutdown)

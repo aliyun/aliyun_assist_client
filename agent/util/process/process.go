@@ -66,17 +66,17 @@ func (p *ProcessCmd) SetPasswordInfo(password string) {
 
 func (p *ProcessCmd)  SyncRunSimple(commandName string, commandArguments []string, timeOut int) error {
 	p.command = exec.Command(commandName, commandArguments...)
-	/*token, err1 := logonUser("changfeng1", "Password01!")
-	if err1 != nil {
-		return err1
-	}
-	defer mustCloseHandle(token)
+	logger := log.GetLogger().WithFields(logrus.Fields{
+		"command": p.command.Args,
+		"timeout": timeOut,
+	})
 
-	p.command.SysProcAttr = &windows.SysProcAttr{
-		Token: syscall.Token(token),
-	}*/
+	if err := p.prepareProcess(); err != nil {
+		return err
+	}
+
 	if err := p.command.Start(); err != nil {
-		log.GetLogger().Errorln("error occurred starting the command", err, commandName)
+		logger.WithError(err).Errorln("error occurred starting the command")
 		return errors.New("error occurred starting the command")
 	}
 
@@ -88,12 +88,12 @@ func (p *ProcessCmd)  SyncRunSimple(commandName string, commandArguments []strin
 	var err error
 	select {
 	case err = <-finished:
-		fmt.Println("Process completed.")
+		logger.Infoln("Process completed.")
 		if err != nil {
-			fmt.Println("error in run command")
+			logger.WithError(err).Infoln("error in run command")
 		}
 	case <-time.After(time.Duration(timeOut) * time.Second):
-		fmt.Println("Timeout in run command.")
+		logger.Errorln("Timeout in run command.")
 		err = errors.New("cmd run timeout")
 		p.command.Process.Kill()
 	}

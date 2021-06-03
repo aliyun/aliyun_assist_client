@@ -170,7 +170,7 @@ func sendFile(sendFile SendFileTaskInfo) int {
 	if len(fileMode) == 0 {
 		fileMode = "0644"
 	}
-	fMode, err := strconv.Atoi(fileMode)
+	fMode, err := strconv.ParseInt(fileMode, 8, 32)
 	if err != nil {
 		return EInalidFileMode
 	}

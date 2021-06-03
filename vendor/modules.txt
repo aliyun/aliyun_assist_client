@@ -1,7 +1,7 @@
-# github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d
+# github.com/StackExchange/wmi v0.0.0-20210224194228-fe8f1750fd46
 ## explicit
 github.com/StackExchange/wmi
-# github.com/aliyun/alibaba-cloud-sdk-go v1.61.623
+# github.com/aliyun/alibaba-cloud-sdk-go v1.61.1066
 ## explicit
 github.com/aliyun/alibaba-cloud-sdk-go/sdk
 github.com/aliyun/alibaba-cloud-sdk-go/sdk/auth
@@ -14,15 +14,25 @@ github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests
 github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses
 github.com/aliyun/alibaba-cloud-sdk-go/sdk/utils
 github.com/aliyun/alibaba-cloud-sdk-go/services/oos
+# github.com/containerd/console v1.0.2
+## explicit
+github.com/containerd/console
+# github.com/creack/goselect v0.1.2
+## explicit
+github.com/creack/goselect
+# github.com/creack/pty v1.1.11
+## explicit
+github.com/creack/pty
 # github.com/davecgh/go-spew v1.1.1
 github.com/davecgh/go-spew/spew
-# github.com/fastly/go-utils v0.0.0-20180712184237-d95a45783239
+# github.com/fabiokung/shm v0.0.0-20150728212823-2852b0d79bae
 ## explicit
-# github.com/go-ole/go-ole v1.2.4
+github.com/fabiokung/shm
+# github.com/go-ole/go-ole v1.2.5
 ## explicit
 github.com/go-ole/go-ole
 github.com/go-ole/go-ole/oleutil
-# github.com/google/uuid v1.1.2
+# github.com/google/uuid v1.2.0
 ## explicit
 github.com/google/uuid
 # github.com/gorilla/websocket v1.4.2
@@ -32,28 +42,24 @@ github.com/gorilla/websocket
 ## explicit
 github.com/hectane/go-acl
 github.com/hectane/go-acl/api
-# github.com/jarcoal/httpmock v1.0.6
+# github.com/jarcoal/httpmock v1.0.8
 ## explicit
 github.com/jarcoal/httpmock
-# github.com/jehiah/go-strftime v0.0.0-20171201141054-1d33003b3869
-## explicit
+github.com/jarcoal/httpmock/internal
 # github.com/jmespath/go-jmespath v0.0.0-20180206201540-c2b33e8439af
 github.com/jmespath/go-jmespath
 # github.com/jonboulle/clockwork v0.2.2
 ## explicit
 # github.com/json-iterator/go v1.1.5
 github.com/json-iterator/go
-# github.com/kardianos/service v1.1.0
-## explicit
-github.com/kardianos/service
-# github.com/kirinlabs/HttpRequest v1.0.5
+# github.com/kirinlabs/HttpRequest v1.1.1
 ## explicit
 github.com/kirinlabs/HttpRequest
 # github.com/lestrrat-go/file-rotatelogs v2.4.0+incompatible
 ## explicit
 github.com/lestrrat-go/file-rotatelogs
 github.com/lestrrat-go/file-rotatelogs/internal/option
-# github.com/lestrrat-go/strftime v1.0.3
+# github.com/lestrrat-go/strftime v1.0.4
 ## explicit
 github.com/lestrrat-go/strftime
 # github.com/marcsauter/single v0.0.0-20201009143647-9f8d81240be2
@@ -63,18 +69,17 @@ github.com/marcsauter/single
 github.com/modern-go/concurrent
 # github.com/modern-go/reflect2 v0.0.0-20180701023420-4b7aa43c6742
 github.com/modern-go/reflect2
+# github.com/pborman/uuid v1.2.1
+## explicit
 # github.com/pkg/errors v0.9.1
 ## explicit
 github.com/pkg/errors
 # github.com/pmezard/go-difflib v1.0.0
 github.com/pmezard/go-difflib/difflib
-# github.com/rifflock/lfshook v0.0.0-20180920164130-b9218ef580f5
-## explicit
-github.com/rifflock/lfshook
 # github.com/robfig/cron/v3 v3.0.1
 ## explicit
 github.com/robfig/cron/v3
-# github.com/shirou/gopsutil v3.20.10+incompatible
+# github.com/shirou/gopsutil v3.21.4+incompatible
 ## explicit
 github.com/shirou/gopsutil/cpu
 github.com/shirou/gopsutil/host
@@ -82,30 +87,37 @@ github.com/shirou/gopsutil/internal/common
 github.com/shirou/gopsutil/mem
 github.com/shirou/gopsutil/net
 github.com/shirou/gopsutil/process
-# github.com/sirupsen/logrus v1.7.0
+# github.com/sirupsen/logrus v1.8.1
 ## explicit
 github.com/sirupsen/logrus
 # github.com/spf13/pflag v1.0.5
 ## explicit
 github.com/spf13/pflag
-# github.com/stretchr/testify v1.6.1
+# github.com/stretchr/testify v1.7.0
 ## explicit
 github.com/stretchr/testify/assert
-# github.com/tebeka/strftime v0.1.5
-## explicit
-# github.com/tidwall/gjson v1.6.3
+# github.com/tidwall/gjson v1.7.5
 ## explicit
 github.com/tidwall/gjson
-# github.com/tidwall/match v1.0.1
+# github.com/tidwall/match v1.0.3
 github.com/tidwall/match
-# github.com/tidwall/pretty v1.0.2
+# github.com/tidwall/pretty v1.1.0
 github.com/tidwall/pretty
+# github.com/tklauser/go-sysconf v0.3.5
+## explicit
+github.com/tklauser/go-sysconf
+# github.com/tklauser/numcpus v0.2.2
+github.com/tklauser/numcpus
 # github.com/viney-shih/go-lock v1.0.1
 ## explicit
 github.com/viney-shih/go-lock
+# golang.org/x/net v0.0.0-20210505214959-0714010a04ed
+## explicit
+golang.org/x/net/http/httpproxy
+golang.org/x/net/idna
 # golang.org/x/sync v0.0.0-20200317015054-43a5402ce75a
 golang.org/x/sync/semaphore
-# golang.org/x/sys v0.0.0-20201109165425-215b40eba54c
+# golang.org/x/sys v0.0.0-20210507014357-30e306a8bba5
 ## explicit
 golang.org/x/sys/internal/unsafeheader
 golang.org/x/sys/unix
@@ -114,14 +126,18 @@ golang.org/x/sys/windows/registry
 golang.org/x/sys/windows/svc
 golang.org/x/sys/windows/svc/eventlog
 golang.org/x/sys/windows/svc/mgr
-# golang.org/x/text v0.3.4
+# golang.org/x/text v0.3.6
 ## explicit
 golang.org/x/text/encoding
 golang.org/x/text/encoding/internal
 golang.org/x/text/encoding/internal/identifier
 golang.org/x/text/encoding/simplifiedchinese
+golang.org/x/text/secure/bidirule
 golang.org/x/text/transform
-# gopkg.in/ini.v1 v1.42.0
+golang.org/x/text/unicode/bidi
+golang.org/x/text/unicode/norm
+# gopkg.in/ini.v1 v1.62.0
+## explicit
 gopkg.in/ini.v1
 # gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c
 gopkg.in/yaml.v3

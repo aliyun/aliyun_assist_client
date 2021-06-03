@@ -2,6 +2,7 @@ package taskengine
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -30,11 +31,23 @@ const (
 	defaultQuotoPre = 6000
 )
 
+type RunTaskRepeatType string
+const (
+	RunTaskOnce RunTaskRepeatType = "Once"
+	RunTaskPeriod RunTaskRepeatType = "Period"
+	RunTaskNextRebootOnly RunTaskRepeatType = "NextRebootOnly"
+	RunTaskEveryReboot RunTaskRepeatType = "EveryReboot"
+)
+
 type Task struct {
 	taskInfo    RunTaskInfo
+	realWorkingDir string
+
 	processer   process.ProcessCmd
-	startTime   int64
-	endTime     int64
+	startTime time.Time
+	endTime time.Time
+	monotonicStartTimestamp   int64
+	monotonicEndTimestamp     int64
 	exit_code   int
 	canceled    bool
 	droped      int
@@ -55,19 +68,21 @@ func NewTask(taskInfo RunTaskInfo) *Task {
 }
 
 type RunTaskInfo struct {
-	InstanceId  string `json:"instanceId"`
-	CommandType string `json:"type"`
-	TaskId      string `json:"taskID"`
-	CommandId   string `json:"commandId"`
-	TimeOut     string `json:"timeOut"`
-	CommandName string `json:"commandName"`
-	Content     string `json:"commandContent"`
-	WorkingDir  string `json:"workingDirectory"`
-	Args        string `json:"args"`
-	Cronat      string `json:"cron"`
-	Username    string `json:"username"`
-	Password    string `json:"windowsPasswordName"`
-	Output      OutputInfo
+	InstanceId      string `json:"instanceId"`
+	CommandType     string `json:"type"`
+	TaskId          string `json:"taskID"`
+	CommandId       string `json:"commandId"`
+	EnableParameter bool   `json:"enableParameter"`
+	TimeOut         string `json:"timeOut"`
+	CommandName     string `json:"commandName"`
+	Content         string `json:"commandContent"`
+	WorkingDir      string `json:"workingDirectory"`
+	Args            string `json:"args"`
+	Cronat          string `json:"cron"`
+	Username        string `json:"username"`
+	Password        string `json:"windowsPasswordName"`
+	Output          OutputInfo
+	Repeat          RunTaskRepeatType
 }
 
 type SendFileTaskInfo struct {
@@ -85,6 +100,14 @@ type SendFileTaskInfo struct {
 	Output      OutputInfo
 }
 
+type SessionTaskInfo struct {
+	CmdContent     string `json:"cmdContent"`
+	Username string `json:"username"`
+	Password    string `json:"windowsPasswordName"`
+	SessionId   string `json:"channelId"`
+	WebsocketUrl   string `json:"websocketUrl"`
+}
+
 type OutputInfo struct {
 	Interval  int  `json:"interval"`
 	LogQuota  int  `json:"logQuota"`
@@ -95,6 +118,7 @@ type OutputInfo struct {
 // presetWrapErrorCode defines and MUST contain all error codes that will be reported
 // as failure
 type presetWrapErrorCode int
+
 const (
 	wrapErrGetScriptPathFailed presetWrapErrorCode = -(1 + iota)
 	wrapErrUnknownCommandType
@@ -103,6 +127,11 @@ const (
 	wrapErrSetExecutablePermissionFailed
 	wrapErrSetWindowsPermissionFailed
 	wrapErrExecuteScriptFailed
+)
+
+var (
+	ErrWorkingDirectoryNotExist = errors.New("WorkingDirectoryNotExist")
+	ErrDefaultWorkingDirectoryNotAvailable = errors.New("DefaultWorkingDirectoryNotAvailable")
 )
 
 func tryRead(stdoutWrite, stderrWrite io.Reader, out *bytes.Buffer) {
@@ -128,19 +157,18 @@ func tryReadAll(stdoutWrite, stderrWrite io.Reader, out *bytes.Buffer) {
 	}
 }
 
-func (task *Task) Run() error {
-	// Reuse specified logger across whole task running phase
+func (task *Task) PreCheck(reportVerified bool) error {
+	// Reuse specified logger across whole task pre-checking phase
 	taskLogger := log.GetLogger().WithFields(logrus.Fields{
 		"TaskId": task.taskInfo.TaskId,
-		"Phase":  "Running",
+		"Phase":  "Pre-checking",
 	})
-	taskLogger.Info("Run task")
 
 	if len(task.taskInfo.Username) > 0 {
 		if runtime.GOOS == "linux" {
 			_, _, _, err := process.GetUserCredentials(task.taskInfo.Username)
 			if err != nil {
-				info := "UserInvalid_"+task.taskInfo.Username
+				info := "UserInvalid_" + task.taskInfo.Username
 				task.SendInvalidTask("UsernameOrPasswordInvalid", info)
 				taskLogger.Errorln("UsernameOrPasswordInvalid", info)
 				return err
@@ -148,13 +176,61 @@ func (task *Task) Run() error {
 		} else if runtime.GOOS == "windows" {
 			err := process.IsUserValid(task.taskInfo.Username, task.taskInfo.Password)
 			if err != nil {
-				info := "UsernameOrPasswordInvalid_"+task.taskInfo.Username
+				info := "UsernameOrPasswordInvalid_" + task.taskInfo.Username
 				task.SendInvalidTask(err.Error(), info)
 				taskLogger.Errorln("UsernameOrPasswordInvalid", err.Error(), info)
 				return err
 			}
 		}
 	}
+
+	if task.taskInfo.CommandType != "RunBatScript" &&
+		task.taskInfo.CommandType != "RunPowerShellScript" &&
+		task.taskInfo.CommandType != "RunShellScript" {
+		task.SendInvalidTask("TypeInvalid", fmt.Sprintf("TypeInvalid_%s", task.taskInfo.CommandType))
+		err := fmt.Errorf("Invalid command type: %s", task.taskInfo.CommandType)
+		taskLogger.Errorln("TypeInvalid", err.Error())
+		return err
+	}
+
+	if _, err := base64.StdEncoding.DecodeString(task.taskInfo.Content); err != nil {
+		task.SendInvalidTask("CommandContentInvalid", err.Error())
+		wrapErr := fmt.Errorf("Invalid command content: decode error: %w", err)
+		taskLogger.Errorln("CommandContentInvalid", wrapErr.Error())
+		return wrapErr
+	}
+
+	realWorkingDir, err := task.detectWorkingDirectory()
+	if err != nil {
+		if errors.Is(err, ErrWorkingDirectoryNotExist) {
+			task.SendInvalidTask("workingDirectory", ErrWorkingDirectoryNotExist.Error())
+		} else if errors.Is(err, ErrDefaultWorkingDirectoryNotAvailable) {
+			task.SendInvalidTask("workingDirectory", ErrDefaultWorkingDirectoryNotAvailable.Error())
+		} else {
+			task.SendInvalidTask("workingDirectory", err.Error())
+		}
+		taskLogger.WithError(err).Errorln("Invalid working directory for invocation")
+		return err
+	}
+	task.realWorkingDir = realWorkingDir
+
+	if reportVerified == true {
+		task.sendTaskVerified()
+	}
+	return nil
+}
+
+func (task *Task) Run() error {
+	if err := task.PreCheck(false); err != nil {
+		return err
+	}
+
+	// Reuse specified logger across whole task running phase
+	taskLogger := log.GetLogger().WithFields(logrus.Fields{
+		"TaskId": task.taskInfo.TaskId,
+		"Phase":  "Running",
+	})
+	taskLogger.Info("Run task")
 
 	taskLogger.Info("Prepare script file of task")
 	var fileName string
@@ -191,6 +267,13 @@ func (task *Task) Run() error {
 	}
 
 	content := string(decodeBytes)
+	if task.taskInfo.EnableParameter {
+		content, err = util.ReplaceAllParameterStore(content)
+		if err != nil {
+			task.SendInvalidTask(err.Error(), "")
+			return errors.New("ReplaceAllParameterStore error")
+		}
+	}
 	if cmdType == "RunBatScript" {
 		content = "@echo off\r\n" + content
 	}
@@ -202,9 +285,10 @@ func (task *Task) Run() error {
 	}
 
 	if err := scriptmanager.SaveScriptFile(fileName, content); err != nil {
-		// NOTE: Only non-periodic tasks need to check whether command script
+		// NOTE: Only non-repeated tasks need to check whether command script
 		// file exists.
-		if task.taskInfo.Cronat == "" || !errors.Is(err, scriptmanager.ErrScriptFileExists) {
+		if (task.taskInfo.Repeat != RunTaskPeriod && task.taskInfo.Repeat != RunTaskEveryReboot) ||
+			!errors.Is(err, scriptmanager.ErrScriptFileExists) {
 			wrapErr := fmt.Errorf("Saving script to %s failed: %w", fileName, err)
 			taskLogger.WithError(wrapErr).Errorln("Saving script file failed")
 			// NOTE: Due to some utility functions, report error message may not
@@ -237,7 +321,8 @@ func (task *Task) Run() error {
 		timeout = 3600
 	}
 
-	task.startTime = timetool.GetAccurateTime()
+	task.startTime = time.Now()
+	task.monotonicStartTimestamp = timetool.ToAccurateTime(task.startTime.Local())
 	args := make([]string, 2)
 	if cmdType == "RunPowerShellScript" {
 		args[0] = "-file"
@@ -249,54 +334,63 @@ func (task *Task) Run() error {
 		fileName = "sh"
 	}
 
-	// Replace variable+mutex with variable+atomic operation to remove dangerous
-	// locking/unlocking operation
-	var neverDirectWrite_Atomic_taskFinished uint32 = 0
 	task.sendTaskStart()
 	taskLogger.Infof("Sent starting event")
 
-	go func() {
+	// Replace variable representing states with context and channel operation,
+	// to replace dangerous state tranfering operation with straightforward
+	// message passing action.
+	ctx, stopSendRunning := context.WithCancel(context.Background())
+	stoppedSendRunning := make(chan struct {}, 1)
+	go func(ctx context.Context, stoppedSendRunning chan <- struct{}) {
+		defer close(stoppedSendRunning)
 		task.data_sended = 0
+		// Running output is not needed to be reported during invocation of
+		// periodic tasks. But stoppedSendRunning channel is still needed to be
+		// closed correctly.
+		if task.taskInfo.Cronat != "" {
+			return
+		}
+
+		intervalMs := task.taskInfo.Output.Interval
+		if intervalMs < 1000 {
+			intervalMs = 1000
+		}
+		ticker := time.NewTicker(time.Duration(intervalMs) * time.Millisecond)
+		defer ticker.Stop()
 		for {
-			if task.taskInfo.Cronat != "" || atomic.LoadUint32(&task.data_sended) > defaultQuotoPre {
-				break
-			}
-			var running_output bytes.Buffer
-			tryRead(&stdoutWrite, &stderrWrite, &running_output)
-			task.sendRunningOutput(running_output.String())
-			atomic.AddUint32(&task.data_sended, uint32(running_output.Len()))
-			taskLogger.Infof("Running output sent: %d bytes", atomic.LoadUint32(&task.data_sended))
-
-			mseconds := task.taskInfo.Output.Interval
-			if mseconds < 1000 {
-				mseconds = 1000
-			}
-			time.Sleep(time.Duration(mseconds) * time.Millisecond)
-
-			// Replace variable+mutex with variable+atomic operation to remove
-			// dangerous locking/unlocking operation
-			if atomic.LoadUint32(&neverDirectWrite_Atomic_taskFinished) == 1 {
-				break
+			select {
+			case <- ticker.C:
+				if atomic.LoadUint32(&task.data_sended) > defaultQuotoPre {
+					return
+				}
+				var running_output bytes.Buffer
+				tryRead(&stdoutWrite, &stderrWrite, &running_output)
+				task.sendRunningOutput(running_output.String())
+				atomic.AddUint32(&task.data_sended, uint32(running_output.Len()))
+				taskLogger.Infof("Running output sent: %d bytes", atomic.LoadUint32(&task.data_sended))
+			case <- ctx.Done():
+				return
 			}
 		}
-	}()
+	}(ctx, stoppedSendRunning)
 
 	taskLogger.Info("Start command process")
 	var status int
 	if len(task.taskInfo.Username) > 0 {
 		task.processer.SetUserInfo(task.taskInfo.Username)
 	}
-    if len(task.taskInfo.Password) > 0 {
-    	task.processer.SetPasswordInfo(task.taskInfo.Password)
+	if len(task.taskInfo.Password) > 0 {
+		task.processer.SetPasswordInfo(task.taskInfo.Password)
 	}
 
-	task.exit_code, status, err = task.processer.SyncRun(task.taskInfo.WorkingDir,
+	task.exit_code, status, err = task.processer.SyncRun(task.realWorkingDir,
 		fileName, args,
 		&stdoutWrite, &stderrWrite,
 		nil, timeout)
 	if status == process.Success {
 		taskLogger.WithFields(logrus.Fields{
-			"exitcode": task.exit_code,
+			"exitcode":   task.exit_code,
 			"extraError": err,
 		}).Info("Finished command process")
 	} else if status == process.Timeout {
@@ -307,18 +401,20 @@ func (task *Task) Run() error {
 		taskLogger.WithError(err).Info("Failed command process")
 	} else {
 		taskLogger.WithFields(logrus.Fields{
-			"exitcode": task.exit_code,
-			"status": status,
+			"exitcode":     task.exit_code,
+			"status":       status,
 			"attchedError": err,
 		}).Warn("Ended command process with unexpected status")
 	}
 
-	// Replace variable+mutex with variable+atomic operation to remove dangerous
-	// locking/unlocking operation
-	atomic.StoreUint32(&neverDirectWrite_Atomic_taskFinished, 1)
+	// That is, send stopping message to the goroutine sending running output
+	stopSendRunning()
+	// Wait for the goroutine sending running output to exit
+	<- stoppedSendRunning
 	tryReadAll(&stdoutWrite, &stderrWrite, &task.output)
 
-	task.endTime = timetool.GetAccurateTime()
+	task.endTime = time.Now()
+	task.monotonicEndTimestamp = timetool.ToAccurateTime(timetool.ToStableElapsedTime(task.endTime, task.startTime).Local())
 
 	if status == process.Fail {
 		if err == nil {
@@ -345,18 +441,26 @@ func (task *Task) Run() error {
 	return nil
 }
 
+func (task *Task) sendTaskVerified() {
+	queryParams := fmt.Sprintf("?taskId=%s", task.taskInfo.TaskId)
+	url := util.GetVerifiedTaskService() + queryParams
+	util.HttpPost(url, "", "text")
+}
+
 func (task *Task) sendTaskStart() {
 	if task.taskInfo.Output.SendStart == false {
 		return
 	}
 	url := util.GetRunningOutputService()
-	url += "?taskId=" + task.taskInfo.TaskId + "&start=" + strconv.FormatInt(task.startTime, 10)
+	url += "?taskId=" + task.taskInfo.TaskId + "&start=" + strconv.FormatInt(task.monotonicStartTimestamp, 10)
 	util.HttpPost(url, "", "text")
 }
 
 func (task *Task) SendInvalidTask(param string, value string) {
+	escapedParam := url.QueryEscape(param)
+	escapedValue := url.QueryEscape(value)
 	url := util.GetInvalidTaskService()
-	url += "?taskId=" + task.taskInfo.TaskId + "&param=" + param + "&value=" + value
+	url += fmt.Sprintf("?taskId=%s&param=%s&value=%s", task.taskInfo.TaskId, escapedParam, escapedValue)
 	util.HttpPost(url, "", "text")
 }
 
@@ -374,8 +478,8 @@ func (task *Task) sendOutput(status string, output string) {
 		return
 	}
 
-	url += "?taskId=" + task.taskInfo.TaskId + "&start=" + strconv.FormatInt(task.startTime, 10)
-	url += "&end=" + strconv.FormatInt(task.endTime, 10) + "&exitCode=" + strconv.Itoa(task.exit_code) + "&dropped=" + strconv.Itoa(task.droped)
+	url += "?taskId=" + task.taskInfo.TaskId + "&start=" + strconv.FormatInt(task.monotonicStartTimestamp, 10)
+	url += "&end=" + strconv.FormatInt(task.monotonicEndTimestamp, 10) + "&exitCode=" + strconv.Itoa(task.exit_code) + "&dropped=" + strconv.Itoa(task.droped)
 	// luban/api/v1/task/stopped API requires extra result=killed parameter in querystring
 	if status == "canceled" {
 		url += "&result=killed"
@@ -400,7 +504,7 @@ func (task *Task) SendError(output string, errCode presetWrapErrorCode, errDesc 
 	safelyTruncatedErrDesc := langutil.SafeTruncateStringInBytes(errDesc, 255)
 	escapedErrDesc := url.QueryEscape(safelyTruncatedErrDesc)
 	queryString := fmt.Sprintf("?taskId=%s&start=%d&end=%d&exitCode=%d&dropped=%d&errCode=%d&errDesc=%s",
-		task.taskInfo.TaskId, task.startTime, task.endTime, task.exit_code,
+		task.taskInfo.TaskId, task.monotonicStartTimestamp, task.monotonicEndTimestamp, task.exit_code,
 		task.droped, errCode, escapedErrDesc)
 	requestURL := util.GetErrorOutputService() + queryString
 
@@ -424,7 +528,12 @@ func (task *Task) Cancel() {
 	task.canceled = true
 	// Consistent with C++ version, end time of canceled task is set to the time
 	// of cancel operation
-	task.endTime = timetool.GetAccurateTime()
+	task.endTime = time.Now()
+	if task.startTime.IsZero() {
+		task.monotonicEndTimestamp = timetool.ToAccurateTime(task.endTime.Local())
+	} else {
+		task.monotonicEndTimestamp = timetool.ToAccurateTime(timetool.ToStableElapsedTime(task.endTime, task.startTime).Local())
+	}
 	task.sendOutput("canceled", task.getReportString(task.output))
 	task.processer.Cancel()
 }
@@ -448,7 +557,7 @@ func (task *Task) getReportString(output bytes.Buffer) string {
 
 func (task *Task) sendRunningOutput(data string) {
 	url := util.GetRunningOutputService()
-	url += "?taskId=" + task.taskInfo.TaskId + "&start=" + strconv.FormatInt(task.startTime, 10)
+	url += "?taskId=" + task.taskInfo.TaskId + "&start=" + strconv.FormatInt(task.monotonicStartTimestamp, 10)
 	if len(data) == 0 && task.taskInfo.Output.SkipEmpty {
 		return
 	}

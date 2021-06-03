@@ -14,6 +14,8 @@ ConditionFileIsExecutable={{.Path|cmdEscape}}
 {{$dep}} {{end}}
 
 [Service]
+StandardOutput=journal+console
+StandardError=journal+console
 StartLimitInterval=3600
 StartLimitBurst=10
 ExecStart={{.Path|cmdEscape}}{{range .Arguments}} {{.|cmd}}{{end}}
@@ -158,6 +160,10 @@ func ServiceConfig() *service.Config {
 		depends = append(depends, "Wants=network-online.target")
 		option["SystemdScript"] = systemdScript
 		option["Restart"] = "on-failure"
+
+		// REMEMBER: Explicit disable LogOutput option of kardianos/service, and
+		// use StandardOutput/StandardError settings manually written above.
+		option["LogOutput"] = false
 	} else {
 		ServiceName = "aliyun-service"
 		option["SysvScript"] = sysvScript

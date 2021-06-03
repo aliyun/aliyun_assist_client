@@ -1,25 +1,20 @@
 package update
 
 import (
-	"sync/atomic"
+	"github.com/aliyun/aliyun_assist_client/agent/util/atomicutil"
 )
 
 var (
-	_criticalActionRunning int32 = 0
+	_cpuIntensiveActionRunning atomicutil.AtomicBoolean
+	_criticalActionRunning atomicutil.AtomicBoolean
 )
+
+// IsCPUIntensiveActionRunning returns cpuIntensiveActionRunning flag as boolean variable
+func IsCPUIntensiveActionRunning() bool {
+	return _cpuIntensiveActionRunning.IsSet()
+}
 
 // IsCriticalActionRunning returns criticalActionRunning flag as boolean variable
 func IsCriticalActionRunning() bool {
-	state := atomic.LoadInt32(&_criticalActionRunning)
-	return state != 0
-}
-
-// setCriticalActionRunning marks criticalActionRunning flag as true
-func setCriticalActionRunning() {
-	atomic.StoreInt32(&_criticalActionRunning, 1)
-}
-
-// unsetCriticalActionRunning marks criticalActionRunning flag as false
-func unsetCriticalActionRunning() {
-	atomic.StoreInt32(&_criticalActionRunning, 0)
+	return _criticalActionRunning.IsSet()
 }

@@ -2,11 +2,14 @@ package channel
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"runtime"
 	"sync"
 	"time"
 
+	"github.com/aliyun/aliyun_assist_client/agent/clientreport"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 )
@@ -113,6 +116,11 @@ func (c *GshellChannel) startChannelUnsafe() error {
 						_, err = c.hGshell.Write([]byte(retStr + "\n"))
 						if err != nil {
 							log.GetLogger().Errorln("write error:", err)
+							report := clientreport.ClientReport{
+								ReportType: "switch_channel_in_gshell",
+								Info:       fmt.Sprintf("start switch :" + err.Error()),
+							}
+							clientreport.SendReport(report)
 							go c.SwitchChannel()
 						}
 					}
@@ -136,8 +144,34 @@ func (c *GshellChannel) StopChannel() error {
 
 func (c *GshellChannel) SwitchChannel() error {
 	c.StopChannel()
-	time.Sleep(time.Duration(3) * time.Second)
-	return G_ChannelMgr.SelectAvailableChannel()
+	time.Sleep(time.Duration(1) * time.Second)
+	err := G_ChannelMgr.SelectAvailableChannel(ChannelGshellType)
+	if err != nil {
+		for i := 0; i < 5; i++ {
+			if G_ChannelMgr.SelectAvailableChannel(ChannelNone) == nil {
+				report := clientreport.ClientReport{
+					ReportType: "switch_channel_in_gshell",
+					Info:       fmt.Sprintf("success: Current channel is %d", G_ChannelMgr.GetCurrentChannelType()),
+				}
+				clientreport.SendReport(report)
+				return nil
+			}
+			time.Sleep(time.Duration(5) * time.Second)
+		}
+	} else {
+		report := clientreport.ClientReport{
+			ReportType: "switch_channel_in_gshell",
+			Info:       fmt.Sprintf("success: Current channel is %d", G_ChannelMgr.GetCurrentChannelType()),
+		}
+		clientreport.SendReport(report)
+		return nil
+	}
+	report := clientreport.ClientReport{
+		ReportType: "switch_channel_in_gshell",
+		Info:       fmt.Sprintf("fail: no available channel"),
+	}
+	clientreport.SendReport(report)
+	return errors.New("no available channel")
 }
 
 func NewGshellChannel(CallBack OnReceiveMsg) IChannel {
