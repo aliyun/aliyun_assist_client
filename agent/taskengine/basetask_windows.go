@@ -6,6 +6,10 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 )
 
+func (task *Task) detectHomeDirectory() (string, error) {
+	return "", nil
+}
+
 func (task *Task) detectWorkingDirectory() (string, error) {
 	workingDir := task.taskInfo.WorkingDir
 

@@ -23,6 +23,7 @@ import (
 	"github.com/tidwall/gjson"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/agent/util/atomicutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/timetool"
 	"github.com/aliyun/aliyun_assist_client/agent/version"
@@ -35,13 +36,24 @@ const (
 var (
 	UserAgentValue string
 	CrtPath        string
+	NilRequest     *atomicutil.AtomicBoolean
 	CaCertPool     *x509.CertPool
 
-	_transport *http.Transport
+	_transport                   *http.Transport
 	_initializeHTTPTransportOnce sync.Once
 )
 
+type HttpErrorCode struct {
+	errorCode int
+}
+
+var (
+	ErrHTTPCode = errors.New("http code error")
+)
+
 func init() {
+	NilRequest = &atomicutil.AtomicBoolean{}
+	NilRequest.Clear()
 	cpath, _ := os.Executable()
 	dir, _ := filepath.Abs(filepath.Dir(cpath))
 	CrtPath = path.Join(dir, "config", "GlobalSignRootCA.crt")
@@ -54,11 +66,21 @@ func init() {
 	CaCertPool.AppendCertsFromPEM(caCert)
 }
 
+func (e *HttpErrorCode) Error() string {
+	return fmt.Sprintf("The error code is %d", e.errorCode)
+}
+func (e *HttpErrorCode) GetCode() int {
+	return e.errorCode
+}
+
 func InitUserAgentValue() {
 	UserAgentValue = fmt.Sprintf("%s_%s/%s", osutil.GetOsType(), osutil.GetOsArch(), version.AssistVersion)
 }
 
 func GetHTTPTransport() *http.Transport {
+	if NilRequest.IsSet() {
+		return nil
+	}
 	_initializeHTTPTransportOnce.Do(func() {
 		_transport = &http.Transport{
 			Proxy: GetProxyFunc(),
@@ -90,6 +112,7 @@ func HttpGet(url string) (error, string) {
 
 func HttpGetWithTimeout(url string, timeout time.Duration, noLog bool) (error, string) {
 	req := HttpRequest.Transport(GetHTTPTransport())
+
 	// 设置超时时间，不设置时，默认30s
 	req.SetTimeout(timeout)
 	req.SetTLSClient(&tls.Config{
@@ -113,7 +136,9 @@ func HttpGetWithTimeout(url string, timeout time.Duration, noLog bool) (error, s
 	defer res.Close()
 	content, _ := res.Content()
 	if err == nil && res.StatusCode() > 400 {
-		err = errors.New("http code error")
+		err = &HttpErrorCode{
+			errorCode: res.StatusCode(),
+		}
 	}
 
 	if noLog {
@@ -177,8 +202,19 @@ func HttpPostWithTimeout(url string, data string, contentType string, timeout ti
 	req.SetTLSClient(&tls.Config{
 		RootCAs: CaCertPool,
 	})
+
+	req.SetHeaders(map[string]string{
+		UserAgentHeader: UserAgentValue,
+	})
+	//excude Hybrid instance id
 	if IsHybrid() {
 		addHttpHeads(req)
+	} else {
+		instance_id := GetInstanceId()
+
+		req.SetHeaders(map[string]string{
+			"X-Client-Instance-ID": instance_id,
+		})
 	}
 
 	// 设置Headers
@@ -192,20 +228,15 @@ func HttpPostWithTimeout(url string, data string, contentType string, timeout ti
 		})
 	}
 
-	//instance_id := GetInstanceId();
-
-	req.SetHeaders(map[string]string{
-		UserAgentHeader:        UserAgentValue,
-		"X-Client-Instance-ID": "123",
-	})
-
 	res, err := req.Post(url, data)
 
 	defer res.Close()
 	content, _ := res.Content()
 
 	if err == nil && res.StatusCode() > 400 {
-		err = errors.New(fmt.Sprintf("http code error: %d", res.StatusCode()))
+		err = &HttpErrorCode{
+			errorCode: res.StatusCode(),
+		}
 	}
 
 	if noLog {
@@ -247,7 +278,7 @@ func HttpDownloadWithTimeout(url string, filePath string, timeout time.Duration)
 		// DefaultTransport will be used instead, thus it's safe to directly
 		// reference `transport` variable.
 		Transport: GetHTTPTransport(),
-		Timeout: timeout,
+		Timeout:   timeout,
 	}
 	res, err := client.Get(url)
 	if err != nil {

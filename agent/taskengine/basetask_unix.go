@@ -13,6 +13,44 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 )
 
+func (task *Task) detectHomeDirectory() (string, error) {
+	taskLogger := log.GetLogger().WithFields(logrus.Fields{
+		"TaskId": task.taskInfo.TaskId,
+		"Phase":  "Running",
+		"Step": "detectHomeDirectory",
+	})
+
+	if task.taskInfo.Username != "" {
+		specifiedUser, err := user.Lookup(task.taskInfo.Username)
+		if err != nil {
+			return "", fmt.Errorf("%w: Failed to detect home directory of specified user: %s", ErrHomeDirectoryNotAvailable, err.Error())
+		}
+
+		taskLogger.WithFields(logrus.Fields{
+			"homeDirectory": specifiedUser.HomeDir,
+		}).Infoln("Home directory of specified user is available")
+		return specifiedUser.HomeDir, nil
+	} else {
+		var err error
+		userHomeDir, err := os.UserHomeDir()
+		if err == nil {
+			taskLogger.WithFields(logrus.Fields{
+				"HOME": userHomeDir,
+			}).Infof("Detected HOME environment variable")
+			return userHomeDir, nil
+		}
+
+		currentUser, err := user.Current()
+		if err == nil {
+			taskLogger.Infof("Detected home directory of current user %s running agent: %s", currentUser.Username, currentUser.HomeDir)
+			return currentUser.HomeDir, nil
+		}
+
+		taskLogger.WithError(err).Errorln("Failed to obtain home directory of current user running agent")
+		return "", nil
+	}
+}
+
 func (task *Task) detectWorkingDirectory() (string, error) {
 	taskLogger := log.GetLogger().WithFields(logrus.Fields{
 		"TaskId": task.taskInfo.TaskId,
@@ -36,34 +74,24 @@ func (task *Task) detectWorkingDirectory() (string, error) {
 	// 2. When working directory for invocation had not been specified, use home
 	// directory of specified user for invocation instead
 	if task.taskInfo.Username != "" {
-		specifiedUser, err := user.Lookup(task.taskInfo.Username)
-		if err != nil {
-			return "", fmt.Errorf("%w: Failed to use home directory of specified user as working directory for invocation: %s", ErrDefaultWorkingDirectoryNotAvailable, err.Error())
+		if task.envHomeDir == "" {
+			return "", fmt.Errorf("%w: Failed to use home directory of specified user as working directory for invocation", ErrDefaultWorkingDirectoryNotAvailable)
 		}
-		taskLogger.Infof("Detected home directory of specified user %s: %s", specifiedUser.Username, specifiedUser.HomeDir)
 
-		if !util.IsDirectory(specifiedUser.HomeDir) {
-			return "", fmt.Errorf("%w: Failed to use home directory of specified user as working directory for invocation: %s does not exist", ErrDefaultWorkingDirectoryNotAvailable, specifiedUser.HomeDir)
+		taskLogger.Infof("Detected home directory of specified user %s: %s", task.taskInfo.Username, task.envHomeDir)
+		if !util.IsDirectory(task.envHomeDir) {
+			return "", fmt.Errorf("%w: Failed to use home directory of specified user as working directory for invocation: %s does not exist", ErrDefaultWorkingDirectoryNotAvailable, task.envHomeDir)
 		}
 
 		taskLogger.WithFields(logrus.Fields{
-			"workingDirectory": specifiedUser.HomeDir,
+			"workingDirectory": task.envHomeDir,
 		}).Infoln("Home directory of specified user is available and used as working directory for invocation")
-		return specifiedUser.HomeDir, nil
+		return task.envHomeDir, nil
 	}
 
 	// 3. When both working directory and user for invocation had not been
 	// specified, use home directory of current user running agent instead
-	workingDir := ""
-	if userHomeDir, err := os.UserHomeDir(); err == nil {
-		log.GetLogger().Infof("Detected HOME environment variable: %s", userHomeDir)
-		workingDir = userHomeDir
-	} else if currentUser, err := user.Current(); err == nil {
-		taskLogger.Infof("Detected home directory of current user %s running agent: %s", currentUser.Username, currentUser.HomeDir)
-		workingDir = currentUser.HomeDir
-	} else {
-		taskLogger.WithError(err).Errorln("Failed to obtain home directory of current user running agent")
-	}
+	workingDir := task.envHomeDir
 	if workingDir != "" {
 		if util.IsDirectory(workingDir) {
 			taskLogger.WithFields(logrus.Fields{

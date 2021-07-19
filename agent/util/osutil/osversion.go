@@ -30,3 +30,15 @@ func GetVersion() string {
 	machine := string(utsn.Machine[:machineLength])
 	return fmt.Sprintf("%s_%s_%s", sysname, version, machine)
 }
+
+func GetUnameMachine() (string, error) {
+	var utsn unix.Utsname
+	err := unix.Uname(&utsn)
+	if err != nil {
+		return "", err
+	}
+
+	machineLength := bytes.IndexByte(utsn.Machine[:], 0)
+	machine := string(utsn.Machine[:machineLength])
+	return machine, nil
+}

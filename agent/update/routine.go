@@ -224,7 +224,7 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 	// Actions contained in below function may occupy much CPU, so criticalActionRunning
 	// flag is set to indicate perfmon module and would be unset automatically
 	// when function ends.
-	err = func () error {
+	updateScriptPath, err := func () (string, error) {
 		_cpuIntensiveActionRunning.Set()
 		defer _cpuIntensiveActionRunning.Clear()
 
@@ -257,14 +257,14 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 				"downloadedPackagePath": tempSavePath,
 			})
 
-			return err
+			return "", err
 		}
 		log.GetLogger().Infof("Package checksum matched with %s", updateInfo.UpdateInfo.Md5)
 
 		// WARNING: Loose timeout limit: only breaks preparation phase after
 		// action finished
 		if preparationTimedOut(startTime, preparationTimeout) {
-			return ErrPreparationTimeout
+			return "", ErrPreparationTimeout
 		}
 
 		// 4. Remove old versions, only preserving no more than two versions after installation
@@ -278,7 +278,7 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 		// WARNING: Loose timeout limit: only breaks preparation phase after
 		// action finished
 		if preparationTimedOut(startTime, preparationTimeout) {
-			return ErrPreparationTimeout
+			return "", ErrPreparationTimeout
 		}
 
 		// 5. Extract downloaded update package directly to install directory
@@ -294,17 +294,53 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 				"destinationDir": destinationDir,
 			})
 
-			return err
+			return "", err
 		}
 		log.GetLogger().Infof("Package extracted to %s", destinationDir)
 
 		// WARNING: Loose timeout limit: only breaks preparation phase after
 		// action finished
 		if preparationTimedOut(startTime, preparationTimeout) {
-			return ErrPreparationTimeout
+			return "", ErrPreparationTimeout
 		}
 
-		return nil
+		// 6. Extract package version from url of update package
+		// TODO: Extract package version from downloaded package itself, thus remove
+		// dependency on url of update package
+		newVersion, err := ExtractVersionStringFromURL(updateInfo.UpdateInfo.URL)
+		if err != nil {
+			log.GetLogger().WithFields(logrus.Fields{
+				"updateInfo": updateInfo,
+				"packageURL": updateInfo.UpdateInfo.URL,
+			}).WithError(err).Errorln("Failed to extract package version from URL")
+			return "", err
+		}
+
+		// 7. Validate agent executable file format and architecture
+		agentPath := GetAgentPathByVersion(newVersion)
+		if err := ValidateExecutable(agentPath); err != nil {
+			log.GetLogger().WithFields(logrus.Fields{
+				"updateInfo": updateInfo,
+				"packageURL": updateInfo.UpdateInfo.URL,
+			}).WithError(err).Errorln("Invalid agent executable downloaded from responded URL")
+
+			ReportValidateExecutableFailed(err, updateInfo, map[string]interface{}{
+				"packageURL": updateInfo.UpdateInfo.URL,
+				"executablePath": agentPath,
+			})
+
+			return "", err
+		}
+
+		// WARNING: Loose timeout limit: only breaks preparation phase after
+		// action finished
+		if preparationTimedOut(startTime, preparationTimeout) {
+			return "", ErrPreparationTimeout
+		}
+
+		// 8. Construct and return path of update script to be executed
+		updateScriptPath := GetUpdateScriptPathByVersion(newVersion)
+		return updateScriptPath, nil
 	}()
 	if err != nil {
 		return err
@@ -316,18 +352,6 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 		return ErrPreparationTimeout
 	}
 
-	// 6. Prepare path of update script to be executed
-	// TODO: Extract package version from downloaded package itself, thus remove
-	// dependency on url of update package
-	newVersion, err := ExtractVersionStringFromURL(updateInfo.UpdateInfo.URL)
-	if err != nil {
-		log.GetLogger().WithFields(logrus.Fields{
-			"updateInfo": updateInfo,
-			"packageURL": updateInfo.UpdateInfo.URL,
-		}).WithError(err).Errorln("Failed to extract package version from URL")
-		return err
-	}
-	updateScriptPath := GetUpdateScriptPathByVersion(newVersion)
 	log.GetLogger().Infof("Update script of new version is %s", updateScriptPath)
 
 	// Actions contained in below function may occupy much CPU, so
@@ -339,10 +363,8 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 	return func () error {
 		_cpuIntensiveActionRunning.Set()
 		defer _cpuIntensiveActionRunning.Clear()
-		_criticalActionRunning.Set()
-		defer _criticalActionRunning.Clear()
 
-		// 7. Wait for existing tasks to finish
+		// 9. Wait for existing tasks to finish
 		for guardExitLoop := false; !guardExitLoop; {
 			// defer keyword works in function scope, so closure function is neccessary
 			guardExitLoop = func() bool {
@@ -353,7 +375,11 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 					return false
 				}
 
-				// No running tasks: acquire lock to prevent concurrent fetching tasks
+				// No running tasks: set criticalActionRunning indicator to
+				// refuse kick_vm later, and acquire lock to prevent concurrent
+				// fetching tasks
+				_criticalActionRunning.Set()
+				defer _criticalActionRunning.Clear()
 				if !taskengine.FetchingTaskLock.TryLock() {
 					time.Sleep(time.Duration(5) * time.Second)
 					return false

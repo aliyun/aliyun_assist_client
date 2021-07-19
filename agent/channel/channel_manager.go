@@ -193,6 +193,8 @@ type GshellCmd struct {
 type GshellCmdReply struct {
 	Return struct {
 		CmdOutput string `json:"cmd_output"`
+		// netcheck field would not presented when no diagnostic result available
+		Netcheck *NetcheckReply `json:"netcheck,omitempty"`
 		Result    int    `json:"result"`
 	} `json:"return"`
 }
@@ -301,6 +303,7 @@ func OnRecvMsg(Msg string, ChannelType int) string {
 			gshellCmdReply := GshellCmdReply{}
 			gshellCmdReply.Return.Result = 8
 			gshellCmdReply.Return.CmdOutput = "execute kick_vm success"
+			gshellCmdReply.Return.Netcheck = LastNetcheckReply()
 			retStr, _ := json.Marshal(gshellCmdReply)
 			return string(retStr)
 		} else {
@@ -324,11 +327,11 @@ func OnRecvMsg(Msg string, ChannelType int) string {
 				gshellCmdReply := GshellCmdReply{}
 				gshellCmdReply.Return.Result = 8
 				gshellCmdReply.Return.CmdOutput = "execute kick_vm success"
+				gshellCmdReply.Return.Netcheck = LastNetcheckReply()
 				retStr, _ := json.Marshal(gshellCmdReply)
 				return string(retStr)
 			}
 		}
-
 	} else if execute == "guest-shutdown" {
 		gshellShutdown := GshellShutdown{}
 		err := json.Unmarshal([]byte(Msg), &gshellShutdown)

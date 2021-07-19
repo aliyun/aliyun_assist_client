@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"runtime"
 	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
 
+	"github.com/aliyun/aliyun_assist_client/agent/checkvirt"
 	"github.com/aliyun/aliyun_assist_client/agent/flagging"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/timermanager"
@@ -33,22 +35,43 @@ var (
 	// TODO: Centralized manager for timers of essential tasks, then get rid of this
 	_heartbeatTimerInitLock sync.Mutex
 
+	_startTime    time.Time
+	_retryCounter uint16
+	_retryMutex   *sync.Mutex
+
 	_processStartTime int64
 	_heartbeatCounter uint64
+	_winVirtioIsOld   int
 )
 
+func checkWindowsVirtVer() int {
+	if runtime.GOOS != "windows" {
+		return 0
+	}
+	for i := 0; i < 26; i++ {
+		err, old := checkvirt.CheckVirtIoVersion(i)
+		if err == nil && old {
+			return 1
+		}
+	}
+	return 0
+}
+
 func init() {
+	_retryCounter = 0
+	_retryMutex = &sync.Mutex{}
 	_processStartTime = timetool.GetAccurateTime()
 	_heartbeatCounter = 0
+	_winVirtioIsOld = checkWindowsVirtVer()
 }
 
 func buildPingRequest(virtType string, osType string, osVersion string,
-	 appVersion string, uptime uint64, timestamp int64, pid int,
-	 processUptime int64, heartbeatCounter uint64, azoneId string, isColdstart bool) string {
+	appVersion string, uptime uint64, timestamp int64, pid int,
+	processUptime int64, heartbeatCounter uint64, azoneId string, isColdstart bool) string {
 	encodedOsVersion := url.QueryEscape(osVersion)
-	paramChars := fmt.Sprintf("?virt_type=%s&lang=golang&os_type=%s&os_version=%s&app_version=%s&uptime=%d&timestamp=%d&pid=%d&process_uptime=%d&index=%d&az=%s",
+	paramChars := fmt.Sprintf("?virt_type=%s&lang=golang&os_type=%s&os_version=%s&app_version=%s&uptime=%d&timestamp=%d&pid=%d&process_uptime=%d&index=%d&az=%s&virtiover=%d",
 		virtType, osType, encodedOsVersion, appVersion, uptime, timestamp, pid,
-		processUptime, heartbeatCounter, azoneId)
+		processUptime, heartbeatCounter, azoneId, _winVirtioIsOld)
 	// Only first heart-beat need to carry cold-start flag
 	if heartbeatCounter == 0 {
 		paramChars = paramChars + fmt.Sprintf("&cold_start=%t", isColdstart)
@@ -60,9 +83,38 @@ func buildPingRequest(virtType string, osType string, osVersion string,
 func invokePingRequest(requestURL string) (string, error) {
 	err, response := util.HttpGet(requestURL)
 	if err != nil {
+		tmp_err, ok := err.(*util.HttpErrorCode)
+		if !(ok && tmp_err.GetCode() < 500) {
+			_retryMutex.Lock()
+			defer _retryMutex.Unlock()
+			Gap := time.Now().Sub(_startTime)
+			//more than 1h than reset counter and start time.
+			if Gap.Minutes() >= 60 {
+				_retryCounter = 0
+				_startTime = time.Now()
+			}
+			//less than 1h and counter more than 3.
+			if _retryCounter >= 3 {
+				log.GetLogger().WithFields(logrus.Fields{
+					"requestURL": requestURL,
+					"response":   response,
+				}).WithError(err).Errorln("Retry too frequent")
+			} else {
+				//do retry
+				time.Sleep(3 * time.Second)
+				err, response := util.HttpGet(requestURL)
+				_retryCounter++
+				if err == nil {
+					return response, nil
+				}
+				log.GetLogger().WithFields(logrus.Fields{
+					"requestURL": requestURL,
+					"response":   response,
+				}).WithError(err).Errorln("Retry failed")
+			}
+		}
 		return "", err
 	}
-
 	return response, nil
 }
 
@@ -106,7 +158,7 @@ func doPing() error {
 	if !gjson.Valid(res) {
 		log.GetLogger().WithFields(logrus.Fields{
 			"requestURL": url,
-			"response": res,
+			"response":   res,
 		}).Errorln("Invalid json response")
 		return nil
 	}
@@ -116,7 +168,7 @@ func doPing() error {
 	if !nextIntervalField.Exists() {
 		log.GetLogger().WithFields(logrus.Fields{
 			"requestURL": url,
-			"response": res,
+			"response":   res,
 		}).Errorln("nextInterval field not found in json response")
 		return nil
 	}
@@ -124,7 +176,7 @@ func doPing() error {
 	if !ok {
 		log.GetLogger().WithFields(logrus.Fields{
 			"requestURL": url,
-			"response": res,
+			"response":   res,
 		}).Errorln("Invalid nextInterval value in json response")
 		return nil
 	}
@@ -137,7 +189,7 @@ func doPing() error {
 	if !newTasksField.Exists() {
 		log.GetLogger().WithFields(logrus.Fields{
 			"requestURL": url,
-			"response": res,
+			"response":   res,
 		}).Errorln("newTasks field not found in json response")
 		return nil
 	}
@@ -145,7 +197,7 @@ func doPing() error {
 	if !ok {
 		log.GetLogger().WithFields(logrus.Fields{
 			"requestURL": url,
-			"response": res,
+			"response":   res,
 		}).Errorln("Invalid newTasks value in json response")
 		return nil
 	}
@@ -160,12 +212,11 @@ func doPing() error {
 	_heartbeatTimer.RefreshTimer()
 
 	log.GetLogger().WithFields(logrus.Fields{
-		"requestURL": url,
-		"response": res,
+		"requestURL":          url,
+		"response":            res,
 		"nextIntervalSeconds": nextIntervalSeconds,
-		"newTasks": newTasks,
+		"newTasks":            newTasks,
 	}).Infoln("Ping request succeeds")
-	_heartbeatCounter++;
 
 	return nil
 }
@@ -176,12 +227,16 @@ func PingwithRetries(retryCount int) {
 			break
 		}
 	}
+	_heartbeatCounter++
+
 }
 
 func pingWithoutRetry() {
 	// Error(s) encountered during heart-beating has been logged internally,
 	// simply ignore it here.
 	doPing()
+	_heartbeatCounter++
+
 }
 
 func InitHeartbeatTimer() error {

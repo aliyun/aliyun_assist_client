@@ -8,10 +8,12 @@ import (
 
 const (
 	DefaultUnixInstallDir = "/usr/local/share/aliyun-assist"
+	DefaultUnixAgentName = "aliyun-service"
 	DefaultUnixUpdateScript = "update_install"
 	DefaultUnixUpdatorName = "aliyun_assist_update"
 
 	DefaultWindowsInstallDir = "C:\\ProgramData\\aliyun\\assist"
+	DefaultWindowsAgentName = "aliyun_assist_service.exe"
 	DefaultWindowsUpdateScript = "install.bat"
 	DefaultWindowsUpdatorName = "aliyun_assist_update.exe"
 )
@@ -26,6 +28,20 @@ func GetInstallDir() string {
 	}
 
 	return DefaultUnixInstallDir
+}
+
+func GetAgentName() string {
+	if runtime.GOOS == "windows" {
+		return DefaultWindowsAgentName
+	}
+
+	return DefaultUnixAgentName
+}
+
+func GetAgentPathByVersion(version string) string {
+	installDir := GetInstallDir()
+	agentName := GetAgentName()
+	return filepath.Join(installDir, version, agentName)
 }
 
 func GetUpdateScript() string {

@@ -46,6 +46,8 @@ func ParseOption(input string) KickHandle {
 		handle = NewHealthCheckHandle()
 	} else if arrays[1] == "file" {
 		handle = NewFileHandle(arrays[2],arrays[3:])
+	} else if arrays[1] == "status" {
+		handle = NewStatusHandle(arrays[2], arrays[3:])
 	}
 
 	return handle

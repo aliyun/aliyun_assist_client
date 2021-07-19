@@ -42,6 +42,7 @@ const (
 type Task struct {
 	taskInfo    RunTaskInfo
 	realWorkingDir string
+	envHomeDir string
 
 	processer   process.ProcessCmd
 	startTime time.Time
@@ -130,6 +131,7 @@ const (
 )
 
 var (
+	ErrHomeDirectoryNotAvailable = errors.New("HomeDirectoryNotAvailable")
 	ErrWorkingDirectoryNotExist = errors.New("WorkingDirectoryNotExist")
 	ErrDefaultWorkingDirectoryNotAvailable = errors.New("DefaultWorkingDirectoryNotAvailable")
 )
@@ -198,6 +200,13 @@ func (task *Task) PreCheck(reportVerified bool) error {
 		wrapErr := fmt.Errorf("Invalid command content: decode error: %w", err)
 		taskLogger.Errorln("CommandContentInvalid", wrapErr.Error())
 		return wrapErr
+	}
+
+	envHomeDir, err := task.detectHomeDirectory()
+	if err != nil {
+		taskLogger.WithError(err).Warningln("Invalid HOME directory for invocation")
+	} else {
+		task.envHomeDir = envHomeDir
 	}
 
 	realWorkingDir, err := task.detectWorkingDirectory()
@@ -382,6 +391,10 @@ func (task *Task) Run() error {
 	}
 	if len(task.taskInfo.Password) > 0 {
 		task.processer.SetPasswordInfo(task.taskInfo.Password)
+	}
+	// Fix $HOME environment variable undex *nix
+	if task.envHomeDir != "" {
+		task.processer.SetHomeDir(task.envHomeDir)
 	}
 
 	task.exit_code, status, err = task.processer.SyncRun(task.realWorkingDir,

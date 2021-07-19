@@ -47,6 +47,14 @@ func ReportExtractPackageFailed(err error, updateInfo *UpdateCheckResp, failureC
 	})
 }
 
+func ReportValidateExecutableFailed(err error, updateInfo *UpdateCheckResp, failureContext map[string]interface{}) {
+	clientreport.ReportUpdateFailure("ValidateExecutableFailed", clientreport.UpdateFailure{
+		UpdateInfo: updateInfo,
+		FailureContext: failureContext,
+		ErrorMessage: err.Error(),
+	})
+}
+
 func ReportExecuteUpdateScriptRunnerTimeout(err error, updateInfo *UpdateCheckResp, failureContext map[string]interface{}) {
 	reportExecutingFailure("ExecuteUpdateScriptRunnerTimeout", err, updateInfo, failureContext)
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/jarcoal/httpmock"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/agent/util/networkcategory"
 )
 
 const (
@@ -177,12 +178,22 @@ func initRegionId() error {
 		regionId := getRegionIdInHybrid()
 		if regionId != "" {
 			g_regionId = regionId
+
+			// Since region id is determined via hybrid cloud-related function,
+			// network category is set to NetworkHybrid
+			networkcategory.Set(networkcategory.NetworkHybrid)
+
 			return nil
 		}
 		// Retrieve region ID from meta server in VPC network
 		err, regionId = getRegionIdInVpc()
 		if err == nil {
 			g_regionId = regionId
+
+			// Since region id is determined via VPC-related functions, network
+			// category is set to NetworkVPC
+			networkcategory.Set(networkcategory.NetworkVPC)
+
 			return nil
 		}
 
@@ -193,6 +204,10 @@ func initRegionId() error {
 		// Else, retrieve region ID by polling preset servers
 		log.GetLogger().Infoln("Poll region id for instance in classic network")
 		g_regionId = pollingRegionId()
+
+		// Since region id is determined via classic network-related function,
+		// network category is set to NetworkClassic
+		networkcategory.Set(networkcategory.NetworkClassic)
 	}
 	return nil
 }
@@ -216,6 +231,11 @@ func getDomainbyMetaServer() string {
 		}
 
 		g_domainId := domain[8:]
+
+		// Since axt server domain is directly retrieved from metaserver, network
+		// category is set to NetworkWithMetaserver
+		networkcategory.Set(networkcategory.NetworkWithMetaserver)
+
 		return g_domainId
 	}
 

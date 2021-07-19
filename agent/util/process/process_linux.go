@@ -1,10 +1,11 @@
 package process
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"syscall"
-     "fmt"
+
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 )
 
@@ -21,6 +22,22 @@ func (p *ProcessCmd) prepareProcess() error {
 			Pgid: 0,
 		}
 	}
+
+	// Fix environment variable $HOME
+	var env []string
+	// 1. Duplicate current environment variable settings as base
+	if p.command.Env == nil || len(p.command.Env) == 0 {
+		env = os.Environ()
+	} else {
+		env = p.command.Env
+	}
+	// 2. Append correct $HOME environment variable value
+	if p.homeDir != "" {
+		homeEnv := fmt.Sprintf("HOME=%s", p.homeDir)
+		env = append(env, homeEnv)
+	}
+
+	p.command.Env = env
 
 	return nil
 }
@@ -116,10 +133,6 @@ func (p *ProcessCmd)  addCredential () error {
 	}
 	p.command.SysProcAttr.Credential = &syscall.Credential{Uid: uid, Gid: gid, Groups: groups, NoSetGroups: false}
 
-	// Setting home environment variable for RunAs user
-	runAsUserHomeEnvVariable := "HOME=/home/" + p.user_name
-	p.command.Env = append(p.command.Env, runAsUserHomeEnvVariable)
-
 	return nil
 }
 
@@ -130,4 +143,3 @@ func (p *ProcessCmd)  removeCredential () error {
 func IsUserValid (userName string, password string) error {
 	return nil
 }
-

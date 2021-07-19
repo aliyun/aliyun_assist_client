@@ -2,16 +2,19 @@ package shell
 
 import (
 	"encoding/json"
-	"github.com/aliyun/aliyun_assist_client/agent/log"
-	"github.com/aliyun/aliyun_assist_client/agent/session/message"
-	"github.com/aliyun/aliyun_assist_client/agent/util/process"
-	"github.com/aliyun/aliyun_assist_client/agent/session/channel"
-	"os/exec"
 	"fmt"
 	"os"
-	"github.com/creack/pty"
+	"os/exec"
+	"os/user"
 	"strings"
 	"syscall"
+
+	"github.com/creack/pty"
+
+	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/agent/session/channel"
+	"github.com/aliyun/aliyun_assist_client/agent/session/message"
+	"github.com/aliyun/aliyun_assist_client/agent/util/process"
 )
 
 type ShellPlugin struct {
@@ -70,7 +73,12 @@ func StartPty(plugin *ShellPlugin)( err error) {
 	plugin.cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uid, Gid: gid, Groups: groups, NoSetGroups: false}
 
 	// Setting home environment variable for RunAs user
-	runAsUserHomeEnvVariable := homeEnvVariable + default_user
+	userInfo, err := user.Lookup(default_user)
+	if err != nil {
+		return err
+	}
+	log.GetLogger().Infof("Home directory of user `%s`: %s", default_user, userInfo.HomeDir)
+	runAsUserHomeEnvVariable := fmt.Sprintf("HOME=%s", userInfo.HomeDir)
 	plugin.cmd.Env = append(plugin.cmd.Env, runAsUserHomeEnvVariable)
 
 	ptyFile, err := pty.Start(plugin.cmd)
