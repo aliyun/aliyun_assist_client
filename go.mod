@@ -26,7 +26,7 @@ require (
 	github.com/sirupsen/logrus v1.8.1
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.7.0
-	github.com/tidwall/gjson v1.7.5
+	github.com/tidwall/gjson v1.9.3
 	github.com/tklauser/go-sysconf v0.3.5 // indirect
 	github.com/viney-shih/go-lock v1.0.1
 	golang.org/x/net v0.0.0-20210505214959-0714010a04ed
