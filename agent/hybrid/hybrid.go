@@ -99,7 +99,12 @@ func Register(region string, code string, id string, name string, need_restart b
 	var register_response registerResponse
 	if err := json.Unmarshal([]byte(response), &register_response); err == nil {
 		if register_response.Code == 200 {
-			path, _ := util.GetHybridPath()
+			var path string
+			if util.IsSelfHosted() {
+				path, _ = util.GetSelfhostedPath()
+			} else {
+				path, _ = util.GetHybridPath()
+			}
 			util.WriteStringToFile(path+"/pub-key", pub.String())
 			util.WriteStringToFile(path+"/pri-key", pri.String())
 			util.WriteStringToFile(path+"/region-id", region)

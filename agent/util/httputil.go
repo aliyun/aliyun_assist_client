@@ -119,7 +119,7 @@ func HttpGetWithTimeout(url string, timeout time.Duration, noLog bool) (error, s
 		RootCAs: CaCertPool,
 	})
 
-	if IsHybrid() {
+	if IsHybrid() || IsSelfHosted() {
 		addHttpHeads(req)
 	}
 
@@ -158,7 +158,12 @@ func addHttpHeads(req *HttpRequest.Request) {
 	str_timestamp := strconv.FormatInt(timestamp, 10)
 
 	var instance_id string
-	path, _ := GetHybridPath()
+	var path string
+	if IsSelfHosted() {
+		path, _ = GetSelfhostedPath()
+	} else {
+		path, _ = GetHybridPath()
+	}
 
 	content, _ := ioutil.ReadFile(path + "/instance-id")
 	instance_id = string(content)
@@ -207,7 +212,7 @@ func HttpPostWithTimeout(url string, data string, contentType string, timeout ti
 		UserAgentHeader: UserAgentValue,
 	})
 	//excude Hybrid instance id
-	if IsHybrid() {
+	if IsHybrid() || IsSelfHosted() {
 		addHttpHeads(req)
 	} else {
 		instance_id := GetInstanceId()
