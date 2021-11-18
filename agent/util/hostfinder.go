@@ -154,7 +154,7 @@ func IsHybrid() bool {
 }
 
 func IsSelfHosted() bool {
-	return true
+	return os.Getenv("ALIYUN_ASSIST_SERVER_HOST") > 0
 }
 
 func getRegionIdInFile() string {
@@ -268,7 +268,7 @@ func GetServerHost() string {
 		return g_domainId
 	}
 	if IsSelfHosted() {
-		return os.Getenv("SERVER_HOST")
+		return os.Getenv("ALIYUN_ASSIST_SERVER_HOST")
 	}
 	regionId := GetRegionId()
 	if regionId != "" {

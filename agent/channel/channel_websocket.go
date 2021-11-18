@@ -52,7 +52,7 @@ func (c *WebSocketChannel) StartChannel() error {
 		util.UserAgentHeader: []string{util.UserAgentValue},
 	}
 
-	if util.IsHybrid() {
+	if util.IsHybrid() || util.IsSelfHosted() {
 		u4 := uuid.New()
 		str_request_id := u4.String()
 
@@ -84,7 +84,7 @@ func (c *WebSocketChannel) StartChannel() error {
 	}
 
 	var MyDialer = &websocket.Dialer{
-		Proxy: util.GetProxyFunc(),
+		Proxy:            util.GetProxyFunc(),
 		HandshakeTimeout: 45 * time.Second,
 		TLSClientConfig: &tls.Config{
 			RootCAs: util.CaCertPool,
