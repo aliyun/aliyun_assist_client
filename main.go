@@ -7,6 +7,9 @@ import (
 	"runtime/debug"
 	"time"
 
+	"github.com/aliyun/aliyun_assist_client/agent/checkvirt"
+	"github.com/aliyun/aliyun_assist_client/agent/pluginmanager"
+
 	"github.com/spf13/pflag"
 
 	"github.com/aliyun/aliyun_assist_client/thirdparty/service"
@@ -19,6 +22,7 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/hybrid"
 	"github.com/aliyun/aliyun_assist_client/agent/install"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	"github.com/aliyun/aliyun_assist_client/agent/perfmon"
 	"github.com/aliyun/aliyun_assist_client/agent/statemanager"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine"
@@ -26,6 +30,7 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/update"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/util/daemon"
+	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/wrapgo"
 	"github.com/aliyun/aliyun_assist_client/agent/version"
 )
@@ -39,7 +44,7 @@ var SingleAppLock *single.Single
 
 var (
 	gitHash   string
-	assistVer string = "10.0.0.1"
+	assistVer string = "10.10.10.10000"
 )
 
 type program struct{}
@@ -112,7 +117,7 @@ func (p *program) run() {
 	// be considered as the whole timeout toleration minus minimum sleeping time
 	// for safe updating (5s) minus normal execution time of updating script
 	// (usually less than 5s), e.g., 50s - 5s - 5s = 40s.
-	if err := update.SafeBootstrapUpdate(time.Duration(40) * time.Second, time.Duration(30) * time.Second); err != nil {
+	if err := update.SafeBootstrapUpdate(time.Duration(40)*time.Second, time.Duration(30)*time.Second); err != nil {
 		log.GetLogger().Errorln("Failed to check update when starting: " + err.Error())
 		// Failed to update at starting phase would not terminate agent
 		// return
@@ -125,6 +130,9 @@ func (p *program) run() {
 
 	if err := update.InitCheckUpdateTimer(); err != nil {
 		log.GetLogger().Fatalln("Failed to initialize update checker: " + err.Error())
+		metrics.GetUpdateFailedEvent(
+			"errormsg", fmt.Sprintf("InitCheckUpdateTimer error: %s", err.Error()),
+		).ReportEvent()
 		return
 	}
 
@@ -143,21 +151,40 @@ func (p *program) run() {
 		log.GetLogger().Errorln("Failed to initialize statemanager: " + err.Error())
 	}
 
+	if succ := pluginmanager.InitPluginCheckTimer(); succ == false {
+		log.GetLogger().Errorln("plugin check timer fail")
+	}
+
 	// Finally, fetching tasks could be allowed and agent starts to run normally.
 	taskengine.EnableFetchingTask()
 	log.GetLogger().Infoln("Started successfully")
 	// And also log to stdout, which would be written to systemd-journal as well
 	// as console via systemd
 	fmt.Println("Started successfully")
-
+	err := checkvirt.StartVirtIoVersionReport()
+	if err != nil {
+		log.GetLogger().Errorln("Failed to StartVirtIoVersionReport: " + err.Error())
+	} else {
+		log.GetLogger().Infoln("Start StartVirtIoVersionReport success")
+	}
 	// Periodic tasks are retrieved only once at startup
 	wrapgo.GoWithDefaultPanicHandler(func() {
 		isColdstart, err := flagging.IsColdstart()
 		if err != nil {
 			log.GetLogger().WithError(err).Errorln("Error encountered when detecting cold-start flag")
+		} else {
+			startType := "not cold start"
+			if isColdstart {
+				startType = "cold start"
+			}
+			metrics.GetBaseStartupEvent(
+				"type", startType,
+				"osName", osutil.GetVersion(),
+			).ReportEvent()
 		}
 
-		taskengine.Fetch(false, "", taskengine.NormalTaskType, isColdstart)	})
+		taskengine.Fetch(false, "", taskengine.NormalTaskType, isColdstart)
+	})
 
 	time.Sleep(time.Duration(3*60) * time.Second)
 	log.GetLogger().Infoln("Start PerfMon ......")
@@ -192,8 +219,8 @@ type Options struct {
 	InstanceName   string
 	RunAsCommon    bool
 	RunAsDaemon    bool
-    LogPath   string
-    IsVerbose     bool
+	LogPath        string
+	IsVerbose      bool
 }
 
 func parseOptions() Options {

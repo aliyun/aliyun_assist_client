@@ -181,6 +181,13 @@ func (p *ProcessCmd)  SyncRun(
 	return exitCode, status, err
 }
 
+func (p *ProcessCmd) Pid() int {
+	if p.command == nil || p.command.Process == nil{
+		return -1
+	}
+	return p.command.Process.Pid
+}
+
 func GetUserCredentials(sessionUser string) (uint32, uint32, []uint32, error) {
 	uidCmdArgs := append([]string{"-c"}, fmt.Sprintf("id -u %s", sessionUser))
 	cmd := exec.Command("sh", uidCmdArgs...)

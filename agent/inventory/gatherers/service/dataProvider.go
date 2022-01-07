@@ -102,7 +102,7 @@ func collectServiceData(config model.Config) (data []model.ServiceData, err erro
 	err = collectDataFromPowerShell(serviceInfoScript, &data)
 	if err != nil {
 		log.GetLogger().WithError(err).Error("collect service failed")
-		return []model.ServiceData{}, err
+		return
 	}
-	return
+	return []model.ServiceData{}, err
 }

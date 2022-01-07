@@ -36,7 +36,7 @@ const (
 
 type Message struct {
 	MessageType    uint32
-	SchemaVersion  uint32
+	SchemaVersion  string
 	SessionId    string
 	CreatedDate    uint64
 	SequenceNumber int64
@@ -51,7 +51,7 @@ func (message *Message) Deserialize(input []byte) (err error) {
 		log.GetLogger().Errorf("Could not deserialize field MessageType with error: %v", err)
 		return err
 	}
-	message.SchemaVersion, err = getUInteger(input, AgentMessage_SchemaVersionOffset)
+	message.SchemaVersion, err = getString(input, AgentMessage_SchemaVersionOffset, AgentMessage_SchemaVersionLength)
 	if err != nil {
 		log.GetLogger().Errorf("Could not deserialize field SchemaVersion with error: %v", err)
 		return err
@@ -150,13 +150,15 @@ func (message *Message) Serialize() (result []byte, err error) {
 		return make([]byte, 1), err
 	}
 
-	if err = putUInteger(result, AgentMessage_SchemaVersionOffset, message.SchemaVersion); err != nil {
-		log.GetLogger().Errorf("Could not serialize SchemaVersion with error: %v", err)
+	startPosition := AgentMessage_SchemaVersionOffset
+	endPosition := AgentMessage_SchemaVersionOffset + AgentMessage_SchemaVersionLength - 1
+	if err = putString(result, startPosition, endPosition, message.SchemaVersion); err != nil {
+		log.GetLogger().Errorf("Could not serialize version with error: %v", err)
 		return make([]byte, 1), err
 	}
 
-	startPosition := AgentMessage_SessionIdOffset
-	endPosition := AgentMessage_SessionIdOffset + AgentMessage_SessionIdLength - 1
+	startPosition = AgentMessage_SessionIdOffset
+	endPosition = AgentMessage_SessionIdOffset + AgentMessage_SessionIdLength - 1
 	if err = putString(result, startPosition, endPosition, message.SessionId); err != nil {
 		log.GetLogger().Errorf("Could not serialize SessionId with error: %v", err)
 		return make([]byte, 1), err

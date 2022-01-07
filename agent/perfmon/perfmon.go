@@ -8,6 +8,7 @@ import (
 
 	"github.com/aliyun/aliyun_assist_client/agent/clientreport"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	"github.com/aliyun/aliyun_assist_client/agent/statemanager"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine"
 	"github.com/aliyun/aliyun_assist_client/agent/update"
@@ -113,12 +114,20 @@ func StartSelfKillMon() {
 			return
 		}
 		if cpuUsage >= CPU_LIMIT && bCollectCpuLoadByAgent {
+			metrics.GetCpuOverloadEvent(
+				"cpu", fmt.Sprintf("%.2f", cpuUsage),
+				"info", fmt.Sprintf("CPU Overload... CPU=%.2f", cpuUsage),
+			).ReportEvent()
 			log.GetLogger().Infoln("CPU Overload... CPU=", cpuUsage)
 			cpu_overload_count += 1
 		} else {
 			cpu_overload_count = 0
 		}
 		if memory >= MEM_LIMIT {
+			metrics.GetMemOverloadEvent(
+				"mem", fmt.Sprintf("%d", memory),
+				"info", fmt.Sprintf("Memory Overload... MEM=%d", memory),
+			).ReportEvent()
 			log.GetLogger().Infoln("Memory Overload... MEM=", memory)
 			mem_overload_count += 1
 		} else {
@@ -134,6 +143,11 @@ func StartSelfKillMon() {
 					err, cpuByTop := GetAgentCpuLoadWithTop(1)
 					if err == nil && cpuByTop >= CPU_LIMIT {
 						//top命令采集的cpu信息和agent一致
+						metrics.GetCpuOverloadEvent(
+							"cpu", fmt.Sprintf("%.2f", cpuByTop),
+							"info", fmt.Sprintf("CPU Overload by top... CPU=%.2f", cpuByTop),
+						).ReportEvent()
+
 						log.GetLogger().Infoln("CPU Overload by top... CPU=", cpuByTop)
 						err = InitCgroup()
 						if err == nil {

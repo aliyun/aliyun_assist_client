@@ -17,11 +17,7 @@ func GetRoleName() (string, error) {
 }
 
 func GetSecretParam(name string) (string, error) {
-	err, region := getRegionIdInVpc()
-	if err != nil {
-		return "", errors.New("RegionIdFailed")
-	}
-
+	region := GetRegionId()
 	roleName, err := GetRoleName()
 	if err != nil {
 		log.GetLogger().Errorln("GetRoleName failed ", "error:", err.Error())
@@ -51,11 +47,7 @@ func GetSecretParam(name string) (string, error) {
 }
 
 func GetParam(name string) (string, error) {
-	err, region := getRegionIdInVpc()
-	if err != nil {
-		return "", errors.New("RegionIdFailed")
-	}
-
+	region := GetRegionId()
 	roleName, err := GetRoleName()
 	if err != nil {
 		log.GetLogger().Errorln("GetRoleName failed ", "error:", err.Error())

@@ -21,6 +21,12 @@ func GetInvalidTaskService() string {
 	return url
 }
 
+func GetMetricsService() string {
+	url := "https://" + GetServerHost()
+	url += "/luban/api/metrics"
+	return url
+}
+
 func GetFetchTaskListService() string {
 	url := "https://" + GetServerHost()
 	url += "/luban/api/v1/task/list"
@@ -90,6 +96,18 @@ func GetGshellCheckService() string {
 func GetPluginListService() string {
 	url := "https://" + GetServerHost()
 	url += "/luban/api/v1/plugin/list"
+	return url
+}
+
+func GetPluginHealthService() string {
+	url := "https://" + GetServerHost()
+	url += "/luban/api/v1/plugin/status"
+	return url
+}
+
+func GetPluginUpdateCheckService() string {
+	url := "https://" + GetServerHost()
+	url += "/luban/api/v1/plugin/update_check"
 	return url
 }
 

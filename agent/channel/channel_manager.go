@@ -15,6 +15,7 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/hybrid"
 	"github.com/aliyun/aliyun_assist_client/agent/kickvmhandle"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine"
 	"github.com/aliyun/aliyun_assist_client/agent/update"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
@@ -103,6 +104,11 @@ func (m *ChannelMgr) Init(CallBack OnReceiveMsg) error {
 							Info:       fmt.Sprintf("fail:" + err.Error()),
 						}
 					}
+					metrics.GetChannelSwitchEvent(
+						"type", ChannelTypeStr(m.GetCurrentChannelType()),
+						"reportType", report.ReportType,
+						"info", report.Info,
+					).ReportEvent()
 					clientreport.SendReport(report)
 				}
 			}
@@ -116,6 +122,8 @@ func (m *ChannelMgr) Init(CallBack OnReceiveMsg) error {
 			if e := item.StartChannel(); e == nil {
 				m.ActiveChannel = item
 				return nil
+			} else {
+				fmt.Println(e.Error())
 			}
 		}
 	}
@@ -162,7 +170,13 @@ func TryStartGshellChannel() {
 }
 
 func StartChannelMgr() {
-	InitChannelMgr(OnRecvMsg)
+	if err := InitChannelMgr(OnRecvMsg); err != nil {
+		metrics.GetChannelFailEvent(
+			metrics.EVENT_SUBCATEGORY_CHANNEL_MGR,
+			"type", "channelmgr",
+			"errormsg", err.Error(),
+		).ReportEvent()
+	}
 }
 
 type GshellInvalid struct {
@@ -246,9 +260,6 @@ func OnRecvMsg(Msg string, ChannelType int) string {
 			return "accept:" + Msg
 		} else if strings.Contains(Msg, "kick_vm agent deregister") {
 			hybrid.UnRegister(true)
-		} else if Msg == "kick_vm start_session debug" {
-			// for debug.
-			taskengine.DoDebugSessionTask()
 		}
 
 		handle := kickvmhandle.ParseOption(Msg)

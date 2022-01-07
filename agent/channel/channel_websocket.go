@@ -16,6 +16,7 @@ import (
 
 	"github.com/aliyun/aliyun_assist_client/agent/clientreport"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/util/timetool"
 )
@@ -27,11 +28,17 @@ type WebSocketChannel struct {
 	*Channel
 	wskConn *websocket.Conn
 	lock    sync.Mutex
+	writeLock    sync.Mutex
 }
 
 func (c *WebSocketChannel) IsSupported() bool {
 	host := util.GetServerHost()
 	if host == "" {
+		metrics.GetChannelFailEvent(
+			metrics.EVENT_SUBCATEGORY_CHANNEL_WS,
+			"errormsg", "websocket channel not supported",
+			"type", ChannelTypeStr(c.ChannelType),
+		).ReportEvent()
 		log.GetLogger().Error("websocket channel not supported")
 		return false
 	}
@@ -41,8 +48,20 @@ func (c *WebSocketChannel) IsSupported() bool {
 func (c *WebSocketChannel) StartChannel() error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+	errmsg := ""
+	defer func() {
+		if len(errmsg) > 0 {
+			metrics.GetChannelFailEvent(
+				metrics.EVENT_SUBCATEGORY_CHANNEL_WS,
+				"errmsg", errmsg,
+				"type", ChannelTypeStr(c.ChannelType),
+			).ReportEvent()
+		}
+	}()
+
 	host := util.GetServerHost()
 	if host == "" {
+		errmsg = "No available host"
 		return errors.New("No available host")
 	}
 
@@ -93,6 +112,7 @@ func (c *WebSocketChannel) StartChannel() error {
 	conn, _, err := MyDialer.Dial(url, header)
 	log.GetLogger().Infoln(url)
 	if err != nil {
+		errmsg = fmt.Sprintf("dial ws channel errror:%s, url=%s", err.Error(), url)
 		log.GetLogger().Errorln(err)
 		return err
 	}
@@ -103,8 +123,8 @@ func (c *WebSocketChannel) StartChannel() error {
 	go func() {
 		defer func() {
 			if msg := recover(); msg != nil {
-				log.GetLogger().Errorln("WebsocketChannel  run panic: %v", msg)
-				log.GetLogger().Errorln("%s: %s", msg, debug.Stack())
+				log.GetLogger().Errorf("WebsocketChannel  run panic: %v", msg)
+				log.GetLogger().Errorf("%s: %s", msg, debug.Stack())
 			}
 		}()
 		retryCount := 0
@@ -122,7 +142,7 @@ func (c *WebSocketChannel) StartChannel() error {
 					defer c.lock.Unlock()
 					c.wskConn.Close()
 					c.Working = false
-					log.GetLogger().Errorln("Reach the retry limit for receive messages. Error: %v", err.Error())
+					log.GetLogger().Errorf("Reach the retry limit for receive messages. Error: %v", err.Error())
 					report := clientreport.ClientReport{
 						ReportType: "switch_channel_in_wsk",
 						Info:       fmt.Sprintf("start:" + err.Error()),
@@ -131,20 +151,29 @@ func (c *WebSocketChannel) StartChannel() error {
 					go c.SwitchChannel()
 					break
 				}
-				log.GetLogger().Errorln(
+				log.GetLogger().Errorf(
 					"An error happened when receiving the message. Retried times: %d, MessageType: %v, Error: %s",
 					retryCount,
 					messageType,
 					err.Error())
 			} else if messageType != websocket.TextMessage && messageType != websocket.BinaryMessage {
-				log.GetLogger().Errorln("Invalid message type %d. ", messageType)
+				log.GetLogger().Errorf("Invalid message type %d. ", messageType)
 
 			} else {
-				log.GetLogger().Infoln("wsk recv: %s", string(message))
+				log.GetLogger().Infof("wsk recv: %s", string(message))
 
 				content := c.CallBack(string(message), ChannelWebsocketType)
 				if content != "" {
-					c.wskConn.WriteMessage(websocket.TextMessage, []byte(content))
+					c.writeLock.Lock()
+					err := c.wskConn.WriteMessage(websocket.TextMessage, []byte(content))
+					c.writeLock.Unlock()
+					if err != nil {
+						metrics.GetChannelFailEvent(
+							metrics.EVENT_SUBCATEGORY_CHANNEL_WS,
+							"errormsg", fmt.Sprintf("websocket writing err:%s, content=%s", err.Error(), content),
+							"type", ChannelTypeStr(c.ChannelType),
+						).ReportEvent()
+					}
 				}
 
 				retryCount = 0
@@ -158,6 +187,12 @@ func (c *WebSocketChannel) SwitchChannel() error {
 	time.Sleep(time.Duration(1) * time.Second)
 	for i := 0; i < 5; i++ {
 		if G_ChannelMgr.SelectAvailableChannel(ChannelNone) == nil {
+			metrics.GetChannelSwitchEvent(
+				"type", ChannelTypeStr(G_ChannelMgr.GetCurrentChannelType()),
+				"reportType", "switch_channel_in_wsk",
+				"info", fmt.Sprintf("success: Current channel is %d", G_ChannelMgr.GetCurrentChannelType()),
+			).ReportEvent()
+
 			report := clientreport.ClientReport{
 				ReportType: "switch_channel_in_wsk",
 				Info:       fmt.Sprintf("success: Current channel is %d", G_ChannelMgr.GetCurrentChannelType()),
@@ -167,6 +202,12 @@ func (c *WebSocketChannel) SwitchChannel() error {
 		}
 		time.Sleep(time.Duration(5) * time.Second)
 	}
+	metrics.GetChannelSwitchEvent(
+		"type", ChannelTypeStr(G_ChannelMgr.GetCurrentChannelType()),
+		"reportType", "switch_channel_in_wsk",
+		"info", fmt.Sprintf("fail: no available channel"),
+	).ReportEvent()
+	
 	report := clientreport.ClientReport{
 		ReportType: "switch_channel_in_wsk",
 		Info:       fmt.Sprintf("fail: no available channel"),
@@ -183,6 +224,11 @@ func (c *WebSocketChannel) StopChannel() error {
 		log.GetLogger().Println("close websocket channel")
 		err := c.wskConn.Close()
 		if err != nil {
+			metrics.GetChannelFailEvent(
+				metrics.EVENT_SUBCATEGORY_CHANNEL_WS,
+				"errormsg", fmt.Sprintf("close websocket channel error:%s", err),
+				"type", ChannelTypeStr(c.ChannelType),
+			).ReportEvent()
 			log.GetLogger().Println("close websocket channel error:", err)
 		}
 	}
@@ -197,11 +243,16 @@ func (c *WebSocketChannel) StartPings(pingInterval time.Duration) {
 				return
 			}
 			log.GetLogger().Infoln("WebsocketChannel: ping...")
-			c.lock.Lock()
+			c.writeLock.Lock()
 			err := c.wskConn.WriteMessage(websocket.PingMessage, []byte("keepalive"))
-			c.lock.Unlock()
+			c.writeLock.Unlock()
 			if err != nil {
-				log.GetLogger().Errorln("Error while sending websocket ping: %v", err)
+				metrics.GetChannelFailEvent(
+					metrics.EVENT_SUBCATEGORY_CHANNEL_WS,
+					"errormsg", fmt.Sprintf("Error while sending websocket ping: %s", err.Error()),
+					"type", ChannelTypeStr(c.ChannelType),
+				).ReportEvent()
+				log.GetLogger().Errorf("Error while sending websocket ping: %v", err)
 				return
 			}
 			time.Sleep(pingInterval)

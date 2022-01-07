@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"os"
 	"runtime"
 	"strconv"
 	"strings"
@@ -32,29 +33,30 @@ const (
 )
 
 type RunTaskRepeatType string
+
 const (
-	RunTaskOnce RunTaskRepeatType = "Once"
-	RunTaskPeriod RunTaskRepeatType = "Period"
+	RunTaskOnce           RunTaskRepeatType = "Once"
+	RunTaskPeriod         RunTaskRepeatType = "Period"
 	RunTaskNextRebootOnly RunTaskRepeatType = "NextRebootOnly"
-	RunTaskEveryReboot RunTaskRepeatType = "EveryReboot"
+	RunTaskEveryReboot    RunTaskRepeatType = "EveryReboot"
 )
 
 type Task struct {
-	taskInfo    RunTaskInfo
+	taskInfo       RunTaskInfo
 	realWorkingDir string
-	envHomeDir string
+	envHomeDir     string
 
-	processer   process.ProcessCmd
-	startTime time.Time
-	endTime time.Time
-	monotonicStartTimestamp   int64
-	monotonicEndTimestamp     int64
-	exit_code   int
-	canceled    bool
-	droped      int
-	cancelMut   sync.Mutex
-	output      bytes.Buffer
-	data_sended uint32
+	processer               process.ProcessCmd
+	startTime               time.Time
+	endTime                 time.Time
+	monotonicStartTimestamp int64
+	monotonicEndTimestamp   int64
+	exit_code               int
+	canceled                bool
+	droped                  int
+	cancelMut               sync.Mutex
+	output                  bytes.Buffer
+	data_sended             uint32
 }
 
 func NewTask(taskInfo RunTaskInfo) *Task {
@@ -102,11 +104,12 @@ type SendFileTaskInfo struct {
 }
 
 type SessionTaskInfo struct {
-	CmdContent     string `json:"cmdContent"`
-	Username string `json:"username"`
-	Password    string `json:"windowsPasswordName"`
-	SessionId   string `json:"channelId"`
-	WebsocketUrl   string `json:"websocketUrl"`
+	CmdContent   string `json:"cmdContent"`
+	Username     string `json:"username"`
+	Password     string `json:"windowsPasswordName"`
+	SessionId    string `json:"channelId"`
+	WebsocketUrl string `json:"websocketUrl"`
+	PortNumber  string `json:"portNumber"`
 }
 
 type OutputInfo struct {
@@ -131,8 +134,8 @@ const (
 )
 
 var (
-	ErrHomeDirectoryNotAvailable = errors.New("HomeDirectoryNotAvailable")
-	ErrWorkingDirectoryNotExist = errors.New("WorkingDirectoryNotExist")
+	ErrHomeDirectoryNotAvailable           = errors.New("HomeDirectoryNotAvailable")
+	ErrWorkingDirectoryNotExist            = errors.New("WorkingDirectoryNotExist")
 	ErrDefaultWorkingDirectoryNotAvailable = errors.New("DefaultWorkingDirectoryNotAvailable")
 )
 
@@ -229,9 +232,9 @@ func (task *Task) PreCheck(reportVerified bool) error {
 	return nil
 }
 
-func (task *Task) Run() error {
+func (task *Task) Run() (presetWrapErrorCode, error) {
 	if err := task.PreCheck(false); err != nil {
-		return err
+		return 0, err
 	}
 
 	// Reuse specified logger across whole task running phase
@@ -247,7 +250,7 @@ func (task *Task) Run() error {
 	if fileName, err = util.GetScriptPath(); err != nil {
 		taskLogger.WithError(err).Errorln("script path is error")
 		task.SendError("", wrapErrGetScriptPathFailed, err.Error())
-		return err
+		return wrapErrGetScriptPathFailed, err
 	}
 
 	cmdType := task.taskInfo.CommandType
@@ -265,22 +268,25 @@ func (task *Task) Run() error {
 	} else {
 		taskLogger.Errorln("unkwown command type")
 		task.SendError("", wrapErrUnknownCommandType, "unkwown command type")
-		return errors.New("unkwown command type")
+		return wrapErrUnknownCommandType, errors.New("unkwown command type")
 	}
 	fileName = fileName + "/" + task.taskInfo.TaskId + cmdTypeName
 
 	decodeBytes, err := base64.StdEncoding.DecodeString(task.taskInfo.Content)
 	if err != nil {
 		task.SendError("", wrapErrBase64DecodeFailed, err.Error())
-		return errors.New("decode error")
+		return wrapErrBase64DecodeFailed, errors.New("decode error")
 	}
-
+	ScriptToDelete := ""
 	content := string(decodeBytes)
 	if task.taskInfo.EnableParameter {
+		if strings.Contains(content, "oos-secret") {
+			ScriptToDelete = fileName
+		}
 		content, err = util.ReplaceAllParameterStore(content)
 		if err != nil {
 			task.SendInvalidTask(err.Error(), "")
-			return errors.New("ReplaceAllParameterStore error")
+			return 0, errors.New("ReplaceAllParameterStore error")
 		}
 	}
 	if cmdType == "RunBatScript" {
@@ -303,7 +309,7 @@ func (task *Task) Run() error {
 			// NOTE: Due to some utility functions, report error message may not
 			// be so precise as expected.
 			task.SendError("", wrapErrSaveScriptFileFailed, wrapErr.Error())
-			return wrapErr
+			return wrapErrSaveScriptFileFailed, wrapErr
 		}
 	}
 
@@ -350,8 +356,8 @@ func (task *Task) Run() error {
 	// to replace dangerous state tranfering operation with straightforward
 	// message passing action.
 	ctx, stopSendRunning := context.WithCancel(context.Background())
-	stoppedSendRunning := make(chan struct {}, 1)
-	go func(ctx context.Context, stoppedSendRunning chan <- struct{}) {
+	stoppedSendRunning := make(chan struct{}, 1)
+	go func(ctx context.Context, stoppedSendRunning chan<- struct{}) {
 		defer close(stoppedSendRunning)
 		task.data_sended = 0
 		// Running output is not needed to be reported during invocation of
@@ -369,7 +375,7 @@ func (task *Task) Run() error {
 		defer ticker.Stop()
 		for {
 			select {
-			case <- ticker.C:
+			case <-ticker.C:
 				if atomic.LoadUint32(&task.data_sended) > defaultQuotoPre {
 					return
 				}
@@ -378,7 +384,7 @@ func (task *Task) Run() error {
 				task.sendRunningOutput(running_output.String())
 				atomic.AddUint32(&task.data_sended, uint32(running_output.Len()))
 				taskLogger.Infof("Running output sent: %d bytes", atomic.LoadUint32(&task.data_sended))
-			case <- ctx.Done():
+			case <-ctx.Done():
 				return
 			}
 		}
@@ -423,7 +429,7 @@ func (task *Task) Run() error {
 	// That is, send stopping message to the goroutine sending running output
 	stopSendRunning()
 	// Wait for the goroutine sending running output to exit
-	<- stoppedSendRunning
+	<-stoppedSendRunning
 	tryReadAll(&stdoutWrite, &stderrWrite, &task.output)
 
 	task.endTime = time.Now()
@@ -450,8 +456,10 @@ func (task *Task) Run() error {
 
 	task.output.Reset()
 	endTaskLogger.Info("Clean task output")
-
-	return nil
+	if ScriptToDelete != "" {
+		os.Remove(ScriptToDelete)
+	}
+	return 0, nil
 }
 
 func (task *Task) sendTaskVerified() {
@@ -478,13 +486,22 @@ func (task *Task) SendInvalidTask(param string, value string) {
 }
 
 func (task *Task) sendOutput(status string, output string) {
+	if G_IsWindows {
+		if langutil.GetDefaultLang() != 0x409 {
+			tmp, _ := langutil.GbkToUtf8([]byte(output))
+			output = string(tmp)
+		}
+	}
+
 	var url string
 	if status == "finished" {
 		url = util.GetFinishOutputService()
 	} else if status == "timeout" {
 		url = util.GetTimeoutOutputService()
 	} else if status == "canceled" {
-		url = util.GetStoppedOutputService()
+		sendStoppedOutput(task.taskInfo.TaskId, task.monotonicStartTimestamp,
+			task.monotonicEndTimestamp, task.exit_code, task.droped, output)
+		return
 	} else if status == "failed" {
 		url = util.GetErrorOutputService()
 	} else {
@@ -493,16 +510,7 @@ func (task *Task) sendOutput(status string, output string) {
 
 	url += "?taskId=" + task.taskInfo.TaskId + "&start=" + strconv.FormatInt(task.monotonicStartTimestamp, 10)
 	url += "&end=" + strconv.FormatInt(task.monotonicEndTimestamp, 10) + "&exitCode=" + strconv.Itoa(task.exit_code) + "&dropped=" + strconv.Itoa(task.droped)
-	// luban/api/v1/task/stopped API requires extra result=killed parameter in querystring
-	if status == "canceled" {
-		url += "&result=killed"
-	}
-	if G_IsWindows {
-		if langutil.GetDefaultLang() != 0x409 {
-			tmp, _ := langutil.GbkToUtf8([]byte(output))
-			output = string(tmp)
-		}
-	}
+
 	var err error
 	_, err = util.HttpPost(url, output, "text")
 

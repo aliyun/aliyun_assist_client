@@ -10,6 +10,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/util/process"
@@ -95,6 +96,17 @@ func SafeUpdate(preparationTimeout time.Duration, maximumDownloadTimeout time.Du
 }
 
 func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDownloadTimeout time.Duration) error {
+	errmsg := ""
+	extrainfo := ""
+	defer func() {
+		if len(errmsg) > 0 {
+			metrics.GetUpdateFailedEvent(
+				"errmsg", errmsg,
+				"extrainfo", extrainfo,
+			).ReportEvent()
+		}
+	}()
+
 	// 0. Pre-check
 	updatingDisabled, err := isUpdatingDisabled()
 	if err != nil {
@@ -109,12 +121,16 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 	if !util.CheckFileIsExist(updatorPath) {
 		wrapErr := fmt.Errorf("%w: %s does not exist", ErrUpdatorNotFound, updatorPath)
 		log.GetLogger().WithError(wrapErr).Errorln("Updating has been disabled due to updator not found")
+		errmsg = wrapErr.Error()
+		extrainfo = fmt.Sprintf("updatorPath=%s", updatorPath)
 		return wrapErr
 	}
 
 	// WARNING: Loose timeout limit: only breaks preparation phase after action
 	// finished
 	if preparationTimedOut(startTime, preparationTimeout) {
+		errmsg = fmt.Sprintf("after CheckFileIsExist timeout: %s", ErrPreparationTimeout.Error())
+		extrainfo = fmt.Sprintf("preparationTimeout=%s", preparationTimeout.String())
 		return ErrPreparationTimeout
 	}
 
@@ -150,6 +166,8 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 		return nil, lastErr
 	}()
 	if err != nil {
+		errmsg = fmt.Sprintf("FetchUpdateInfo err: %s", err.Error())
+		extrainfo = fmt.Sprintf("preparationTimeout=%s", preparationTimeout.String())
 		return err
 	}
 	if updateInfo.NeedUpdate == 0 {
@@ -159,12 +177,15 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 	// WARNING: Loose timeout limit: only breaks preparation phase after action
 	// finished
 	if preparationTimedOut(startTime, preparationTimeout) {
+		errmsg = fmt.Sprintf("after FetchUpdateInfo timeout: %s", ErrPreparationTimeout.Error())
+		extrainfo = fmt.Sprintf("preparationTimeout=%s", preparationTimeout.String())
 		return ErrPreparationTimeout
 	}
 
 	// 2. Download update package into temporary directory
 	tempDir, err := util.GetTempPath()
 	if err != nil {
+		errmsg = fmt.Sprintf("GetTempPath error: %s", err.Error())
 		return err
 	}
 	tempSavePath := filepath.Join(tempDir, fmt.Sprintf("aliyun_assist_%s.zip", updateInfo.UpdateInfo.Md5))
@@ -173,6 +194,8 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 	if preparationTimeout > 0 {
 		elapsedTime := time.Now().Sub(startTime)
 		if elapsedTime >= preparationTimeout {
+			errmsg = fmt.Sprintf("after GetTempPath timeout: %s", ErrPreparationTimeout.Error())
+			extrainfo = fmt.Sprintf("preparationTimeout=%s", preparationTimeout.String())
 			return ErrPreparationTimeout
 		}
 
@@ -190,6 +213,8 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 
 		// Re-check downloadTimeout value in case of negative value after subtraction
 		if downloadTimeout < 0 {
+			errmsg = fmt.Sprintf("downloadTimeout < 0 error: %s", ErrPreparationTimeout.Error())
+			extrainfo = fmt.Sprintf("preparationTimeout=%s", preparationTimeout.String())
 			return ErrPreparationTimeout
 		}
 	}
@@ -200,6 +225,8 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 			"targetSavePath": tempSavePath,
 		}).WithError(err).Errorln("Failed to download update package")
 
+		errmsg = fmt.Sprintf("DownloadPackage error: %s", err.Error())
+		extrainfo = fmt.Sprintf("url=%s&tempsavepath=%s&downloadtimeout=%s", updateInfo.UpdateInfo.URL, tempSavePath, downloadTimeout.String())
 		// Try our best to report error encountered during downloading packages,
 		// and REMEMBER: timeout situation of such reporting action MUST be
 		// considered into preparation time.
@@ -218,6 +245,8 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 	// WARNING: Loose timeout limit: only breaks preparation phase after action
 	// finished
 	if preparationTimedOut(startTime, preparationTimeout) {
+		errmsg = fmt.Sprintf("after DownloadPackage timeout: %s", ErrPreparationTimeout.Error())
+		extrainfo = fmt.Sprintf("preparationTimeout=%s", preparationTimeout.String())
 		return ErrPreparationTimeout
 	}
 
@@ -237,6 +266,8 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 			// even when preparation times out. This would be dangerous when IO
 			// operation is slow and will block task execution. Review is needed.
 			if err := RemoveUpdatePackage(tempSavePath); err != nil {
+				errmsg = fmt.Sprintf("RemoveUpdatePackage error: %s", err.Error())
+				extrainfo = fmt.Sprintf("downloadedPackagePath=%s&packageURL=%s", tempSavePath, updateInfo.UpdateInfo.URL)
 				log.GetLogger().WithFields(logrus.Fields{
 					"updateInfo": updateInfo,
 					"downloadedPackagePath": tempSavePath,
@@ -252,6 +283,8 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 				"updateInfo": updateInfo,
 				"downloadedPackagePath": tempSavePath,
 			}).WithError(err).Errorln("Inconsistent checksum of update package")
+			errmsg = fmt.Sprintf("CompareFileMD5 error: %s", err.Error())
+			extrainfo = fmt.Sprintf("downloadedPackagePath=%s&md5InUpdateInfo=%s", tempSavePath, updateInfo.UpdateInfo.Md5)
 
 			ReportCheckMD5Failed(err, updateInfo, map[string]interface{}{
 				"downloadedPackagePath": tempSavePath,
@@ -264,6 +297,8 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 		// WARNING: Loose timeout limit: only breaks preparation phase after
 		// action finished
 		if preparationTimedOut(startTime, preparationTimeout) {
+			errmsg = fmt.Sprintf("after CompareFileMD5 timeout: %s", ErrPreparationTimeout.Error())
+			extrainfo = fmt.Sprintf("preparationTimeout=%s", preparationTimeout.String())
 			return "", ErrPreparationTimeout
 		}
 
@@ -278,11 +313,15 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 		// WARNING: Loose timeout limit: only breaks preparation phase after
 		// action finished
 		if preparationTimedOut(startTime, preparationTimeout) {
+			errmsg = fmt.Sprintf("after RemoveOldVersion timeout: %s", ErrPreparationTimeout.Error())
+			extrainfo = fmt.Sprintf("preparationTimeout=%s", preparationTimeout.String())
 			return "", ErrPreparationTimeout
 		}
 
 		// 5. Extract downloaded update package directly to install directory
 		if err := ExtractPackage(tempSavePath, destinationDir); err != nil {
+			errmsg = fmt.Sprintf("ExtractPackage error: %s", err.Error())
+			extrainfo = fmt.Sprintf("destinationDir=%s&downloadedPackagePath=%s", destinationDir, tempSavePath)
 			log.GetLogger().WithFields(logrus.Fields{
 				"updateInfo": updateInfo,
 				"downloadedPackagePath": tempSavePath,
@@ -301,6 +340,8 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 		// WARNING: Loose timeout limit: only breaks preparation phase after
 		// action finished
 		if preparationTimedOut(startTime, preparationTimeout) {
+			errmsg = fmt.Sprintf("after ExtractPackage timeout: %s", ErrPreparationTimeout.Error())
+			extrainfo = fmt.Sprintf("preparationTimeout=%s", preparationTimeout.String())
 			return "", ErrPreparationTimeout
 		}
 
@@ -309,6 +350,8 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 		// dependency on url of update package
 		newVersion, err := ExtractVersionStringFromURL(updateInfo.UpdateInfo.URL)
 		if err != nil {
+			errmsg = fmt.Sprintf("ExtractVersionStringFromURL error: %s", err.Error())
+			extrainfo = fmt.Sprintf("packageURL=%s", updateInfo.UpdateInfo.URL)
 			log.GetLogger().WithFields(logrus.Fields{
 				"updateInfo": updateInfo,
 				"packageURL": updateInfo.UpdateInfo.URL,
@@ -319,6 +362,8 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 		// 7. Validate agent executable file format and architecture
 		agentPath := GetAgentPathByVersion(newVersion)
 		if err := ValidateExecutable(agentPath); err != nil {
+			errmsg = fmt.Sprintf("GetAgentPathByVersion error: %s", err.Error())
+			extrainfo = fmt.Sprintf("packageURL=%s&executablePath=%s", updateInfo.UpdateInfo.URL, agentPath)
 			log.GetLogger().WithFields(logrus.Fields{
 				"updateInfo": updateInfo,
 				"packageURL": updateInfo.UpdateInfo.URL,
@@ -335,6 +380,8 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 		// WARNING: Loose timeout limit: only breaks preparation phase after
 		// action finished
 		if preparationTimedOut(startTime, preparationTimeout) {
+			errmsg = fmt.Sprintf("after ValidateExecutable timeout: %s", ErrPreparationTimeout.Error())
+			extrainfo = fmt.Sprintf("preparationTimeout=%s", preparationTimeout.String())
 			return "", ErrPreparationTimeout
 		}
 
@@ -349,6 +396,8 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 	// WARNING: Loose timeout limit: only breaks preparation phase after action
 	// finished
 	if preparationTimedOut(startTime, preparationTimeout) {
+		errmsg = fmt.Sprintf("after updateScriptPath timeout: %s", ErrPreparationTimeout.Error())
+		extrainfo = fmt.Sprintf("preparationTimeout=%s", preparationTimeout.String())
 		return ErrPreparationTimeout
 	}
 

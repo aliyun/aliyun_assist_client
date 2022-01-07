@@ -1,6 +1,11 @@
+# bou.ke/monkey v1.0.2
+## explicit
+bou.ke/monkey
 # github.com/StackExchange/wmi v0.0.0-20210224194228-fe8f1750fd46
 ## explicit
 github.com/StackExchange/wmi
+# github.com/agiledragon/gomonkey v2.0.2+incompatible
+## explicit
 # github.com/aliyun/alibaba-cloud-sdk-go v1.61.1066
 ## explicit
 github.com/aliyun/alibaba-cloud-sdk-go/sdk
@@ -32,6 +37,8 @@ github.com/fabiokung/shm
 ## explicit
 github.com/go-ole/go-ole
 github.com/go-ole/go-ole/oleutil
+# github.com/golang/mock v1.6.0
+## explicit
 # github.com/google/uuid v1.2.0
 ## explicit
 github.com/google/uuid
@@ -115,9 +122,9 @@ github.com/viney-shih/go-lock
 ## explicit
 golang.org/x/net/http/httpproxy
 golang.org/x/net/idna
-# golang.org/x/sync v0.0.0-20200317015054-43a5402ce75a
+# golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 golang.org/x/sync/semaphore
-# golang.org/x/sys v0.0.0-20210507014357-30e306a8bba5
+# golang.org/x/sys v0.0.0-20210510120138-977fb7262007
 ## explicit
 golang.org/x/sys/internal/unsafeheader
 golang.org/x/sys/unix

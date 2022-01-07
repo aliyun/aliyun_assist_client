@@ -367,8 +367,8 @@ func (c *Client) SendResizeDataMessage(inputData []byte) (err error) {
 func (c *Client) sendMessage(input []byte, inputType int) error {
 	defer func() {
 		if msg := recover(); msg != nil {
-			log.GetLogger().Errorln("WebsocketChannel  run panic: %v", msg)
-			log.GetLogger().Errorln("%s: %s", msg, debug.Stack())
+			log.GetLogger().Errorf("WebsocketChannel  run panic: %v", msg)
+			log.GetLogger().Errorf("%s: %s", msg, debug.Stack())
 		}
 	}()
 

@@ -6,10 +6,16 @@ import (
 	"io/ioutil"
 	"os"
 	"testing"
+	"time"
+	"net/http"
 
 	"github.com/aliyun/aliyun_assist_client/agent/inventory/model"
 	"github.com/aliyun/aliyun_assist_client/agent/util/jsonutil"
+	"github.com/aliyun/aliyun_assist_client/agent/util/timetool"
+	"github.com/jarcoal/httpmock"
 
+	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -72,4 +78,56 @@ func TestLoad(t *testing.T) {
 	fmt.Println(string(dataC))
 	checksum = calculateCheckSum([]byte(dataC))
 	fmt.Println(checksum)
+}
+
+func TestInventoryUploader(t *testing.T) {
+	instanceId := util.GetInstanceId()
+	uploader, err := NewInventoryUploader(instanceId)
+	assert.NotEqual(t, uploader, nil)
+	assert.Equal(t, err, nil)
+
+	items := []model.Item{}
+	item := model.Item{
+		Name: "item-1",
+		SchemaVersion: osutil.GetOsArch(),
+		Content: []string{"content-1", "content-2"},
+		CaptureTime: timetool.ApiTimeFormat(time.Now()),
+	}
+	items = append(items, item)
+	item.Name = "item-2"
+	items = append(items, item)
+
+	var optimizedInventoryItems, nonOptimizedInventoryItems []*model.InventoryItem
+	optimizedInventoryItems, nonOptimizedInventoryItems, err = uploader.ConvertToOOSInventoryItems(items)
+	assert.Equal(t, err, nil)
+
+	
+	httpmock.Activate()
+	util.NilRequest.Set()
+	defer httpmock.DeactivateAndReset()
+	defer util.NilRequest.Clear()
+	mockReginId := "mock-reginid"
+	util.MockMetaServer(mockReginId)
+	httpmock.RegisterResponder("POST",
+		fmt.Sprintf("https://%s.axt.aliyun.com/luban/api/instance/put_inventory", mockReginId),
+		func(h *http.Request) (*http.Response, error) {
+			apiResp := ApiResponse {
+				ErrCode: "200",
+				ErrMsg: "success",
+				Result: &OOSResult{
+					RequestId: "requestid",
+				},
+			}
+			content, err := json.Marshal(&apiResp)
+			return httpmock.NewStringResponse(200, string(content)), err
+		})
+
+	err = uploader.SendDataToOOS(instanceId, optimizedInventoryItems)
+	assert.Equal(t, err, nil)
+	err = uploader.SendDataToOOS(instanceId, nonOptimizedInventoryItems)
+	assert.Equal(t, err, nil)
+
+	_, err = uploader.GetDirtyOOSInventoryItems(items)
+	assert.Equal(t, err, nil)
+	
 }

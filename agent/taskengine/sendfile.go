@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 )
 
@@ -66,7 +67,12 @@ func SendFileFinished(sendFile SendFileTaskInfo, status int) {
 		sendFile.TaskID, reportStatus, "sendfile", status)
 	url += param
 	log.GetLogger().Printf("post = %s", url)
-
+	if status != ESuccess {
+		metrics.GetTaskFailedEvent(
+			"taskid", sendFile.TaskID,
+			"errormsg", param,
+		).ReportEvent()
+	}
 	_, err := util.HttpPost(url, "", "text")
 	if err != nil {
 		log.GetLogger().Printf("HttpPost url %s error:%s ", url, err.Error())
@@ -100,6 +106,10 @@ func SendFileInvalid(sendFile SendFileTaskInfo, status int) {
 		key = "FileOwnerNotExist"
 		value = sendFile.Owner
 	}
+	metrics.GetTaskFailedEvent(
+		"taskid", sendFile.TaskID,
+		"errormsg", fmt.Sprintf("%s : %s", key, value),
+	).ReportEvent()
 	url = url + "?" + "taskId=" + sendFile.TaskID + "&taskType=sendfile&param=" + key + "&value=" + value
 	log.GetLogger().Printf("post = %s", url)
 	_, err := util.HttpPost(url, "", "text")
@@ -215,7 +225,7 @@ func changeFileOwner(filePath string, User string, Group string) int {
 	err = os.Chown(filePath, uid, gid)
 	if err != nil {
 		log.GetLogger().Printf("Chown file %s error:%s ", filePath, err.Error())
-		return EChmodError
+		return EChownError
 	}
 	return ESuccess
 }
@@ -225,10 +235,17 @@ func writeFile(filePath string, data []byte, overWrite bool, fileMode os.FileMod
 	if fileExist && !overWrite {
 		return EFileAlreadyExist
 	}
-	err := ioutil.WriteFile(filePath, data, fileMode)
+	err := ioutil.WriteFile(filePath, data, 0644)
 	if err != nil {
 		log.GetLogger().Errorln("WriteFile: ", err)
 		return EFileCreateFail
+	}
+	if G_IsLinux {
+		err = os.Chmod(filePath, fileMode)
+		if err != nil {
+			log.GetLogger().Errorln(" Chmod faild", err)
+			return EChmodError
+		}
 	}
 	return ESuccess
 }

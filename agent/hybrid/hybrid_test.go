@@ -20,6 +20,8 @@ func TestKeyPair(t *testing.T) {
 func TestRegister(t *testing.T) {
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
+	util.NilRequest.Set()
+	defer util.NilRequest.Clear()
 
 	region := "cn-test100"
 

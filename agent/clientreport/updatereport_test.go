@@ -15,6 +15,8 @@ import (
 
 func TestReportUpdateFailure(t *testing.T) {
 	httpmock.Activate()
+	util.NilRequest.Set()
+	defer util.NilRequest.Clear()
 	defer httpmock.DeactivateAndReset()
 
 	const mockRegion = "cn-test100"
@@ -59,3 +61,4 @@ func TestReportUpdateFailure(t *testing.T) {
 	assert.Exactly(t, true, sendedFailure.FailureContext["unittest"])
 	assert.Exactly(t, sendedFailure.ErrorMessage, "UnitTest")
 }
+

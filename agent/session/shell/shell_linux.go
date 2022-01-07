@@ -80,6 +80,7 @@ func StartPty(plugin *ShellPlugin)( err error) {
 	log.GetLogger().Infof("Home directory of user `%s`: %s", default_user, userInfo.HomeDir)
 	runAsUserHomeEnvVariable := fmt.Sprintf("HOME=%s", userInfo.HomeDir)
 	plugin.cmd.Env = append(plugin.cmd.Env, runAsUserHomeEnvVariable)
+	plugin.cmd.Dir = userInfo.HomeDir
 
 	ptyFile, err := pty.Start(plugin.cmd)
 	if err != nil {

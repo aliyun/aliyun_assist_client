@@ -11,6 +11,7 @@ import (
 
 	"github.com/aliyun/aliyun_assist_client/agent/clientreport"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 )
 
@@ -92,6 +93,12 @@ func (c *GshellChannel) startChannelUnsafe() error {
 	}
 	h, e := os.OpenFile(gshellPath, os.O_RDWR, 0666)
 	if e != nil {
+		metrics.GetChannelFailEvent(
+			metrics.EVENT_SUBCATEGORY_CHANNEL_GSHELL,
+			"errormsg", fmt.Sprintf("open gshell failed: %s  error: %s", gshellPath, e),
+			"filepath", gshellPath,
+			"type", ChannelTypeStr(c.ChannelType),
+		).ReportEvent()
 		log.GetLogger().Errorln("open gshell failed:", gshellPath, "error:", e)
 		return e
 	}
@@ -149,6 +156,12 @@ func (c *GshellChannel) SwitchChannel() error {
 	if err != nil {
 		for i := 0; i < 5; i++ {
 			if G_ChannelMgr.SelectAvailableChannel(ChannelNone) == nil {
+				metrics.GetChannelSwitchEvent(
+					"type", ChannelTypeStr(G_ChannelMgr.GetCurrentChannelType()),
+					"info", fmt.Sprintf("success: Current channel is %d", G_ChannelMgr.GetCurrentChannelType()),
+					"reportType", "switch_channel_in_gshell",
+				).ReportEvent()
+
 				report := clientreport.ClientReport{
 					ReportType: "switch_channel_in_gshell",
 					Info:       fmt.Sprintf("success: Current channel is %d", G_ChannelMgr.GetCurrentChannelType()),
@@ -159,6 +172,12 @@ func (c *GshellChannel) SwitchChannel() error {
 			time.Sleep(time.Duration(5) * time.Second)
 		}
 	} else {
+		metrics.GetChannelSwitchEvent(
+			"type", ChannelTypeStr(G_ChannelMgr.GetCurrentChannelType()),
+			"info", fmt.Sprintf("success: Current channel is %d", G_ChannelMgr.GetCurrentChannelType()),
+			"reportType", "switch_channel_in_gshell",
+		).ReportEvent()
+
 		report := clientreport.ClientReport{
 			ReportType: "switch_channel_in_gshell",
 			Info:       fmt.Sprintf("success: Current channel is %d", G_ChannelMgr.GetCurrentChannelType()),
@@ -166,6 +185,12 @@ func (c *GshellChannel) SwitchChannel() error {
 		clientreport.SendReport(report)
 		return nil
 	}
+	metrics.GetChannelSwitchEvent(
+		"type", "type", ChannelTypeStr(G_ChannelMgr.GetCurrentChannelType()),
+		"info", fmt.Sprintf("fail: no available channel"),
+		"reportType", "switch_channel_in_gshell",
+	).ReportEvent()
+
 	report := clientreport.ClientReport{
 		ReportType: "switch_channel_in_gshell",
 		Info:       fmt.Sprintf("fail: no available channel"),

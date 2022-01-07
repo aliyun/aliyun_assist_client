@@ -18,6 +18,8 @@ type ISessionChannel interface {
 	Close() error
 	Reconnect() error
 	SendStreamDataMessage(inputData []byte) (err error)
+	GetChannelId() string
+	IsActive() bool
 }
 
 type SessionChannel struct {
@@ -72,6 +74,7 @@ func NewSessionChannel(url string, sessionId string, inputStreamMessageHandler I
 		for {
 			if atomic.LoadUint32(&sessionChannel.input_stream_cnt) > 60*3 {
 				cancelFlag.Set(util.Canceled)
+				log.GetLogger().Infoln("timeout in sessionChannel")
 				break
 			}
 			time.Sleep(time.Second)
@@ -81,6 +84,13 @@ func NewSessionChannel(url string, sessionId string, inputStreamMessageHandler I
 	} ()
 
 	return sessionChannel,nil
+}
+
+func (sessionChannel *SessionChannel) IsActive() bool {
+	if sessionChannel.wsChannel == nil {
+		return false
+	}
+	return sessionChannel.wsChannel.IsActive()
 }
 
 func (sessionChannel *SessionChannel) Open() error {
@@ -115,6 +125,10 @@ func (sessionChannel *SessionChannel) SendMessage( input []byte, inputType int) 
 	return sessionChannel.wsChannel.SendMessage(input, inputType)
 }
 
+func (sessionChannel *SessionChannel) GetChannelId() string {
+	return sessionChannel.ChannelId
+}
+
 func (sessionChannel *SessionChannel) inputMessageHandler(rawMessage []byte) error {
 
 	streamDataMessage := &message.Message{}
@@ -143,7 +157,7 @@ func (sessionChannel *SessionChannel) inputMessageHandler(rawMessage []byte) err
 	case message.SetSizeDataMessage:
 		 return sessionChannel.handleStreamDataMessage( *streamDataMessage, rawMessage)
 	default:
-		log.GetLogger().Warnf("Invalid message type received: %s", streamDataMessage.MessageType)
+		log.GetLogger().Warnf("Invalid message type received: %d", streamDataMessage.MessageType)
 	}
 
 	return nil
@@ -168,7 +182,7 @@ func (sessionChannel *SessionChannel) SendStreamDataMessage(inputData []byte) (e
 
 	agentMessage := &message.Message{
 		MessageType:   message.OutputStreamDataMessage,
-		SchemaVersion:  1,
+		SchemaVersion:  "1.01",
 		SessionId:  sessionChannel.ChannelId,
 		CreatedDate:    uint64(time.Now().UnixNano() / 1000000),
 		SequenceNumber: sessionChannel.StreamDataSequenceNumber,

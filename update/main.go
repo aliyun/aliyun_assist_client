@@ -92,52 +92,70 @@ func main() {
 	log.GetLogger().Infof("Starting...... version: %s githash: %s", version.AssistVersion, version.GitCommitHash)
 	SingleAppLock = single.New("AliyunAssistUpdateSingleLock")
 	if err := SingleAppLock.CheckLock(); err != nil && err == single.ErrAlreadyRunning {
-		log.GetLogger().Fatal("another instance of the app is already running, exiting")
+		fmt.Fprintln(os.Stderr, "Error: another instance of the app is already running")
+		os.Exit(1)
+		return
 	}
 	defer SingleAppLock.TryUnlock()
 
 	if options.CheckUpdate {
 		// Exclusive options check
 		if options.ForceUpdate || options.LocalInstall != "" {
-			log.GetLogger().Errorln("Invalid multiple options")
+			fmt.Fprintln(os.Stderr, "Invalid options: speficified options in conflict")
 			pflag.Usage()
+			os.Exit(1)
 			return
 		}
 
 		if err := doCheckUpdate(); err != nil {
-			log.GetLogger().Fatalf("Failed to update: %s", err.Error())
+			log.GetLogger().WithError(err).Errorln("Failed to check or update agent")
+			fmt.Fprintln(os.Stderr, "Error:", err.Error())
+			os.Exit(1)
 		}
+		return
 	} else if options.ForceUpdate {
 		// Exclusive options check
 		if options.CheckUpdate || options.LocalInstall != "" {
-			log.GetLogger().Errorln("Invalid multiple options")
+			fmt.Fprintln(os.Stderr, "Invalid options: speficified options in conflict")
 			pflag.Usage()
+			os.Exit(1)
 			return
 		}
 
 		if options.ForceUpdateURL == "" {
-			log.GetLogger().Fatalln("ForceUpdate must specify URL via --url option")
+			fmt.Fprintln(os.Stderr, "Invalid options: -f/--force_update option needs specifying update package URL via --url option")
+			pflag.Usage()
+			os.Exit(1)
 			return
 		}
 		if options.ForceUpdateMD5 == "" {
-			log.GetLogger().Fatalln("ForceUpdate must specify md5 via --md5 option")
+			fmt.Fprintln(os.Stderr, "Invalid options: -f/--force_update option needs specifying MD5 checksum of update package via --md5 option")
+			pflag.Usage()
+			os.Exit(1)
 			return
 		}
 
 		log.GetLogger().Infof("Force update: url=%s, md5=%s", options.ForceUpdateURL, options.ForceUpdateMD5)
 		if err := doUpdate(options.ForceUpdateURL, options.ForceUpdateMD5, ""); err != nil {
-			log.GetLogger().Fatalf("Failure encountered during updating: %s", err.Error())
+			log.GetLogger().WithError(err).Errorln("Failed to perform force updating")
+			fmt.Fprintln(os.Stderr, "Error:", err.Error())
+			os.Exit(1)
 		}
+		return
 	} else if options.LocalInstall != "" {
 		// Exclusive options check
 		if options.CheckUpdate || options.ForceUpdate {
-			log.GetLogger().Errorln("Invalid multiple options")
+			fmt.Fprintln(os.Stderr, "Invalid options: speficified options in conflict")
 			pflag.Usage()
+			os.Exit(1)
 			return
 		}
 
 		if err := doInstall(options.LocalInstall); err != nil {
-			log.GetLogger().Fatalf("Failure encountered during executing update script: %s", err.Error())
+			log.GetLogger().WithError(err).Errorln("Failed to execute update script")
+			fmt.Fprintln(os.Stderr, "Error:", err.Error())
+			os.Exit(1)
+			return
 		}
 	} else {
 		pflag.Usage()

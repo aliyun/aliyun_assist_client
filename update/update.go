@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
@@ -35,7 +36,7 @@ func doUpdate(url string, md5 string, version string) error {
 	}
 
 	// 1. Download update package
-	filename := "update_" + md5 + ".zip"
+	filename := fmt.Sprintf("aliyun-assist_%s.zip", version)
 	// NOTE: A timeout of zero means no timeout, and we do not set timeout here
 	// since this function is often manually invoked by users.
 	if err := libupdate.DownloadPackage(url, filename, time.Duration(0)); err != nil {
@@ -58,7 +59,13 @@ func doUpdate(url string, md5 string, version string) error {
 		return err
 	}
 
-	// 5. Execute update script
+	// 5. Validate agent executable file format and architecture
+	agentPath := libupdate.GetAgentPathByVersion(version)
+	if err := libupdate.ValidateExecutable(agentPath); err != nil {
+		return err
+	}
+
+	// 6. Execute update script
 	updateScriptPath := libupdate.GetUpdateScriptPathByVersion(version)
 	if err := doInstall(updateScriptPath); err != nil {
 		return err

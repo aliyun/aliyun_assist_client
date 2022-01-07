@@ -2,13 +2,20 @@ package checkvirt
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"syscall"
 	"unsafe"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/agent/metrics"
+	"github.com/aliyun/aliyun_assist_client/agent/taskengine/timermanager"
 )
 
+const (
+	// DefaultCheckIntervalSeconds is the default interval for report virtio driver version
+	DefaultCheckIntervalSeconds = 3600 * 24
+)
 const (
 	IOCTL_STORAGE_QUERY_PROPERTY  = 0x002d1400
 	StorageDeviceUniqueIdProperty = 3
@@ -127,4 +134,37 @@ func CheckVirtIoVersion(Index int) (error, bool) {
 		return nil, true
 	}
 	return nil, false
+}
+
+func doCheck() {
+	viostor, err := GetFileVersion("C:\\Windows\\System32\\drivers\\viostor.sys")
+	if err != nil {
+		log.GetLogger().Infoln("get viostor.sys version failed,err=", err.Error())
+	}
+	netkvm, err := GetFileVersion("C:\\Windows\\System32\\drivers\\netkvm.sys")
+	if err != nil {
+		log.GetLogger().Infoln("get netkvm.sys version failed,err=", err.Error())
+	}
+	vioser, err := GetFileVersion("C:\\Windows\\System32\\drivers\\vioser.sys")
+	if err != nil {
+		log.GetLogger().Infoln("get vioser.sys version failed,err=", err.Error())
+	}
+	metrics.GetVirtioVersionEvent(
+		"viostor", fmt.Sprintf("%d.%d.%d.%d", viostor.Major, viostor.Minor, viostor.Patch, viostor.Build),
+		"netkvm", fmt.Sprintf("%d.%d.%d.%d", netkvm.Major, netkvm.Minor, netkvm.Patch, netkvm.Build),
+		"vioser", fmt.Sprintf("%d.%d.%d.%d", vioser.Major, vioser.Minor, vioser.Patch, vioser.Build),
+	).ReportEvent()
+}
+
+func StartVirtIoVersionReport() error {
+	timerManager := timermanager.GetTimerManager()
+	timer, err := timerManager.CreateTimerInSeconds(doCheck, DefaultCheckIntervalSeconds)
+	if err != nil {
+		return err
+	}
+	_, err = timer.Run()
+	if err != nil {
+		return err
+	}
+	return nil
 }

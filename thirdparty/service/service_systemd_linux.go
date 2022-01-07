@@ -177,19 +177,28 @@ func (s *systemd) Install() error {
 		return err
 	}
 
+	// NOTE: The order of enabling service and reloading daemon is swapped due
+	// to an unexpected systemd behavior on SLES12sp2, i.e., enabling enabled
+	// service would cause an error with exit status 1 and will prevent daemon
+	// from reloading operation after that. In my opinion, any external
+	// modification to unit file should be followed by immediate
+	// daemon-reloading opeartion to notify systemd to update its internal
+	// servive status, and I really wonder why the service library author does
+	// not follow such method, maybe there are some other reasons that I have
+	// not known.
 	if s.Option.bool(optionUserService, optionUserServiceDefault) {
-		err = run("systemctl", "enable", "--user", s.Name+".service")
+		err = run("systemctl", "daemon-reload", "--user")
 	} else {
-		err = run("systemctl", "enable", s.Name+".service")
+		err = run("systemctl", "daemon-reload")
 	}
 	if err != nil {
 		return err
 	}
 
 	if s.Option.bool(optionUserService, optionUserServiceDefault) {
-		err = run("systemctl", "daemon-reload", "--user")
+		err = run("systemctl", "enable", "--user", s.Name+".service")
 	} else {
-		err = run("systemctl", "daemon-reload")
+		err = run("systemctl", "enable", s.Name+".service")
 	}
 	return err
 }

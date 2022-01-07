@@ -61,7 +61,7 @@ func SendMsgToWebsocketServer(msg string) error {
 					g_conn = nil
 					return
 				}
-				fmt.Print("recv: %s", message)
+				fmt.Printf("recv: %s", message)
 			//	ResponseHandler(string(message), false)
 			}
 		}()

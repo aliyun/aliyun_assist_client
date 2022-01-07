@@ -35,3 +35,14 @@ func (c *Channel) IsWorking() bool {
 func (c *Channel) GetChannelType() int {
 	return c.ChannelType
 }
+
+func ChannelTypeStr(channelType int) string {
+	switch (channelType) {
+	case ChannelGshellType:
+		return "gshell"
+	case ChannelWebsocketType:
+		return "websocket"
+	default:
+		return "unknown"
+	}
+}

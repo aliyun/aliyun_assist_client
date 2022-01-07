@@ -2,7 +2,7 @@ package taskengine
 
 import (
 	"errors"
-	"fmt"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -11,6 +11,7 @@ import (
 	heavylock "github.com/viney-shih/go-lock"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/timermanager"
 	"github.com/aliyun/aliyun_assist_client/agent/util/atomicutil"
 )
@@ -158,7 +159,14 @@ func dispatchRunTask(taskInfo RunTaskInfo) {
 		taskFactory.AddTask(t)
 		pool := GetPool()
 		pool.RunTask(func ()  {
-			t.Run()
+			code, err := t.Run()
+			if code != 0 || err != nil {
+				metrics.GetTaskFailedEvent(
+					"taskid", t.taskInfo.TaskId,
+					"errormsg", err.Error(),
+					"reason", strconv.Itoa(int(code)),
+				).ReportEvent()
+			}
 			taskFactory := GetTaskFactory()
 			taskFactory.RemoveTaskByName(t.taskInfo.TaskId)
 		})
@@ -193,17 +201,17 @@ func dispatchStopTask(taskInfo RunTaskInfo) {
 	taskFactory := GetTaskFactory()
 	switch taskInfo.Repeat {
 	case RunTaskOnce, RunTaskNextRebootOnly, RunTaskEveryReboot:
-		// NOTE: Non-periodic tasks are managed by TaskFactory. Those tasks
-		// does not exist in TaskFactory need not to be canceled.
-		if !taskFactory.ContainsTaskByName(taskInfo.TaskId) {
-			cancelLogger.Warning("Ignore task not found due to finished or error")
-			return
+		scheduledTask, ok := taskFactory.GetTask(taskInfo.TaskId)
+		if ok {
+			cancelLogger.Info("Cancel task and invocation")
+			scheduledTask.Cancel()
+			cancelLogger.Info("Canceled task and invocation")
+		} else {
+			response, err := sendStoppedOutput(taskInfo.TaskId, 0, 0, 0, 0, "")
+			cancelLogger.WithFields(logrus.Fields{
+				"response": response,
+			}).WithError(err).Warning("Force cancelling task not found due to finished or error")
 		}
-
-		cancelLogger.Info("Cancel task and invocation")
-		scheduledTask, _ := taskFactory.GetTask(taskInfo.TaskId)
-		scheduledTask.Cancel()
-		cancelLogger.Info("Canceled task and invocation")
 	case RunTaskPeriod:
 		// Periodic tasks are managed by _periodicTaskSchedules
 		err := cancelPeriodicTask(taskInfo)
@@ -277,7 +285,14 @@ func (s *PeriodicTaskSchedule) startExclusiveInvocation() {
 	taskFactory.AddTask(s.reusableInvocation)
 	pool := GetPool()
 	pool.RunTask(func ()  {
-		s.reusableInvocation.Run()
+		code, err := s.reusableInvocation.Run()
+		if code != 0 || err != nil {
+			metrics.GetTaskFailedEvent(
+				"taskid", s.reusableInvocation.taskInfo.TaskId,
+				"errormsg", err.Error(),
+				"reason", strconv.Itoa(int(code)),
+			).ReportEvent()
+		}
 		taskFactory := GetTaskFactory()
 		taskFactory.RemoveTaskByName(s.reusableInvocation.taskInfo.TaskId)
 	})
@@ -363,7 +378,11 @@ func cancelPeriodicTask(taskInfo RunTaskInfo) error {
 	// 1. Check whether task is registered in local storage
 	periodicTaskSchedule, ok := _periodicTaskSchedules[taskInfo.TaskId]
 	if !ok {
-		return fmt.Errorf("Unregistered periodic task %s", taskInfo.TaskId)
+		response, err := sendStoppedOutput(taskInfo.TaskId, 0, 0, 0, 0, "")
+		cancelLogger.WithFields(logrus.Fields{
+			"response": response,
+		}).WithError(err).Warning("Force cancelling periodic task unregistered due to finished or previous errors")
+		return nil
 	}
 
 	// 2. Delete timer of periodic task from TimerManager, which contains stopping

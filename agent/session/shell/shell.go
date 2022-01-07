@@ -21,7 +21,8 @@ const(
 	Session_id_duplicate = "Session_id_duplicate"
 	Process_data_error = "Process_data_error"
 	Open_pty_failed = "Open_pty_failed"
-	Time_out = "Time_out"
+	Timeout = "Timeout"
+	Notified = "Notified"
 	Unknown_error = "Unknown_error"
 )
 
@@ -65,11 +66,16 @@ func (p *ShellPlugin) Execute(dataChannel channel.ISessionChannel, cancelFlag ut
 	}
 	log.GetLogger().Infoln("start pty success")
 	cancelled := make(chan bool, 1)
+	errorCode := Ok
 	go func() {
 		cancelState := cancelFlag.Wait()
-		if cancelFlag.Canceled() {
+		if cancelFlag.State() == util.Canceled{
 			cancelled <- true
-			log.GetLogger().Debug("Cancel flag set to cancelled in session")
+			errorCode = Timeout
+		}
+		if cancelFlag.State() == util.Completed {
+			cancelled <- true
+			errorCode = Notified
 		}
 		log.GetLogger().Debugf("Cancel flag set to %v in session", cancelState)
 	}()
@@ -80,7 +86,7 @@ func (p *ShellPlugin) Execute(dataChannel channel.ISessionChannel, cancelFlag ut
 		done <- p.writePump()
 	}()
 	log.GetLogger().Infof("Plugin %s started", p.id)
-	errorCode := Ok
+
 
 	select {
 	case <-cancelled:

@@ -155,7 +155,7 @@ func getPlatformDetails() (name string, version string, err error) {
 		log.GetLogger().Debugf(fetchingDetailsMessage, unameCommand)
 
 		if contentsBytes, err = exec.Command(unameCommand, "-sr").Output(); err != nil {
-			log.GetLogger().Debugf(fetchingDetailsMessage, unameCommand, err)
+			log.GetLogger().Debugf(errorOccurredMessage, unameCommand, err)
 			return
 		}
 		log.GetLogger().Debugf(commandOutputMessage, contentsBytes)
@@ -173,7 +173,7 @@ func getPlatformDetails() (name string, version string, err error) {
 
 		// platform name
 		if contentsBytes, err = exec.Command(lsbReleaseCommand, "-i").Output(); err != nil {
-			log.GetLogger().Debugf(fetchingDetailsMessage, lsbReleaseCommand, err)
+			log.GetLogger().Debugf(errorOccurredMessage, lsbReleaseCommand, err)
 			return
 		}
 		name = strings.TrimSpace(string(contentsBytes))

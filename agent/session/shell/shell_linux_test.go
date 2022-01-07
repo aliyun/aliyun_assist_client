@@ -2,6 +2,7 @@ package shell
 
 import (
 	"github.com/stretchr/testify/assert"
+	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"testing"
 	"time"
 )

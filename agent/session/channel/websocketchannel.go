@@ -19,6 +19,7 @@ type IWebSocketChannel interface {
 	Open() error
 	Close() error
 	StartPings()
+	IsActive() bool
 	SendMessage(input []byte, inputType int) error
 }
 
@@ -38,6 +39,10 @@ func (webSocketChannel *WebSocketChannel) Initialize(channelUrl string,
 	webSocketChannel.OnError = onErrorHandler
 	webSocketChannel.OnMessage = onMessageHandler
 	return nil
+}
+
+func (webSocketChannel *WebSocketChannel) IsActive() bool {
+	return webSocketChannel.IsOpen == true
 }
 
 func (webSocketChannel *WebSocketChannel) Open() error {
@@ -120,6 +125,7 @@ func (webSocketChannel *WebSocketChannel) StartPings() {
 			err := webSocketChannel.Connection.WriteMessage(websocket.PingMessage, []byte("keepalive"))
 			webSocketChannel.writeLock.Unlock()
 			if err != nil {
+				webSocketChannel.Close()
 				log.GetLogger().Warnf("Error while sending websocket ping: %v", err)
 				return
 			}

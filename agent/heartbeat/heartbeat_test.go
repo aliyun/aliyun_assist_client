@@ -2,6 +2,7 @@ package heartbeat
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -10,18 +11,21 @@ import (
 	"testing"
 	"time"
 
+	"bou.ke/monkey"
+	"github.com/aliyun/aliyun_assist_client/agent/taskengine/timermanager"
+	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
-
-	"github.com/aliyun/aliyun_assist_client/agent/util"
 )
 
 func TestBuildPingRequest(t *testing.T) {
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
-
+	util.NilRequest.Set()
+	defer util.NilRequest.Clear()
 	const mockRegion = "cn-test100"
-	//	util.MockMetaServer(mockRegion)
+	util.MockMetaServer(mockRegion)
+
 	const virtType = "kvm"
 	const osType = "linux"
 	const osVersion = "Linux_#1 SMP Sun Jul 26 15:27:06 UTC 2020_x86_64"
@@ -30,12 +34,14 @@ func TestBuildPingRequest(t *testing.T) {
 	const timestamp = 1595777226000
 	const pid = 7136
 	const processUptime = 409
-	const heartbeatCounter = 2
+	const acknowledgeCounter = 2
+	const sendCounter = 2
 	const azoneId = "1q23213"
 	const isColdstart = false
 
 	requestURL := buildPingRequest(virtType, osType, osVersion, appVersion, uptime,
-		timestamp, pid, processUptime, heartbeatCounter, azoneId, isColdstart)
+		timestamp, pid, processUptime, acknowledgeCounter, azoneId, isColdstart,
+		sendCounter)
 	fmt.Println(requestURL)
 
 	segments, err := url.Parse(requestURL)
@@ -64,7 +70,8 @@ func TestBuildPingRequest(t *testing.T) {
 		{strconv.Itoa(timestamp), params["timestamp"]},
 		{strconv.Itoa(pid), params["pid"]},
 		{strconv.Itoa(processUptime), params["process_uptime"]},
-		{strconv.Itoa(heartbeatCounter), params["index"]},
+		{strconv.Itoa(acknowledgeCounter), params["index"]},
+		{strconv.Itoa(sendCounter), params["seq_no"]},
 	}
 	for _, c := range paramCases {
 		assert.Exactly(t, 1, len(c.actualValues))
@@ -81,7 +88,8 @@ func generateFakePingRequest(mockRegion string) string {
 	const timestamp = 1595777226000
 	const pid = 7136
 	const processUptime = 409
-	const heartbeatCounter = 2
+	const acknowledgeCounter = 2
+	const sendCounter = 2
 
 	var requestURL = url.URL{
 		Scheme: "https",
@@ -96,7 +104,8 @@ func generateFakePingRequest(mockRegion string) string {
 			"timestamp":      []string{strconv.Itoa(timestamp)},
 			"pid":            []string{strconv.Itoa(pid)},
 			"process_uptime": []string{strconv.Itoa(processUptime)},
-			"index":          []string{strconv.Itoa(heartbeatCounter)},
+			"index":          []string{strconv.Itoa(acknowledgeCounter)},
+			"seq_no":         []string{strconv.Itoa(sendCounter)},
 		}.Encode(),
 	}
 	return requestURL.String()
@@ -297,4 +306,71 @@ func TestInvokePingRequestTimeOut(t *testing.T) {
 
 	assert.NoError(t, err, "invokePingRequest should not return error for this testcase")
 	assert.Exactly(t, mockSuccessfulResponse, response, "invokePingRequest should return mockResponse without error")
+}
+
+func Test_doPing(t *testing.T) {
+	httpmock.Activate()
+	defer httpmock.DeactivateAndReset()
+	util.NilRequest.Set()
+	defer util.NilRequest.Clear()
+	const mockRegion = "cn-test100"
+	util.MockMetaServer(mockRegion)
+	timermanager.InitTimerManager()
+	InitHeartbeatTimer()
+	tests := []struct {
+		name    string
+		wantErr bool
+	}{
+		{
+			name: "invokePingRequestError",
+			wantErr: true,
+		},
+		{
+			name: "nextIntervalNotExist",
+			wantErr: false,
+		},
+		{
+			name: "nextIntervalNotFloat64",
+			wantErr: false,
+		},
+		{
+			name: "newTasksNotExist",
+			wantErr: false,
+		},
+		{
+			name: "newTasksNotBool",
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res := make(map[string]interface{})
+			res["nextInterval"] = 100
+			res["newTasks"] = true
+			if tt.name == "nextIntervalNotExist" {
+				delete(res, "nextInterval")
+			}
+			if tt.name == "nextIntervalNotFloat64" {
+				res["nextInterval"] = "abc"
+			}
+			if tt.name == "newTasksNotExist" {
+				delete(res, "newTask")
+			}
+			if tt.name == "newTasksNotBool" {
+				res["newTask"] = "abc"
+			}
+
+			content, _ := json.Marshal(&res)
+			if tt.name == "invokePingRequestError" {
+				guard := monkey.Patch(invokePingRequest, func(string) (string, error) { return "", errors.New("some error")})
+				defer guard.Unpatch()
+			} else {
+				guard := monkey.Patch(invokePingRequest, func(string) (string, error) { return string(content), nil})
+				defer guard.Unpatch()
+			}
+			if err := doPing(); (err != nil) != tt.wantErr {
+				t.Errorf("doPing() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
 }

@@ -2,15 +2,22 @@ package util
 
 import (
 	"fmt"
+	"os"
+	"testing"
+
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 
 func TestGetRegionIdInFile(t *testing.T) {
 	cur, _ := GetCurrentPath()
 	path := cur + "../region-id"
+	defer func(){
+		if CheckFileIsExist(path) {
+			os.Remove(path)
+		}
+	}()
 	WriteStringToFile(path, "cn-hangzhou\r\n")
 
 	region_id := getRegionIdInFile()
@@ -19,13 +26,22 @@ func TestGetRegionIdInFile(t *testing.T) {
 
 func TestGetRegionIdInHybrid(t *testing.T) {
 	path,_ := GetHybridPath()
-	path +=  "/instance-id"
-	WriteStringToFile(path, "cn-hangzhou\r")
-	WriteStringToFile(path, "cn-hangzhou\r")
+	regin_path := path + "/region-id"
+	instance_path := path + "/instance-id"
+	defer func() {
+		if CheckFileIsExist(regin_path) {
+			os.Remove(regin_path)
+		}
+		if CheckFileIsExist(instance_path) {
+			os.Remove(instance_path)
+		}
+	}()
+	
+	WriteStringToFile(instance_path, "cn-hangzhou\r")
+	WriteStringToFile(regin_path, "cn-hangzhou\r")
 
 	region_id := getRegionIdInHybrid()
 	assert.Equal(t, region_id, "cn-hangzhou")
-
 	is_hybrid := IsHybrid()
 	assert.Equal(t, is_hybrid, true)
 }
@@ -33,6 +49,8 @@ func TestGetRegionIdInHybrid(t *testing.T) {
 func TestGetDomainByMetaServer(t *testing.T) {
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
+	NilRequest.Set()
+	defer NilRequest.Clear()
 
 	httpmock.RegisterResponder("GET", "http://100.100.100.200/latest/meta-data/region-id",
 		httpmock.NewStringResponder(200, `cn-test`))

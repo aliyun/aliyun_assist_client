@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/process"
@@ -45,10 +46,27 @@ type unregisterResponse struct {
 	Code int `json:"code"`
 }
 
-func Register(region string, code string, id string, name string, need_restart bool) bool {
+func Register(region string, code string, id string, name string, need_restart bool) (ret bool) {
 	log.GetLogger().Infoln(region, code, id, name)
+	errmsg := ""
+	defer func() {
+		msgkey := "info"
+		status := "success"
+		if !ret {
+			msgkey = "errmsg"
+			status = "failed"
+		}
+		metrics.GetHybridRegisterEvent(
+			ret,
+			"status", status,
+			msgkey, errmsg,
+		).ReportEvent()
+	}()
+
+	ret = true
 	if util.IsHybrid() {
 		fmt.Println("error, agent already register, deregister first")
+		errmsg = "error, agent already register, deregister first"
 		log.GetLogger().Infoln("error, agent already register, deregister first")
 		return false
 	}
@@ -63,6 +81,8 @@ func Register(region string, code string, id string, name string, need_restart b
 	var pub, pri bytes.Buffer
 	err := genRsaKey(&pub, &pri)
 	if err != nil {
+	
+		errmsg = fmt.Sprintf("generate rsa key error: %s", err.Error())
 		fmt.Println("error, generate rsa key failed")
 		return false
 	}
@@ -82,18 +102,21 @@ func Register(region string, code string, id string, name string, need_restart b
 		Id:              id,
 	}
 	jsonBytes, _ := json.Marshal(*info)
-	ret := true
 	url := util.GetRegisterService()
 	var response string
 	response, err = util.HttpPost(url, string(jsonBytes), "")
 	if err != nil {
+		ret = false
+		errmsg = fmt.Sprintf("register request err: %s, url=%s", err.Error(), url)
 		fmt.Println(response, err)
-		return false
+		return
 	}
 
 	if !gjson.Valid(response) {
+		ret = false
+		errmsg = fmt.Sprintf("invalid task info json, url=%s, response=%s", url, response)
 		fmt.Println("invalid task info json:", response)
-		return false
+		return
 	}
 
 	var register_response registerResponse
@@ -116,9 +139,12 @@ func Register(region string, code string, id string, name string, need_restart b
 	}
 
 	if !ret {
+		errmsg = fmt.Sprintf("register failed, responsecode=%d, url=%s", register_response.Code, url)
 		fmt.Println("register failed")
 		fmt.Println(response)
+		return
 	} else {
+		errmsg = fmt.Sprintf("register ok, instanceid=%s", register_response.InstanceId)
 		fmt.Println("register ok")
 		fmt.Println("instance id:", register_response.InstanceId)
 		if need_restart {
@@ -126,14 +152,32 @@ func Register(region string, code string, id string, name string, need_restart b
 		}
 		fmt.Println("restart service")
 	}
-	return ret
+	return
 }
 
 func UnRegister(need_restart bool) bool {
-	url := util.GetDeRegisterService()
+	errmsg := ""
+	defer func() {
+		if len(errmsg) > 0 {
+			metrics.GetHybridUnregisterEvent(
+				false,
+				"status", "failed",
+				"errormsg", errmsg,
+			).ReportEvent()
+		} else {
+			metrics.GetHybridUnregisterEvent(
+				true,
+				"status", "success",
+			).ReportEvent()
+		}
+	}()
+
+	url := "https://" + util.GetServerHost();
+	url += "/luban/api/instance/deregister";
 
 	response, err := util.HttpPost(url, "", "")
 	if err != nil {
+		errmsg = fmt.Sprintf("deregister request err: %s", err.Error())
 		fmt.Println(response)
 	}
 	ret := true
@@ -147,6 +191,7 @@ func UnRegister(need_restart bool) bool {
 	}
 
 	if !ret {
+		errmsg = fmt.Sprintf("unregister failed, responsecode=%d", unregister_response.Code)
 		fmt.Println("unregister failed")
 		fmt.Println(response)
 	} else {
@@ -161,7 +206,7 @@ func genRsaKey(pub io.Writer, pri io.Writer) error {
 	// 生成私钥文件
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
-		return err
+		return	err
 	}
 	derStream := x509.MarshalPKCS1PrivateKey(privateKey)
 	block := &pem.Block{

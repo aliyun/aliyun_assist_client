@@ -40,8 +40,10 @@ var (
 	_retryMutex   *sync.Mutex
 
 	_processStartTime int64
-	_heartbeatCounter uint64
+	_acknowledgeCounter uint64
+	_sendCounter uint64
 	_winVirtioIsOld   int
+	_machineId string
 )
 
 func checkWindowsVirtVer() int {
@@ -61,19 +63,23 @@ func init() {
 	_retryCounter = 0
 	_retryMutex = &sync.Mutex{}
 	_processStartTime = timetool.GetAccurateTime()
-	_heartbeatCounter = 0
+	_acknowledgeCounter = 0
+	_sendCounter = 0
 	_winVirtioIsOld = checkWindowsVirtVer()
+	_machineId, _ = util.GetMachineID()
 }
 
 func buildPingRequest(virtType string, osType string, osVersion string,
 	appVersion string, uptime uint64, timestamp int64, pid int,
-	processUptime int64, heartbeatCounter uint64, azoneId string, isColdstart bool) string {
+	processUptime int64, acknowledgeCounter uint64, azoneId string,
+	isColdstart bool, sendCounter uint64) string {
 	encodedOsVersion := url.QueryEscape(osVersion)
-	paramChars := fmt.Sprintf("?virt_type=%s&lang=golang&os_type=%s&os_version=%s&app_version=%s&uptime=%d&timestamp=%d&pid=%d&process_uptime=%d&index=%d&az=%s&virtiover=%d",
+	paramChars := fmt.Sprintf("?virt_type=%s&lang=golang&os_type=%s&os_version=%s&app_version=%s&uptime=%d&timestamp=%d&pid=%d&process_uptime=%d&index=%d&az=%s&virtiover=%d&machineid=%s&seq_no=%d",
 		virtType, osType, encodedOsVersion, appVersion, uptime, timestamp, pid,
-		processUptime, heartbeatCounter, azoneId, _winVirtioIsOld)
+		processUptime, acknowledgeCounter, azoneId, _winVirtioIsOld, _machineId,
+		sendCounter)
 	// Only first heart-beat need to carry cold-start flag
-	if heartbeatCounter == 0 {
+	if acknowledgeCounter == 0 {
 		paramChars = paramChars + fmt.Sprintf("&cold_start=%t", isColdstart)
 	}
 	url := util.GetPingService() + paramChars
@@ -127,11 +133,12 @@ func doPing() error {
 	timestamp := timetool.GetAccurateTime()
 	pid := os.Getpid()
 	processUptime := timetool.GetAccurateTime() - _processStartTime
-	heartbeatCounter := _heartbeatCounter
+	acknowledgeCounter := _acknowledgeCounter
+	sendCounter := _sendCounter
 	azoneId := util.GetAzoneId()
 	isColdstart := false
 	// Only first heart-beat need to carry cold-start flag
-	if heartbeatCounter == 0 {
+	if acknowledgeCounter == 0 {
 		if _isColdstart, err := flagging.IsColdstart(); err != nil {
 			log.GetLogger().WithError(err).Errorln("Error encountered when detecting cold-start flag")
 		} else {
@@ -140,7 +147,8 @@ func doPing() error {
 	}
 
 	url := buildPingRequest(virtType, osType, osVersion, appVersion, startTime,
-		timestamp, pid, processUptime, heartbeatCounter, azoneId, isColdstart)
+		timestamp, pid, processUptime, acknowledgeCounter, azoneId, isColdstart,
+		sendCounter)
 
 	nextIntervalSeconds := DefaultPingIntervalSeconds
 	newTasks := false
@@ -224,19 +232,20 @@ func doPing() error {
 func PingwithRetries(retryCount int) {
 	for i := 0; i < retryCount; i++ {
 		if err := doPing(); err == nil {
+			_acknowledgeCounter++
 			break
 		}
 	}
-	_heartbeatCounter++
-
+	_sendCounter++
 }
 
 func pingWithoutRetry() {
 	// Error(s) encountered during heart-beating has been logged internally,
 	// simply ignore it here.
-	doPing()
-	_heartbeatCounter++
-
+	if err := doPing(); err == nil {
+		_acknowledgeCounter++
+	}
+	_sendCounter++
 }
 
 func InitHeartbeatTimer() error {

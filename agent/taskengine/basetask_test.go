@@ -63,7 +63,7 @@ func TestRunTask(t *testing.T) {
 	}
 	task := NewTask(info)
 
-	err := task.Run()
+	errcode, err := task.Run()
 
 	/*if runtime.GOOS == "windows" {
 		assert.Contains(t, output, "Users")
@@ -74,4 +74,5 @@ func TestRunTask(t *testing.T) {
 	}*/
 
 	assert.Equal(t, nil , err)
+	assert.Equal(t, 0 , int(errcode))
 }
