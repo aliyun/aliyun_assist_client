@@ -154,7 +154,7 @@ func IsHybrid() bool {
 }
 
 func IsSelfHosted() bool {
-	return os.Getenv("ALIYUN_ASSIST_SERVER_HOST") > 0
+	return len(os.Getenv("ALIYUN_ASSIST_SERVER_HOST")) > 0
 }
 
 func getRegionIdInFile() string {
