@@ -81,7 +81,7 @@ func Register(region string, code string, id string, name string, need_restart b
 	var pub, pri bytes.Buffer
 	err := genRsaKey(&pub, &pri)
 	if err != nil {
-	
+
 		errmsg = fmt.Sprintf("generate rsa key error: %s", err.Error())
 		fmt.Println("error, generate rsa key failed")
 		return false
@@ -133,6 +133,9 @@ func Register(region string, code string, id string, name string, need_restart b
 			util.WriteStringToFile(path+"/region-id", region)
 			util.WriteStringToFile(path+"/instance-id", register_response.InstanceId)
 			util.WriteStringToFile(path+"/machine-id", mid)
+			if util.IsSelfHosted() {
+				util.WriteStringToFile(path+"/self-hosted-server", util.GetServerHost())
+			}
 		} else {
 			ret = false
 		}
@@ -172,8 +175,8 @@ func UnRegister(need_restart bool) bool {
 		}
 	}()
 
-	url := "https://" + util.GetServerHost();
-	url += "/luban/api/instance/deregister";
+	url := "https://" + util.GetServerHost()
+	url += "/luban/api/instance/deregister"
 
 	response, err := util.HttpPost(url, "", "")
 	if err != nil {
@@ -206,7 +209,7 @@ func genRsaKey(pub io.Writer, pri io.Writer) error {
 	// 生成私钥文件
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
-		return	err
+		return err
 	}
 	derStream := x509.MarshalPKCS1PrivateKey(privateKey)
 	block := &pem.Block{

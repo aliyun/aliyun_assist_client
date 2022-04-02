@@ -154,7 +154,14 @@ func IsHybrid() bool {
 }
 
 func IsSelfHosted() bool {
-	return os.Getenv("ALIYUN_ASSIST_SERVER_HOST") != ""
+	// check if self-hosted-server file exists
+	path, _ := GetSelfhostedPath()
+	server_addr_path := path + "/self-hosted-server"
+	if CheckFileIsExist(server_addr_path) {
+		return true
+	} else {
+		return os.Getenv("ALIYUN_ASSIST_SERVER_HOST") != ""
+	}
 }
 
 func getRegionIdInFile() string {
@@ -268,6 +275,14 @@ func GetServerHost() string {
 		return g_domainId
 	}
 	if IsSelfHosted() {
+		path, _ := GetSelfhostedPath()
+		server_addr_path := path + "/self-hosted-server"
+		if CheckFileIsExist(server_addr_path) {
+			host_addr, err := ioutil.ReadFile(server_addr_path)
+			if err == nil && len(host_addr) > 0 {
+				return string(host_addr)
+			}
+		}
 		return os.Getenv("ALIYUN_ASSIST_SERVER_HOST")
 	}
 	regionId := GetRegionId()
