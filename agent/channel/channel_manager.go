@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -19,6 +18,7 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine"
 	"github.com/aliyun/aliyun_assist_client/agent/update"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/agent/util/powerutil"
 )
 
 var _gshellChannel IChannel = nil
@@ -228,24 +228,6 @@ func BuildInvalidRet(desc string) string {
 	return string(retStr)
 }
 
-func onPowerdown() {
-	shutdownCmd := "shutdown -h now"
-	if runtime.GOOS == "windows" {
-		shutdownCmd = "shutdown -f -s -t 0"
-	}
-	log.GetLogger().Infoln("powerdown......")
-	util.ExeCmd(shutdownCmd)
-}
-
-func onReboot() {
-	rebootCmd := "shutdown -r now"
-	if runtime.GOOS == "windows" {
-		rebootCmd = "shutdown -f -r -t 0"
-	}
-	log.GetLogger().Infoln("reboot......")
-	util.ExeCmd(rebootCmd)
-}
-
 func OnRecvMsg(Msg string, ChannelType int) string {
 	log.GetLogger().Infoln("kick msg:", Msg)
 
@@ -361,9 +343,9 @@ func OnRecvMsg(Msg string, ChannelType int) string {
 			return BuildInvalidRet("invalid guest-shutdown command")
 		}
 		if reboot {
-			onReboot()
+			powerutil.Reboot()
 		} else {
-			onPowerdown()
+			powerutil.Powerdown()
 		}
 		return string(retStr)
 	}

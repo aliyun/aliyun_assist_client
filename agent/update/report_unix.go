@@ -2,15 +2,6 @@
 
 package update
 
-import (
-	"errors"
-	"syscall"
-)
-
-func isNoEnoughSpaceError(err error) bool {
-	return errors.Is(err, syscall.ENOSPC)
-}
-
 func categorizeExitCode(exitCode int) string {
 	if exitCode == 0 {
 		return ""

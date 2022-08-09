@@ -15,7 +15,8 @@ import (
 )
 
 const (
-	HYBRID_DOMAIN = ".axt.aliyuncs.com"
+	HYBRID_DOMAIN     = ".axt.aliyuncs.com"
+	HYBRID_DOMAIN_VPC = ".axt.aliyun.com"
 )
 
 var region_ids []string = []string{
@@ -130,6 +131,22 @@ func pollingRegionId() string {
 func getRegionIdInHybrid() string {
 	path, _ := GetHybridPath()
 	path += "/region-id"
+	if CheckFileIsExist(path) {
+		raw, err := ioutil.ReadFile(path)
+		if err == nil {
+			content := string(raw)
+			content = strings.Trim(content, "\r")
+			content = strings.Trim(content, "\n")
+			content = strings.Trim(content, "\t")
+			return strings.TrimSpace(content)
+		}
+	}
+	return ""
+}
+
+func getNetworkTypeInHybrid() string {
+	path, _ := GetHybridPath()
+	path += "/network-mode"
 	if CheckFileIsExist(path) {
 		raw, err := ioutil.ReadFile(path)
 		if err == nil {
@@ -273,7 +290,11 @@ func GetServerHost() string {
 	regionId := GetRegionId()
 	if regionId != "" {
 		if IsHybrid() {
-			return regionId + HYBRID_DOMAIN
+			if getNetworkTypeInHybrid() == "vpc" {
+				return regionId + HYBRID_DOMAIN_VPC
+			} else {
+				return regionId + HYBRID_DOMAIN
+			}
 		}
 		return regionId + ".axt.aliyun.com"
 	} else {

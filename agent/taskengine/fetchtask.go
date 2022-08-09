@@ -3,13 +3,14 @@ package taskengine
 import (
 	"encoding/json"
 	"fmt"
+	neturl "net/url"
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"github.com/tidwall/gjson"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/agent/util/timetool"
 )
 
 type FetchReason string
@@ -64,55 +65,54 @@ func parseTaskInfo(jsonStr string) *taskCollection {
 
 	taskInfos := newTaskCollection()
 
-	if !gjson.Valid(jsonStr) {
+	var task_lists tasks
+	err := json.Unmarshal([]byte(jsonStr), &task_lists)
+	if err != nil {
 		logger.WithFields(logrus.Fields{
 			"jsonString": jsonStr,
-		}).Errorln("Invalid task info json")
+		}).WithError(err).Errorln("Invalid task info json")
 		return taskInfos
 	}
 
-	var task_lists tasks
-	if err := json.Unmarshal([]byte(jsonStr), &task_lists); err == nil {
-		for _, v := range task_lists.RunTasks {
-			runTaskInfo, err := v.toRunTaskInfo()
-			if err != nil {
-				logger.WithFields(logrus.Fields{
-					"runTask": v,
-				}).WithError(err).Errorln("Invalid run task info")
-				continue
-			}
-			taskInfos.runInfos = append(taskInfos.runInfos, runTaskInfo)
+	for _, v := range task_lists.RunTasks {
+		runTaskInfo, err := v.toRunTaskInfo(task_lists.InstanceId)
+		if err != nil {
+			logger.WithFields(logrus.Fields{
+				"runTask": v,
+			}).WithError(err).Errorln("Invalid run task info")
+			continue
 		}
+		taskInfos.runInfos = append(taskInfos.runInfos, runTaskInfo)
+	}
 
-		for _, stopTask := range task_lists.StopTasks {
-			stopTaskInfo, err := stopTask.toRunTaskInfo()
-			if err != nil {
-				logger.WithFields(logrus.Fields{
-					"stopTask": stopTask,
-				}).WithError(err).Errorln("Invalid stop task info")
-				continue
-			}
-			taskInfos.stopInfos = append(taskInfos.stopInfos, stopTaskInfo)
+	for _, stopTask := range task_lists.StopTasks {
+		stopTaskInfo, err := stopTask.toRunTaskInfo(task_lists.InstanceId)
+		if err != nil {
+			logger.WithFields(logrus.Fields{
+				"stopTask": stopTask,
+			}).WithError(err).Errorln("Invalid stop task info")
+			continue
 		}
-		for _, testTask := range task_lists.TestTasks {
-			testTaskInfo, err := testTask.toRunTaskInfo()
-			if err != nil {
-				logger.WithFields(logrus.Fields{
-					"testTask": testTask,
-				}).WithError(err).Errorln("Invalid test task info")
-				continue
-			}
-			taskInfos.testInfos = append(taskInfos.testInfos, testTaskInfo)
+		taskInfos.stopInfos = append(taskInfos.stopInfos, stopTaskInfo)
+	}
+	for _, testTask := range task_lists.TestTasks {
+		testTaskInfo, err := testTask.toRunTaskInfo(task_lists.InstanceId)
+		if err != nil {
+			logger.WithFields(logrus.Fields{
+				"testTask": testTask,
+			}).WithError(err).Errorln("Invalid test task info")
+			continue
 		}
-		for _, sendFileTask := range task_lists.SendFileTasks {
-			sendFile := sendFileTask.TaskInfo
-			sendFile.Output = sendFileTask.OutputInfo
-			taskInfos.sendFiles = append(taskInfos.sendFiles, sendFile)
-		}
+		taskInfos.testInfos = append(taskInfos.testInfos, testTaskInfo)
+	}
+	for _, sendFileTask := range task_lists.SendFileTasks {
+		sendFile := sendFileTask.TaskInfo
+		sendFile.Output = sendFileTask.OutputInfo
+		taskInfos.sendFiles = append(taskInfos.sendFiles, sendFile)
+	}
 
-		for _, sessionTask := range task_lists.SessionTasks {
-			taskInfos.sessionInfos = append(taskInfos.sessionInfos, sessionTask)
-		}
+	for _, sessionTask := range task_lists.SessionTasks {
+		taskInfos.sessionInfos = append(taskInfos.sessionInfos, sessionTask)
 	}
 
 	return taskInfos
@@ -144,9 +144,11 @@ func FetchTaskList(reason FetchReason, taskId string, taskType int, isColdstart 
 		if taskId != "" {
 			url = url + "&taskId=" + taskId
 		}
+		// Append Unix timestamp and timezone name of current wall clock
+		currentTime, currentOffsetFromUTC, timezoneName := timetool.NowWithTimezoneName()
+		escapedTimezoneName := neturl.QueryEscape(timezoneName)
+		url += fmt.Sprintf("&currentTime=%d&offset=%d&timeZone=%s", timetool.ToAccurateTime(currentTime), currentOffsetFromUTC, escapedTimezoneName)
 	}
-
-
 
 	var err error
 	var response string
@@ -165,8 +167,9 @@ func FetchTaskList(reason FetchReason, taskId string, taskType int, isColdstart 
 	return taskInfos
 }
 
-func (t *taskInfo) toRunTaskInfo() (RunTaskInfo, error) {
+func (t *taskInfo) toRunTaskInfo(instanceId string) (RunTaskInfo, error) {
 	runTaskInfo := t.TaskInfo
+	runTaskInfo.InstanceId = instanceId
 	runTaskInfo.Output = t.OutputInfo
 	runTaskInfo.Repeat = t.Repeat
 
@@ -174,9 +177,18 @@ func (t *taskInfo) toRunTaskInfo() (RunTaskInfo, error) {
 	// TODO: Remove compatibility code when `Repeat` field fully available
 	if runTaskInfo.Repeat == "" {
 		if runTaskInfo.Cronat != "" {
-			runTaskInfo.Repeat = RunTaskPeriod
+			runTaskInfo.Repeat = RunTaskCron
 		} else {
 			runTaskInfo.Repeat = RunTaskOnce
+		}
+	}
+
+	// Prepare values of environment parameters if enableParameter is true
+	if runTaskInfo.EnableParameter {
+		runTaskInfo.EnvironmentArguments = map[string]string{
+			"InstanceId": instanceId,
+			"CommandId": runTaskInfo.CommandId,
+			"InvokeId": runTaskInfo.TaskId,
 		}
 	}
 

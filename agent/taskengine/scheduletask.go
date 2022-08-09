@@ -152,7 +152,7 @@ func dispatchRunTask(taskInfo RunTaskInfo) {
 	})
 	switch taskInfo.Repeat {
 	case RunTaskOnce, RunTaskNextRebootOnly, RunTaskEveryReboot:
-		t := NewTask(taskInfo)
+		t := NewTask(taskInfo, nil, nil)
 
 		scheduleLogger.Info("Schedule non-periodic task")
 		// Non-periodic tasks are managed by TaskFactory
@@ -171,7 +171,7 @@ func dispatchRunTask(taskInfo RunTaskInfo) {
 			taskFactory.RemoveTaskByName(t.taskInfo.TaskId)
 		})
 		scheduleLogger.Info("Scheduled for pending or running")
-	case RunTaskPeriod:
+	case RunTaskCron, RunTaskRate, RunTaskAt:
 		// Periodic tasks are managed by _periodicTaskSchedules
 		err := schedulePeriodicTask(taskInfo)
 		if err != nil {
@@ -207,12 +207,12 @@ func dispatchStopTask(taskInfo RunTaskInfo) {
 			scheduledTask.Cancel()
 			cancelLogger.Info("Canceled task and invocation")
 		} else {
-			response, err := sendStoppedOutput(taskInfo.TaskId, 0, 0, 0, 0, "")
+			response, err := sendStoppedOutput(taskInfo.TaskId, 0, 0, 0, 0, "", stopReasonKilled)
 			cancelLogger.WithFields(logrus.Fields{
 				"response": response,
 			}).WithError(err).Warning("Force cancelling task not found due to finished or error")
 		}
-	case RunTaskPeriod:
+	case RunTaskCron, RunTaskRate, RunTaskAt:
 		// Periodic tasks are managed by _periodicTaskSchedules
 		err := cancelPeriodicTask(taskInfo)
 		if err != nil {
@@ -249,8 +249,8 @@ func dispatchTestTask(taskInfo RunTaskInfo) {
 		"Phase":  "Scheduling",
 	})
 	switch taskInfo.Repeat {
-	case RunTaskOnce, RunTaskPeriod, RunTaskNextRebootOnly, RunTaskEveryReboot:
-		t := NewTask(taskInfo)
+	case RunTaskOnce, RunTaskCron, RunTaskNextRebootOnly, RunTaskEveryReboot, RunTaskRate, RunTaskAt:
+		t := NewTask(taskInfo, nil, nil)
 
 		scheduleLogger.Info("Schedule testing task to be pre-checked")
 		pool := GetPrecheckPool()
@@ -328,21 +328,84 @@ func schedulePeriodicTask(taskInfo RunTaskInfo) error {
 		timer: nil,
 		// Invocations of periodic task is not allowed to overlap, so Task struct
 		// for invocation data can be reused.
-		reusableInvocation: NewTask(taskInfo),
+		reusableInvocation: nil,
 	}
-	// 3. Create cron expression timer and register into TimerManager
+	// 3. Create timer based on expression and register into TimerManager
 	// NOTE: reusableInvocation is binded to callback via closure feature of golang,
 	// maybe explicit passing into callback like "data" for traditional thread
 	// would be better
-	timer, err := timerManager.CreateCronTimer(func() {
-		periodicTaskSchedule.startExclusiveInvocation()
-	}, taskInfo.Cronat)
+	var timer *timermanager.Timer
+	var err error
+	var scheduleLocation *time.Location = nil
+	var onFinish FinishCallback = nil
+	if taskInfo.Repeat == RunTaskRate {
+		creationTimeSeconds := taskInfo.CreationTime / 1000
+		creationTimeMs := taskInfo.CreationTime % 1000
+		creationTime := time.Unix(creationTimeSeconds, creationTimeMs * int64(time.Millisecond))
+		timer, err = timerManager.CreateRateTimer(func() {
+			periodicTaskSchedule.startExclusiveInvocation()
+		}, taskInfo.Cronat, creationTime)
+	} else if taskInfo.Repeat == RunTaskAt {
+		timer, err = timerManager.CreateAtTimer(func() {
+			periodicTaskSchedule.startExclusiveInvocation()
+		}, taskInfo.Cronat)
+	} else {
+		timer, err = timerManager.CreateCronTimer(func() {
+			periodicTaskSchedule.startExclusiveInvocation()
+		}, taskInfo.Cronat)
+	}
 	if err != nil {
+		// Report errors for invalid cron/rate/at expression
+		var response string
+		var reportErr error
+		if cronParameterErr, ok := err.(timermanager.CronParameterError); ok {
+			// Only report string constant code to luban
+			response, reportErr = reportInvalidTask(taskInfo.TaskId, invalidParamCron, cronParameterErr.Code())
+		} else {
+			response, reportErr = reportInvalidTask(taskInfo.TaskId, invalidParamCron, err.Error())
+		}
+		scheduleLogger.WithFields(logrus.Fields{
+			"expression": taskInfo.Cronat,
+			"reportErr": reportErr,
+			"response": response,
+		}).WithError(err).Info("Report errors for invalid cron/rate/at expression")
 		return err
 	}
-	// then bind it to periodicTaskSchedule object
+	// Special attributes for additional reporting of cron tasks
+	if taskInfo.Repeat == RunTaskCron {
+		cronScheduled, ok := timer.Schedule.(*timermanager.CronScheduled)
+		if !ok {
+			// Should never run into logic here
+			errorMessage := "Unexpected schedule object when invoking onFinish callback for cron schedule!"
+			scheduleLogger.Errorln(errorMessage)
+			return errors.New(errorMessage)
+		}
+		scheduleLocation = cronScheduled.Location()
+		onFinish = func() {
+			onFinishLogger := log.GetLogger().WithFields(logrus.Fields{
+				"TaskId": taskInfo.TaskId,
+				"Phase":  "onFinishCallback",
+			})
+
+			cronScheduled, ok := timer.Schedule.(*timermanager.CronScheduled)
+			if !ok {
+				// Should never run into logic here
+				onFinishLogger.Errorln("Unexpected schedule object when invoking onFinish callback for cron schedule!")
+				return
+			}
+
+			if cronScheduled.NoNextRun() {
+				response, err := sendStoppedOutput(taskInfo.TaskId, 0, 0, 0, 0, "", stopReasonCompleted)
+				onFinishLogger.WithFields(logrus.Fields{
+					"response": response,
+				}).WithError(err).Infoln("Sent completion event for cron task on last invocation finished")
+			}
+		}
+	}
+	// then bind them to periodicTaskSchedule object
 	periodicTaskSchedule.timer = timer
-	scheduleLogger.Info("Created timer of periodic task")
+	periodicTaskSchedule.reusableInvocation = NewTask(taskInfo, scheduleLocation, onFinish)
+	scheduleLogger.Info("Created timer and schedule object of periodic task")
 
 	// 4. Register schedule object into _periodicTaskSchedules
 	_periodicTaskSchedules[taskInfo.TaskId] = periodicTaskSchedule
@@ -378,7 +441,7 @@ func cancelPeriodicTask(taskInfo RunTaskInfo) error {
 	// 1. Check whether task is registered in local storage
 	periodicTaskSchedule, ok := _periodicTaskSchedules[taskInfo.TaskId]
 	if !ok {
-		response, err := sendStoppedOutput(taskInfo.TaskId, 0, 0, 0, 0, "")
+		response, err := sendStoppedOutput(taskInfo.TaskId, 0, 0, 0, 0, "", stopReasonKilled)
 		cancelLogger.WithFields(logrus.Fields{
 			"response": response,
 		}).WithError(err).Warning("Force cancelling periodic task unregistered due to finished or previous errors")

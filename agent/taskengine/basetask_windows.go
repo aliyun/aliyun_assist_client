@@ -6,6 +6,11 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 )
 
+var (
+	exitcodePoweroff = 3009
+	exitcodeReboot   = 3010
+)
+
 func (task *Task) detectHomeDirectory() (string, error) {
 	return "", nil
 }
@@ -23,4 +28,8 @@ func (task *Task) detectWorkingDirectory() (string, error) {
 		return workingDir, fmt.Errorf("%w: %s", ErrWorkingDirectoryNotExist, workingDir)
 	}
 	return workingDir, nil
+}
+
+func (task *Task) categorizeSyscallErrno(err error, prefixDefault presetWrapErrorCode) (presetWrapErrorCode, string) {
+	return prefixDefault, presetErrorPrefixes[prefixDefault]
 }

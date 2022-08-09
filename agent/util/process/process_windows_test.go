@@ -14,7 +14,7 @@ func TestWinCommnad(t *testing.T) {
 
 	commandName := "cmd"
 	code,_, err := processer.SyncRun("",
-		commandName, nil, &stdoutWrite, &stderrWrite,  nil, 30)
+		commandName, nil, &stdoutWrite, &stderrWrite,  nil, nil, 30)
 
 	fmt.Println(code, err)
 	assert.Contains(t,  stdoutWrite.String(), "Microsoft")

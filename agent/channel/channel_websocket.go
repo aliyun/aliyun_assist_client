@@ -26,9 +26,9 @@ const MAX_RETRY_COUNT = 5
 
 type WebSocketChannel struct {
 	*Channel
-	wskConn *websocket.Conn
-	lock    sync.Mutex
-	writeLock    sync.Mutex
+	wskConn   *websocket.Conn
+	lock      sync.Mutex
+	writeLock sync.Mutex
 }
 
 func (c *WebSocketChannel) IsSupported() bool {
@@ -71,7 +71,7 @@ func (c *WebSocketChannel) StartChannel() error {
 		util.UserAgentHeader: []string{util.UserAgentValue},
 	}
 
-	if util.IsHybrid() || util.IsSelfHosted() {
+	if util.IsHybrid() {
 		u4 := uuid.New()
 		str_request_id := u4.String()
 
@@ -207,7 +207,7 @@ func (c *WebSocketChannel) SwitchChannel() error {
 		"reportType", "switch_channel_in_wsk",
 		"info", fmt.Sprintf("fail: no available channel"),
 	).ReportEvent()
-	
+
 	report := clientreport.ClientReport{
 		ReportType: "switch_channel_in_wsk",
 		Info:       fmt.Sprintf("fail: no available channel"),

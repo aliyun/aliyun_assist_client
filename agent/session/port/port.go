@@ -1,16 +1,18 @@
 package port
 
 import (
+	"errors"
 	"fmt"
+	"net"
+	"os"
+	"strconv"
+	"time"
+
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/session/channel"
 	"github.com/aliyun/aliyun_assist_client/agent/session/message"
 	"github.com/aliyun/aliyun_assist_client/agent/session/shell"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
-	"net"
-	"os"
-	"strconv"
-	"time"
 )
 
 const(
@@ -20,6 +22,12 @@ const(
 	IO_socket_error = "IO_port_failed"
 )
 
+const (
+	sendPackageSize = 2048 // 发送的payload大小上限，单位 B
+	defaultSendSpeed = 200 // 默认的最大数据发送速率，单位 kbps
+	defaultSendInterval = 1000 / (defaultSendSpeed * 1024 / 8 / sendPackageSize) // writeloop的循环间隔时间 单位ms
+)
+
 type PortPlugin struct {
 	id        string
 	portNumber   int
@@ -27,15 +35,24 @@ type PortPlugin struct {
 	conn               net.Conn
 	reconnectToPort bool
 	reconnectToPortErr chan error
+	flowLimit	int
+	sendInterval int
 }
 
-func NewPortPlugin(id string, portNumber int) *PortPlugin {
+func NewPortPlugin(id string, portNumber int, flowLimit int) *PortPlugin {
 	plugin := &PortPlugin{
 		id:id,
 		reconnectToPort:false,
 		portNumber:portNumber,
 		reconnectToPortErr: make(chan error),
+		sendInterval: defaultSendInterval,
 	}
+	if flowLimit > 0 {
+		plugin.sendInterval = 1000 / (flowLimit / 8 / sendPackageSize)
+	} else {
+		flowLimit = defaultSendSpeed * 1024
+	}
+	log.GetLogger().Infof("Init send speed, channelId[%s] speed[%d]bps sendInterval[%d]ms\n", id, flowLimit, plugin.sendInterval)
 	return plugin
 }
 
@@ -91,6 +108,7 @@ func (p *PortPlugin) Execute(dataChannel channel.ISessionChannel, cancelFlag uti
 
 	select {
 	case <-cancelled:
+		p.reconnectToPortErr <- errors.New("Session has been cancelled")
 		log.GetLogger().Info("The session was cancelled")
 
 
@@ -110,18 +128,18 @@ func (p *PortPlugin) writePump() (errorCode string) {
 		}
 	}()
 
-	packet := make([]byte, 2048)
+	packet := make([]byte, sendPackageSize)
 
 	for {
 		if p.dataChannel.IsActive() == true {
 			numBytes, err := p.conn.Read(packet)
 			if err != nil {
-			    // it may cause goroutines leak, disable retry.
-				/*var exitCode int
+				// it may cause goroutines leak, disable retry.
+				var exitCode int
 				if exitCode = p.onError(); exitCode == 1 {
 					log.GetLogger().Infoln("Reconnection to port is successful, resume reading from port.")
 					continue
-				}*/
+				}
 				log.GetLogger().Infof("Unable to read port: %v", err)
 				return Read_port_failed
 			}
@@ -140,7 +158,7 @@ func (p *PortPlugin) writePump() (errorCode string) {
 		}
 
 		// Wait for TCP to process more data
-		time.Sleep(time.Millisecond)
+		time.Sleep(time.Duration(p.sendInterval) * time.Millisecond)
 	}
 }
 
@@ -152,7 +170,7 @@ func (p *PortPlugin) onError() int {
 
 	log.GetLogger().Debugf("Waiting for reconnection to port!!")
 	err := <-p.reconnectToPortErr
-
+	log.GetLogger().Infoln("reconnectToPortErr: ", err)
 	if err != nil {
 		log.GetLogger().Error(err)
 		return 2
@@ -187,6 +205,27 @@ func (p *PortPlugin) InputStreamMessageHandler(streamDataMessage message.Message
 		if util.IsVerboseMode() {
 			log.GetLogger().Infoln("write data:", string(streamDataMessage.Payload))
 		}
+	case message.StatusDataMessage:
+		if len(streamDataMessage.Payload) > 0 {
+			code, err := message.BytesToIntU(streamDataMessage.Payload[0:1])
+			if err == nil {
+				if code == 7 { // 设置agent的发送速率
+					speed, err := message.BytesToIntU(streamDataMessage.Payload[1:]) // speed 单位是 bps
+					if speed == 0 {
+						break
+					}
+					if err != nil {
+						log.GetLogger().Errorf("Invalid flowLimit: %s", err)
+						return err
+					}
+					p.sendInterval = 1000 / (speed / 8 / sendPackageSize)
+					log.GetLogger().Infof("Set send speed, channelId[%s] speed[%d]bps sendInterval[%d]ms\n", p.id, speed, p.sendInterval)
+				}
+			} else {
+				log.GetLogger().Errorf("Parse status code err: %s", err)
+			}
+		}
+		break
 	}
 	return nil
 }

@@ -1,22 +1,24 @@
 package pluginmanager
 
+// 插件状态
 const (
 	// PluginTypeHealth 健康 0
 	PERSIST_RUNNING string = "PERSIST_RUNNING"
 	// PluginTypeFail 未成功启动 1
 	PERSIST_FAIL	string = "PERSIST_FAIL"
-	// PluginTypeOnce 一次性插件已安装 2
-	ONCE_INSTALLED	string = "ONCE_INSTALLED"
 	// PluginUnknown 未知
 	PERSIST_UNKNOWN string = "PERSIST_UNKNOWN"
+
+	// PluginTypeOnce 一次性插件已安装 2
+	ONCE_INSTALLED	string = "ONCE_INSTALLED"
 )
 
+// 插件类型
 const (
-
 	// PluginOneTime 一次性插件
-	PluginOneTime int = iota
+	PluginOneTime int = 0
 	// PluginPersist 常驻型插件
-	PluginPersist
+	PluginPersist int = 1
 )
 
 type PluginInfo struct {
@@ -29,7 +31,7 @@ type PluginInfo struct {
 	Url            string `json:"url"`
 	Md5            string `json:"md5"`
 	RunPath        string `json:"runPath"`
-	Timeout        string  `json:"timeout"`
+	Timeout        string `json:"timeout"`
 	IsPreInstalled string `json:"isPreInstalled"`
 	PluginType     int    `json:"pluginType"`
 }
@@ -63,7 +65,11 @@ type PluginStatusResquest struct {
 	Arch string `json:"arch"`
 	Plugin []PluginStatus `json:"plugin"`
 }
-
+// 状态上报的响应数据
+type PluginStatusResponse struct {
+	InstanceId string `json:"instanceId"`
+	NextInterval int `json:"nextInterval"`
+}
 
 
 

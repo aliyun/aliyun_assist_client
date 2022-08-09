@@ -13,7 +13,7 @@ func TestPwdCommnad(t *testing.T) {
 
 	commandName := "pwd"
 	processer.SyncRun("/tmp",
-		commandName, nil, &stdoutWrite, &stderrWrite,  nil, 30)
+		commandName, nil, &stdoutWrite, &stderrWrite,  nil, nil, 30)
 
 	assert.Contains(t,  stdoutWrite.String(), "/tmp")
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"strings"
+	"fmt"
 )
 
 const (
@@ -13,6 +14,7 @@ const (
 	OutputStreamDataMessage = 1 // string = "output_stream_data"
 	SetSizeDataMessage = 2 //string = "set_size"
 	CloseDataChannel = 3
+	StatusDataMessage = 5
 )
 
 const (
@@ -322,4 +324,27 @@ func bytesToInteger(input []byte) (result int32, err error) {
 	buf := bytes.NewBuffer(input)
 	binary.Read(buf, binary.LittleEndian, &res)
 	return res, nil
+}
+
+func BytesToIntU(b []byte) (int, error) {
+	if len(b) == 3 {
+		b = append([]byte{0}, b...)
+	}
+	bytesBuffer := bytes.NewBuffer(b)
+	switch len(b) {
+	case 1:
+		var tmp uint8
+		err := binary.Read(bytesBuffer, binary.BigEndian, &tmp)
+		return int(tmp), err
+	case 2:
+		var tmp uint16
+		err := binary.Read(bytesBuffer, binary.BigEndian, &tmp)
+		return int(tmp), err
+	case 4:
+		var tmp uint32
+		err := binary.Read(bytesBuffer, binary.BigEndian, &tmp)
+		return int(tmp), err
+	default:
+		return 0, fmt.Errorf("%s", "BytesToInt bytes lenth is invaild!")
+	}
 }

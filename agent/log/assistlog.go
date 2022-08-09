@@ -26,6 +26,7 @@ func InitLog(filename string, logpath string) {
 		logdir+"/log/"+filename+".%Y%m%d",
 		rotatelogs.WithMaxAge(time.Duration(24*30)*time.Hour),    //最长保留30天
 		rotatelogs.WithRotationTime(time.Duration(24)*time.Hour), //每天进行一次日志切割
+		rotatelogs.WithLinkName(logdir+"/log/"+filename), // 为日志文件创建一个名字不变的链接
 	)
 	if err != nil {
 		log.Errorf("config local file system logger error. %+v", errors.WithStack(err))

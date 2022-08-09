@@ -27,13 +27,14 @@ type SessionTask struct{
 	shellPlugin         *shell.ShellPlugin
 	portPlugin         *port.PortPlugin
 	cancelFlag         util.CancelFlag
+	flowLimit	int
 }
 
 
 func NewSessionTask(sessionId string,
 	                websocketUrl string,
 	                taskId string, cmdContent string, username string, passwordName string,
-	                portNumber string) *SessionTask{
+	                portNumber string, flowLimit int) *SessionTask{
 	task := &SessionTask{
 		sessionId:sessionId,
 		taskId:taskId,
@@ -43,6 +44,7 @@ func NewSessionTask(sessionId string,
 		username:username,
 		cancelFlag: util.NewChanneledCancelFlag(),
 		portNumber:portNumber,
+		flowLimit: flowLimit,
 	}
 	return task
 }
@@ -84,9 +86,9 @@ func (sessionTask *SessionTask) runTask() (string, error){
 	}
 	if sessionTask.isPortForwardTask() {
 		port_num,_ := strconv.Atoi(sessionTask.portNumber)
-		sessionTask.portPlugin= port.NewPortPlugin(sessionTask.sessionId, port_num)
+		sessionTask.portPlugin= port.NewPortPlugin(sessionTask.sessionId, port_num, sessionTask.flowLimit)
 	} else {
-		sessionTask.shellPlugin = shell.NewShellPlugin(sessionTask.sessionId, sessionTask.cmdContent, sessionTask.username, sessionTask.passwordName)
+		sessionTask.shellPlugin = shell.NewShellPlugin(sessionTask.sessionId, sessionTask.cmdContent, sessionTask.username, sessionTask.passwordName, sessionTask.flowLimit)
 	}
 	GetSessionFactory().AddSessionTask(sessionTask)
 
@@ -155,7 +157,8 @@ func DoSessionTask(tasks [] SessionTaskInfo) {
 				s.CmdContent,
 				s.Username,
 				s.Password,
-				s.PortNumber)
+				s.PortNumber,
+				s.FlowLimit)
 			session.RunTask(s.SessionId)
 		}
 	}()

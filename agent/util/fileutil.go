@@ -1,8 +1,14 @@
 package util
 
 import (
+	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
+
+	"errors"
+	"path/filepath"
+	"strings"
 )
 
 func CheckFileIsExist(filename string) bool {
@@ -16,5 +22,64 @@ func CheckFileIsExist(filename string) bool {
 func WriteStringToFile(path string, content string) error {
 	var d1 = []byte(content)
 	err := ioutil.WriteFile(path, d1, 0666) //写入文件(字节数组)
+	return err
+}
+
+// copy srcPath/* to destPath/, srcPath,destPath need exist
+func CopyDir(srcPath string, destPath string) error {
+	if !filepath.IsAbs(srcPath) {
+		srcPath, _ = filepath.Abs(srcPath)
+	}
+	if !filepath.IsAbs(destPath) {
+		destPath, _ = filepath.Abs(destPath)
+	}
+ 	if srcInfo, err := os.Stat(srcPath); err != nil {
+ 		return err
+ 	} else {
+ 		if !srcInfo.IsDir() {
+			return errors.New(fmt.Sprintf("'%s' is not a valid dir", srcPath))
+		}
+ 	}
+	if destInfo, err := os.Stat(destPath); err != nil {
+		return err
+	} else {
+		if !destInfo.IsDir() {
+			e := errors.New(fmt.Sprintf("'%s' is not a valid dir", destPath))
+			return e
+		}
+	}
+	err := filepath.Walk(srcPath, func(path string, f os.FileInfo, err error) error {
+		if f == nil {
+			return err
+		}
+		destNewPath := strings.Replace(path, srcPath, destPath, -1)
+		if !f.IsDir() {
+			copyFile(path, destNewPath)
+		} else {
+			MakeSurePath(destPath)
+		}
+		return nil
+	})
+	return err
+}
+
+func copyFile(src, dest string) (err error) {
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+	idx := strings.LastIndex(dest, string(filepath.Separator))
+	destdir := dest
+	if idx > 0 {
+		destdir = dest[:idx+1]
+	}
+	MakeSurePath(destdir)
+	dstFile, err := os.Create(dest)
+	if err != nil {
+		return err
+	}
+	defer dstFile.Close()
+	_, err = io.Copy(dstFile, srcFile)
 	return err
 }
