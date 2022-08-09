@@ -173,7 +173,7 @@ func Test_dispatchRunTask(t *testing.T) {
 			args: args{
 				taskInfo: RunTaskInfo{
 					TaskId: "abc",
-					Repeat: RunTaskPeriod,
+					Repeat: RunTaskCron,
 				},
 			},
 		},
@@ -242,7 +242,7 @@ func Test_dispatchStopTask(t *testing.T) {
 			args: args{
 				taskInfo: RunTaskInfo{
 					TaskId: "abc",
-					Repeat: RunTaskPeriod,
+					Repeat: RunTaskCron,
 				},
 			},
 		},

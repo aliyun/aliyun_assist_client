@@ -137,3 +137,13 @@ func GetCachePath() (string, error) {
 	MakeSurePath((path))
 	return path, err
 }
+
+func GetPluginPath() (string , error) {
+	cur, err := GetCurrentPath()
+	if err != nil {
+		return "", err
+	}
+	path := cur + ".." + string(filepath.Separator) + "plugin"
+	err = MakeSurePath(path)
+	return path, err
+}

@@ -73,6 +73,7 @@ type ModifyInstanceNetworkSpecRequest struct {
 	*requests.RpcRequest
 	ResourceOwnerId         requests.Integer `position:"Query" name:"ResourceOwnerId"`
 	ClientToken             string           `position:"Query" name:"ClientToken"`
+	ISP                     string           `position:"Query" name:"ISP"`
 	InternetMaxBandwidthOut requests.Integer `position:"Query" name:"InternetMaxBandwidthOut"`
 	StartTime               string           `position:"Query" name:"StartTime"`
 	AutoPay                 requests.Boolean `position:"Query" name:"AutoPay"`
@@ -89,8 +90,8 @@ type ModifyInstanceNetworkSpecRequest struct {
 // ModifyInstanceNetworkSpecResponse is the response struct for api ModifyInstanceNetworkSpec
 type ModifyInstanceNetworkSpecResponse struct {
 	*responses.BaseResponse
-	RequestId string `json:"RequestId" xml:"RequestId"`
 	OrderId   string `json:"OrderId" xml:"OrderId"`
+	RequestId string `json:"RequestId" xml:"RequestId"`
 }
 
 // CreateModifyInstanceNetworkSpecRequest creates a request to invoke ModifyInstanceNetworkSpec API

@@ -51,7 +51,7 @@ func (m *TimerManager) Stop() {
 	}
 
 	m.lock.Lock()
-	m.lock.Unlock()
+	defer m.lock.Unlock()
 	for t := range m.timers {
 		delete(m.timers, t)
 	}
@@ -59,6 +59,32 @@ func (m *TimerManager) Stop() {
 
 func (m *TimerManager) CreateCronTimer(callback TimerCallback, cronat string) (*Timer, error) {
 	s, err := NewCronScheduled(cronat)
+	if err != nil {
+		return nil, err
+	}
+	t := NewTimer(s, callback)
+
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	m.timers[t] = struct{}{}
+	return t, nil
+}
+
+func (m *TimerManager) CreateRateTimer(callback TimerCallback, cronat string, creationTime time.Time) (*Timer, error) {
+	s, err := NewRateScheduled(cronat, creationTime)
+	if err != nil {
+		return nil, err
+	}
+	t := NewTimer(s, callback)
+
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	m.timers[t] = struct{}{}
+	return t, nil
+}
+
+func (m *TimerManager) CreateAtTimer(callback TimerCallback, cronat string) (*Timer, error) {
+	s, err := NewAtScheduled(cronat)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +107,7 @@ func (m *TimerManager) CreateTimerInNanoseconds(callback TimerCallback, interval
 	t := NewTimer(s, callback)
 
 	m.lock.Lock()
-	m.lock.Unlock()
+	defer m.lock.Unlock()
 	m.timers[t] = struct{}{}
 	return t, nil
 }
@@ -90,7 +116,7 @@ func (m *TimerManager) DeleteTimer(t *Timer) {
 	t.Stop()
 
 	m.lock.Lock()
-	m.lock.Unlock()
+	defer m.lock.Unlock()
 	delete(m.timers, t)
 }
 

@@ -8,6 +8,7 @@ import (
 	"os/exec"
 
 	"github.com/aliyun/aliyun_assist_client/agent/clientreport"
+	"github.com/aliyun/aliyun_assist_client/agent/util/errnoutil"
 )
 
 func ReportDownloadPackageFailed(err error, updateInfo *UpdateCheckResp, failureContext map[string]interface{}) {
@@ -18,7 +19,7 @@ func ReportDownloadPackageFailed(err error, updateInfo *UpdateCheckResp, failure
 		failureType += ":NetworkTimeout"
 	} else if errors.Is(err, os.ErrDeadlineExceeded) {
 		failureType += ":NetworkTimeout"
-	} else if isNoEnoughSpaceError(err) {
+	} else if errnoutil.IsNoEnoughSpaceError(err) {
 		failureType += ":NoEnoughSpace"
 	} else if errors.Is(err, io.ErrUnexpectedEOF) {
 		failureType += ":UnexpectedEOF"

@@ -1,4 +1,11 @@
-﻿2022-1
+﻿2022-8
+v2.x.x.317
+执行命令支持特定退出码触发系统关机/重启
+插件管理模块替换成golang重构版
+支持session manager限流
+增加kdump及pagefile metrics
+
+2022-1
 v2.x.x.256
 支持ssh over session manager
 

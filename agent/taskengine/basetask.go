@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"os/exec"
 	"runtime"
 	"strconv"
 	"strings"
@@ -20,9 +21,12 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/agent/taskengine/parameters"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/scriptmanager"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/agent/util/errnoutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/langutil"
+	"github.com/aliyun/aliyun_assist_client/agent/util/powerutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/process"
 	"github.com/aliyun/aliyun_assist_client/agent/util/timetool"
 )
@@ -36,15 +40,21 @@ type RunTaskRepeatType string
 
 const (
 	RunTaskOnce           RunTaskRepeatType = "Once"
-	RunTaskPeriod         RunTaskRepeatType = "Period"
+	RunTaskCron           RunTaskRepeatType = "Period"
 	RunTaskNextRebootOnly RunTaskRepeatType = "NextRebootOnly"
 	RunTaskEveryReboot    RunTaskRepeatType = "EveryReboot"
+	RunTaskRate           RunTaskRepeatType = "Rate"
+	RunTaskAt             RunTaskRepeatType = "At"
 )
 
+type FinishCallback func ()
+
 type Task struct {
-	taskInfo       RunTaskInfo
-	realWorkingDir string
-	envHomeDir     string
+	taskInfo             RunTaskInfo
+	realWorkingDir       string
+	envHomeDir           string
+	scheduleLocation     *time.Location
+	onFinish             FinishCallback
 
 	processer               process.ProcessCmd
 	startTime               time.Time
@@ -59,9 +69,11 @@ type Task struct {
 	data_sended             uint32
 }
 
-func NewTask(taskInfo RunTaskInfo) *Task {
+func NewTask(taskInfo RunTaskInfo, scheduleLocation *time.Location, onFinish FinishCallback) *Task {
 	task := &Task{
 		taskInfo:  taskInfo,
+		scheduleLocation: scheduleLocation,
+		onFinish:  onFinish,
 		processer: process.ProcessCmd{},
 		canceled:  false,
 		droped:    0,
@@ -84,8 +96,10 @@ type RunTaskInfo struct {
 	Cronat          string `json:"cron"`
 	Username        string `json:"username"`
 	Password        string `json:"windowsPasswordName"`
+	CreationTime    int64 `json:"creationTime"`
 	Output          OutputInfo
 	Repeat          RunTaskRepeatType
+	EnvironmentArguments map[string]string
 }
 
 type SendFileTaskInfo struct {
@@ -110,6 +124,7 @@ type SessionTaskInfo struct {
 	SessionId    string `json:"channelId"`
 	WebsocketUrl string `json:"websocketUrl"`
 	PortNumber  string `json:"portNumber"`
+	FlowLimit	 int    `json:"flowLimit"` // 最大流量 单位 bps
 }
 
 type OutputInfo struct {
@@ -118,20 +133,6 @@ type OutputInfo struct {
 	SkipEmpty bool `json:"skipEmpty"`
 	SendStart bool `json:"sendStart"`
 }
-
-// presetWrapErrorCode defines and MUST contain all error codes that will be reported
-// as failure
-type presetWrapErrorCode int
-
-const (
-	wrapErrGetScriptPathFailed presetWrapErrorCode = -(1 + iota)
-	wrapErrUnknownCommandType
-	wrapErrBase64DecodeFailed
-	wrapErrSaveScriptFileFailed
-	wrapErrSetExecutablePermissionFailed
-	wrapErrSetWindowsPermissionFailed
-	wrapErrExecuteScriptFailed
-)
 
 var (
 	ErrHomeDirectoryNotAvailable           = errors.New("HomeDirectoryNotAvailable")
@@ -249,8 +250,14 @@ func (task *Task) Run() (presetWrapErrorCode, error) {
 	var err error
 	if fileName, err = util.GetScriptPath(); err != nil {
 		taskLogger.WithError(err).Errorln("script path is error")
-		task.SendError("", wrapErrGetScriptPathFailed, err.Error())
-		return wrapErrGetScriptPathFailed, err
+		if errnoutil.IsNoEnoughSpaceError(err) {
+			task.sendPresetError("", wrapErrNoEnoughSpace, err)
+			return wrapErrNoEnoughSpace, err
+		} else {
+			errCode, errDescPrefix := task.categorizeSyscallErrno(err, wrapErrGetScriptPathFailed)
+			task.SendError("", errCode, fmt.Sprintf("%s: %s", errDescPrefix, err.Error()))
+			return errCode, err
+		}
 	}
 
 	cmdType := task.taskInfo.CommandType
@@ -264,22 +271,33 @@ func (task *Task) Run() (presetWrapErrorCode, error) {
 		}
 	} else if cmdType == "RunPowerShellScript" {
 		cmdTypeName = ".ps1"
-		task.processer.SyncRunSimple("powershell.exe", strings.Split("Set-ExecutionPolicy RemoteSigned", " "), 10)
 	} else {
 		taskLogger.Errorln("unkwown command type")
-		task.SendError("", wrapErrUnknownCommandType, "unkwown command type")
+		task.SendError("", wrapErrUnknownCommandType, fmt.Sprintf("UnknownCommandType: %s", cmdType))
 		return wrapErrUnknownCommandType, errors.New("unkwown command type")
 	}
-	fileName = fileName + "/" + task.taskInfo.TaskId + cmdTypeName
+	commandName := task.taskInfo.CommandName
+	if commandName == "" {
+		fileName = fileName + "/" + task.taskInfo.TaskId + cmdTypeName
+	} else {
+		fileName = fileName + "/" + commandName + "-" + task.taskInfo.TaskId + cmdTypeName
+	}
+	
 
 	decodeBytes, err := base64.StdEncoding.DecodeString(task.taskInfo.Content)
 	if err != nil {
-		task.SendError("", wrapErrBase64DecodeFailed, err.Error())
+		task.sendPresetError("", wrapErrBase64DecodeFailed, err)
 		return wrapErrBase64DecodeFailed, errors.New("decode error")
 	}
 	ScriptToDelete := ""
 	content := string(decodeBytes)
 	if task.taskInfo.EnableParameter {
+		content, err = parameters.ResolveEnvironmentParameters(content, task.taskInfo.EnvironmentArguments)
+		if err != nil {
+			task.SendInvalidTask("InvalidEnvironmentParameter", err.Error())
+			return wrapErrResolveEnvironmentParameterFailed, err
+		}
+
 		if strings.Contains(content, "oos-secret") {
 			ScriptToDelete = fileName
 		}
@@ -302,27 +320,38 @@ func (task *Task) Run() (presetWrapErrorCode, error) {
 	if err := scriptmanager.SaveScriptFile(fileName, content); err != nil {
 		// NOTE: Only non-repeated tasks need to check whether command script
 		// file exists.
-		if (task.taskInfo.Repeat != RunTaskPeriod && task.taskInfo.Repeat != RunTaskEveryReboot) ||
+		if (task.taskInfo.Repeat != RunTaskCron && task.taskInfo.Repeat != RunTaskEveryReboot &&
+			task.taskInfo.Repeat != RunTaskRate && task.taskInfo.Repeat != RunTaskAt) ||
 			!errors.Is(err, scriptmanager.ErrScriptFileExists) {
 			wrapErr := fmt.Errorf("Saving script to %s failed: %w", fileName, err)
 			taskLogger.WithError(wrapErr).Errorln("Saving script file failed")
 			// NOTE: Due to some utility functions, report error message may not
 			// be so precise as expected.
-			task.SendError("", wrapErrSaveScriptFileFailed, wrapErr.Error())
-			return wrapErrSaveScriptFileFailed, wrapErr
+			switch {
+			case errors.Is(err, scriptmanager.ErrScriptFileExists):
+				task.sendPresetError("", wrapErrScriptFileExisted, wrapErr)
+				return wrapErrScriptFileExisted, wrapErr
+			case errnoutil.IsNoEnoughSpaceError(err):
+				task.sendPresetError("", wrapErrNoEnoughSpace, wrapErr)
+				return wrapErrNoEnoughSpace, wrapErr
+			default:
+				errCode, errDescPrefix := task.categorizeSyscallErrno(err, wrapErrSaveScriptFileFailed)
+				task.SendError("", errCode, fmt.Sprintf("%s: %s", errDescPrefix, wrapErr.Error()))
+				return errCode, err
+			}
 		}
 	}
 
 	// Set executable permission bit of shell script file
 	if cmdType == "RunShellScript" {
-		if err := task.processer.SyncRunSimple("chmod", []string{"+x", fileName}, 10); err != nil {
-			task.SendError("", wrapErrSetExecutablePermissionFailed, fmt.Sprintf("Failed to set executable permission of shell script: %s", err.Error()))
+		if err := acl.Chmod(fileName, 0755); err != nil {
+			task.SendError("", wrapErrSetExecutablePermissionFailed, fmt.Sprintf("SetExecutablePermissionFailed: Failed to set executable permission of shell script: %s", err.Error()))
 			taskLogger.WithError(err).Errorf("Failed to set executable permission of shell script")
 		}
 	} else {
 		if len(task.taskInfo.Username) > 0 {
 			if err := acl.Chmod(fileName, 0755); err != nil {
-				task.SendError("", wrapErrSetWindowsPermissionFailed, fmt.Sprintf("Failed to set permission of script on Windows: %s", err.Error()))
+				task.SendError("", wrapErrSetWindowsPermissionFailed, fmt.Sprintf("SetWindowsPermissionFailed: Failed to set permission of script on Windows: %s", err.Error()))
 				taskLogger.WithError(err).Errorf("Failed to set permission of script on Windows")
 			}
 		}
@@ -343,10 +372,24 @@ func (task *Task) Run() (presetWrapErrorCode, error) {
 		args[0] = "-file"
 		args[1] = fileName
 		fileName = "powershell"
+
+		if _, err := exec.LookPath(fileName); err != nil {
+			task.sendPresetError("", wrapErrPowershellNotFound, err)
+			return wrapErrPowershellNotFound, err
+		}
+		if err := task.processer.SyncRunSimple("powershell.exe",
+			strings.Split("Set-ExecutionPolicy RemoteSigned", " "), 10); err != nil {
+			taskLogger.WithError(err).Warningln("Failed to set powershell execution policy")
+		}
 	} else if cmdType == "RunShellScript" {
 		args[0] = "-c" // TODO: 兼容freebsd
 		args[1] = fileName
 		fileName = "sh"
+
+		if _, err := exec.LookPath(fileName); err != nil {
+			task.sendPresetError("", wrapErrSystemDefaultShellNotFound, err)
+			return wrapErrSystemDefaultShellNotFound, err
+		}
 	}
 
 	task.sendTaskStart()
@@ -405,7 +448,7 @@ func (task *Task) Run() (presetWrapErrorCode, error) {
 
 	task.exit_code, status, err = task.processer.SyncRun(task.realWorkingDir,
 		fileName, args,
-		&stdoutWrite, &stderrWrite,
+		&stdoutWrite, &stderrWrite, nil,
 		nil, timeout)
 	if status == process.Success {
 		taskLogger.WithFields(logrus.Fields{
@@ -439,7 +482,8 @@ func (task *Task) Run() (presetWrapErrorCode, error) {
 		if err == nil {
 			task.sendOutput("failed", task.getReportString(task.output))
 		} else {
-			task.SendError(task.getReportString(task.output), wrapErrExecuteScriptFailed, err.Error())
+			errCode, errDescPrefix := task.categorizeSyscallErrno(err, wrapErrExecuteScriptFailed)
+			task.SendError(task.getReportString(task.output), errCode, fmt.Sprintf("%s: %s", errDescPrefix, err.Error()))
 		}
 	} else if status == process.Timeout {
 		task.sendOutput("timeout", task.getReportString(task.output))
@@ -459,6 +503,18 @@ func (task *Task) Run() (presetWrapErrorCode, error) {
 	if ScriptToDelete != "" {
 		os.Remove(ScriptToDelete)
 	}
+
+	// Perform instructed poweroff/reboot action after task finished
+	if status == process.Success {
+		if task.exit_code == exitcodePoweroff {
+			endTaskLogger.Infof("Poweroff the instance due to the special task exitcode %d", task.exit_code)
+			powerutil.Powerdown()
+		} else if task.exit_code == exitcodeReboot {
+			endTaskLogger.Infof("Reboot the instance due to the special task exitcode %d", task.exit_code)
+			powerutil.Reboot()
+		}
+	}
+
 	return 0, nil
 }
 
@@ -474,15 +530,13 @@ func (task *Task) sendTaskStart() {
 	}
 	url := util.GetRunningOutputService()
 	url += "?taskId=" + task.taskInfo.TaskId + "&start=" + strconv.FormatInt(task.monotonicStartTimestamp, 10)
+	url += task.wallClockQueryParams()
+
 	util.HttpPost(url, "", "text")
 }
 
 func (task *Task) SendInvalidTask(param string, value string) {
-	escapedParam := url.QueryEscape(param)
-	escapedValue := url.QueryEscape(value)
-	url := util.GetInvalidTaskService()
-	url += fmt.Sprintf("?taskId=%s&param=%s&value=%s", task.taskInfo.TaskId, escapedParam, escapedValue)
-	util.HttpPost(url, "", "text")
+	reportInvalidTask(task.taskInfo.TaskId, param, value)
 }
 
 func (task *Task) sendOutput(status string, output string) {
@@ -500,7 +554,8 @@ func (task *Task) sendOutput(status string, output string) {
 		url = util.GetTimeoutOutputService()
 	} else if status == "canceled" {
 		sendStoppedOutput(task.taskInfo.TaskId, task.monotonicStartTimestamp,
-			task.monotonicEndTimestamp, task.exit_code, task.droped, output)
+			task.monotonicEndTimestamp, task.exit_code, task.droped, output,
+			stopReasonKilled)
 		return
 	} else if status == "failed" {
 		url = util.GetErrorOutputService()
@@ -510,6 +565,7 @@ func (task *Task) sendOutput(status string, output string) {
 
 	url += "?taskId=" + task.taskInfo.TaskId + "&start=" + strconv.FormatInt(task.monotonicStartTimestamp, 10)
 	url += "&end=" + strconv.FormatInt(task.monotonicEndTimestamp, 10) + "&exitCode=" + strconv.Itoa(task.exit_code) + "&dropped=" + strconv.Itoa(task.droped)
+	url += task.wallClockQueryParams()
 
 	var err error
 	_, err = util.HttpPost(url, output, "text")
@@ -519,6 +575,9 @@ func (task *Task) sendOutput(status string, output string) {
 		_, err = util.HttpPost(url, output, "text")
 	}
 
+	if task.onFinish != nil {
+		task.onFinish()
+	}
 }
 
 func (task *Task) SendError(output string, errCode presetWrapErrorCode, errDesc string) {
@@ -527,6 +586,8 @@ func (task *Task) SendError(output string, errCode presetWrapErrorCode, errDesc 
 	queryString := fmt.Sprintf("?taskId=%s&start=%d&end=%d&exitCode=%d&dropped=%d&errCode=%d&errDesc=%s",
 		task.taskInfo.TaskId, task.monotonicStartTimestamp, task.monotonicEndTimestamp, task.exit_code,
 		task.droped, errCode, escapedErrDesc)
+	queryString += task.wallClockQueryParams()
+
 	requestURL := util.GetErrorOutputService() + queryString
 
 	if len(output) > 0 && G_IsWindows {
@@ -579,6 +640,8 @@ func (task *Task) getReportString(output bytes.Buffer) string {
 func (task *Task) sendRunningOutput(data string) {
 	url := util.GetRunningOutputService()
 	url += "?taskId=" + task.taskInfo.TaskId + "&start=" + strconv.FormatInt(task.monotonicStartTimestamp, 10)
+	url += task.wallClockQueryParams()
+
 	if len(data) == 0 && task.taskInfo.Output.SkipEmpty {
 		return
 	}
@@ -595,4 +658,35 @@ func (task *Task) IsCancled() bool {
 	task.cancelMut.Lock()
 	defer task.cancelMut.Unlock()
 	return task.canceled
+}
+
+// Generate additional querystring parameters: Unix timestamp of wall clock for
+// cron/rate tasks, and timezone name of schedule clock for only cron tasks
+func (task *Task) wallClockQueryParams() string {
+	switch task.taskInfo.Repeat {
+	case RunTaskRate:
+		return fmt.Sprintf("&currentTime=%d", timetool.GetAccurateTime())
+	case RunTaskCron:
+		if task.scheduleLocation != nil {
+			// NOTE: The time stdlib of golang hopelessly mixes nil pointer and
+			// pointer to pre-defined utcLoc for some Location methods, e.g.,
+			// String(). That is, even `*time.Location(nil).String()` would
+			// return "UTC" instead of just panic. Be careful with this!!!
+			escapedTimezoneName := url.QueryEscape(task.scheduleLocation.String())
+			locatedNow := time.Now().In(task.scheduleLocation)
+			_, currentOffsetFromUTC := locatedNow.Zone()
+			return fmt.Sprintf("&currentTime=%d&offset=%d&timeZone=%s", timetool.ToAccurateTime(locatedNow), currentOffsetFromUTC, escapedTimezoneName)
+		} else {
+			currentTime, currentOffsetFromUTC, timezoneName := timetool.NowWithTimezoneName()
+			escapedTimezoneName := url.QueryEscape(timezoneName)
+			return fmt.Sprintf("&currentTime=%d&offset=%d&timeZone=%s", timetool.ToAccurateTime(currentTime), currentOffsetFromUTC, escapedTimezoneName)
+		}
+	}
+
+	return ""
+}
+
+func (task *Task) sendPresetError(output string, errCode presetWrapErrorCode, err error) {
+	errDescPrefix := presetErrorPrefixes[errCode]
+	task.SendError(output, errCode, fmt.Sprintf("%s: %s", errDescPrefix, err.Error()))
 }

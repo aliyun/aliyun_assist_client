@@ -14,6 +14,8 @@ type ShellPlugin struct {
 	username   string
 	passwordName string
 	dataChannel channel.ISessionChannel
+	flowLimit	int
+	sendInterval	int
 }
 
 const (

@@ -1,3 +1,5 @@
+//go:generate goversioninfo -o=resource_windows.syso
+
 package main
 
 import (
@@ -33,6 +35,7 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/wrapgo"
 	"github.com/aliyun/aliyun_assist_client/agent/version"
+	"github.com/aliyun/aliyun_assist_client/agent/checkkdump"
 )
 
 var G_Running bool = true
@@ -151,8 +154,12 @@ func (p *program) run() {
 		log.GetLogger().Errorln("Failed to initialize statemanager: " + err.Error())
 	}
 
-	if succ := pluginmanager.InitPluginCheckTimer(); succ == false {
-		log.GetLogger().Errorln("plugin check timer fail")
+	pluginmanager.InitPluginCheckTimer()
+
+	if err := checkkdump.CheckKdumpTimer(); err != nil {
+		log.GetLogger().Errorln("Failed to StartKdumpCheckTimer: ", err)
+	} else {
+		log.GetLogger().Infoln("Start StartKdumpCheckTimer")
 	}
 
 	// Finally, fetching tasks could be allowed and agent starts to run normally.
@@ -216,6 +223,7 @@ type Options struct {
 	Region         string
 	ActivationCode string
 	ActivationId   string
+	NetWorkMode    string
 	InstanceName   string
 	RunAsCommon    bool
 	RunAsDaemon    bool
@@ -239,6 +247,7 @@ func parseOptions() Options {
 	pflag.StringVarP(&options.Region, "RegionId", "R", "", "used in register mode")
 	pflag.StringVarP(&options.ActivationCode, "ActivationCode", "C", "", "used in register mode")
 	pflag.StringVarP(&options.ActivationId, "ActivationId", "I", "", "used in register mode")
+	pflag.StringVarP(&options.NetWorkMode, "NetworkMode", "m", "", "used in register mode")
 	pflag.StringVarP(&options.InstanceName, "InstanceName", "N", "", "used in register mode")
 
 	pflag.StringVarP(&options.LogPath, "LogPath", "L", "", "log path")
@@ -292,7 +301,7 @@ func main() {
 		return
 	}
 	if options.Register {
-		hybrid.Register(options.Region, options.ActivationCode, options.ActivationId, options.InstanceName, true)
+		hybrid.Register(options.Region, options.ActivationCode, options.ActivationId, options.InstanceName, options.NetWorkMode, true)
 		return
 	}
 	if options.DeRegister {

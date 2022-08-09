@@ -32,7 +32,7 @@ type gshellStatus struct {
 }
 
 func (c *GshellChannel) IsSupported() bool {
-	if util.IsHybrid() || util.IsSelfHosted() {
+	if util.IsHybrid() {
 		return false
 	}
 	c.lock.Lock()

@@ -62,7 +62,7 @@ func getPlatformDetails() (name string, version string, err error) {
 			return
 		}
 
-		if strings.Contains(contents, "CentOS") || strings.Contains(contents, "Aliyun"){
+		if strings.Contains(contents, "CentOS") || strings.Contains(contents, "Aliyun") || strings.Contains(contents, "Alibaba"){
 			data := strings.Split(contents, "release")
 			name = strings.TrimSpace(data[0])
 			if len(data) >= 2 {
@@ -97,6 +97,12 @@ func getPlatformDetails() (name string, version string, err error) {
 			return
 		}
 		if strings.Contains(contents, "Aliyun") {
+			data := strings.Split(contents, "release")
+			name = strings.TrimSpace(data[0])
+			if len(data) >= 2 {
+				version = strings.TrimSpace(data[1])
+			}
+		} else if strings.Contains(contents, "Alibaba") {
 			data := strings.Split(contents, "release")
 			name = strings.TrimSpace(data[0])
 			if len(data) >= 2 {

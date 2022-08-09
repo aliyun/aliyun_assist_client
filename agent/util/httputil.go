@@ -56,11 +56,21 @@ func init() {
 	NilRequest.Clear()
 	cpath, _ := os.Executable()
 	dir, _ := filepath.Abs(filepath.Dir(cpath))
-	CrtPath = path.Join(dir, "config", "GlobalSignRootCA.crt")
-	//log.GetLogger().Infoln("crt:", CrtPath)
-	caCert, err := ioutil.ReadFile(CrtPath)
-	if err != nil {
-		return
+	var caCert []byte
+	var err error
+	CrtPath = os.Getenv("ALIYUN_ASSIST_CERT_PATH")
+	if CrtPath != "" && CheckFileIsExist(CrtPath) {
+		caCert, err = ioutil.ReadFile(CrtPath)
+		if err != nil {
+			return
+		}
+	} else {
+		CrtPath = path.Join(dir, "config", "GlobalSignRootCA.crt")
+		// log.GetLogger().Infoln("crt:", CrtPath)
+		caCert, err = ioutil.ReadFile(CrtPath)
+		if err != nil {
+			return
+		}
 	}
 	CaCertPool = x509.NewCertPool()
 	CaCertPool.AppendCertsFromPEM(caCert)
@@ -119,7 +129,7 @@ func HttpGetWithTimeout(url string, timeout time.Duration, noLog bool) (error, s
 		RootCAs: CaCertPool,
 	})
 
-	if IsHybrid() || IsSelfHosted() {
+	if IsHybrid() {
 		addHttpHeads(req)
 	}
 
@@ -212,7 +222,7 @@ func HttpPostWithTimeout(url string, data string, contentType string, timeout ti
 		UserAgentHeader: UserAgentValue,
 	})
 	//excude Hybrid instance id
-	if IsHybrid() || IsSelfHosted() {
+	if IsHybrid() {
 		addHttpHeads(req)
 	} else {
 		instance_id := GetInstanceId()

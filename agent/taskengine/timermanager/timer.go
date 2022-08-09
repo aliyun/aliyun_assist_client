@@ -1,6 +1,7 @@
 package timermanager
 
 import (
+	"errors"
 	"sync"
 	"time"
 
@@ -25,6 +26,10 @@ type Timer struct {
 	isRunning bool
 	err error
 }
+
+var (
+	ErrNoNextRun = errors.New("Schedule has finished and no next run")
+)
 
 func NewTimer(s scheduled, c TimerCallback) *Timer {
 	return &Timer{
@@ -51,27 +56,41 @@ func (t *Timer) Run() (*Timer, error) {
 		return nil, t.err
 	}
 
-	next, err := t.Schedule.nextRun()
+	durationToWait, err := t.Schedule.nextRun()
 	if err != nil {
 		return nil, err
 	}
+	if durationToWait < 0 {
+		return nil, ErrNoNextRun
+	}
 	wrapgo.GoWithDefaultPanicHandler(func() {
-		for {
-			select {
-			case <- t.refreshTimer:
-				; // No-op. Just start next cycle with new interval
-			case <- t.skipWait:
-				wrapgo.GoWithDefaultPanicHandler(func () {
-					runTimer(t)
-				})
-			case <- t.quit:
+		for shouldContinue := true; shouldContinue; {
+			if durationToWait < 0 {
 				return
-			case <- time.After(next):
-				wrapgo.GoWithDefaultPanicHandler(func () {
-					runTimer(t)
-				})
 			}
-			next, _ = t.Schedule.nextRun()
+
+			shouldContinue = func () bool {
+				timer := time.NewTimer(durationToWait)
+				defer timer.Stop()
+
+				select {
+				case <- t.refreshTimer:
+					; // No-op. Just start next cycle with new interval
+				case <- t.skipWait:
+					wrapgo.GoWithDefaultPanicHandler(func () {
+						runTimer(t)
+					})
+				case <- t.quit:
+					return false
+				case <- timer.C:
+					wrapgo.GoWithDefaultPanicHandler(func () {
+						runTimer(t)
+					})
+				}
+
+				return true
+			}()
+			durationToWait, _ = t.Schedule.nextRun()
 		}
 	})
 	return t, nil

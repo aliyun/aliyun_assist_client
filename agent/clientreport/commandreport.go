@@ -20,7 +20,7 @@ type executionResult struct {
 // ReportCommandOutput executes specified command and reports its output
 func ReportCommandOutput(reportType string, command string, arguments []string) (string, error) {
 	var mixedOutput bytes.Buffer
-	exitCode, _, err := process.NewProcessCmd().SyncRun("", command, arguments, &mixedOutput, &mixedOutput, nil, 120)
+	exitCode, _, err := process.NewProcessCmd().SyncRun("", command, arguments, &mixedOutput, &mixedOutput, nil, nil, 120)
 
 	exitMessage := "Success"
 	errorMessage := ""

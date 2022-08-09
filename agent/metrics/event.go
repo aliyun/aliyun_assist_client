@@ -27,6 +27,7 @@ const (
 	EVENT_PERF_MEM_OVERLOAD MetricsEventID = "agent.pref.mem.overload"
 	EVENT_BASE_STARTUP      MetricsEventID = "agent.startup"
 	EVENT_BASE_VIRTIO       MetricsEventID = "agent.virtio"
+	EVENT_KDUMP             MetricsEventID = "agent.kdump"
 
 	// event category
 	EVENT_CATEGORY_CHANNEL EventCategory = "CHANNEL"
@@ -37,6 +38,7 @@ const (
 	EVENT_CATEGORY_PERF    EventCategory = "PERF"
 	EVENT_CATEGORY_STARTUP EventCategory = "STARTUP"
 	EVENT_CATEGORY_VIRTIO  EventCategory = "VIRTIO"
+	EVENT_CATEGORY_KDUMP   EventCategory = "KDUMP"
 
 	// event subcategory
 	EVENT_SUBCATEGORY_CHANNEL_GSHELL    EventSubCategory = "gshell"
@@ -68,10 +70,12 @@ type ReportBuff struct {
 }
 
 type CommonInfo struct {
-	Arch        string `json:"arch"`
-	InstanceId  string `json:"instanceId"`
-	OsVersion   string `json:"osVersion"`
-	VirtualType string `json:"virtualType"`
+	Arch          string `json:"arch"`
+	InstanceId    string `json:"instanceId"`
+	OsVersion     string `json:"osVersion"`
+	VirtualType   string `json:"virtualType"`
+	Distribution  string `json:"distribution"`
+	KernelVersion string `json:"kernekVersion"`
 }
 
 func (m *MetricsEvent) ReportEvent() {
@@ -123,6 +127,10 @@ func getCommonInfoStr() string {
 		_commonInfo.OsVersion = osutil.GetVersion()
 		_commonInfo.VirtualType = osutil.GetVirtualType()
 		_commonInfo.InstanceId = util.GetInstanceId()
+		platFormName, _ := osutil.PlatformName()
+		platFormVersion, _ := osutil.PlatformVersion()
+		_commonInfo.Distribution = platFormName + " " + platFormVersion
+		_commonInfo.KernelVersion = getKernelVersion()
 		str, err := json.Marshal(&_commonInfo)
 		if err != nil {
 			log.GetLogger().Errorf("metrics Marshal _commonInfo err: %s", err.Error())
@@ -275,6 +283,19 @@ func GetBaseStartupEvent(keywords ...string) *MetricsEvent {
 	event := &MetricsEvent{
 		EventId:    EVENT_BASE_STARTUP,
 		Category:   EVENT_CATEGORY_STARTUP,
+		EventLevel: EVENT_LEVEL_INFO,
+		EventTime:  time.Now().UnixNano() / 1e6,
+		Common:     getCommonInfoStr(),
+		KeyWords:   genKeyWordsStr(keywords...),
+	}
+	return event
+}
+
+// ecs_dump服务状态上报
+func GetKdumpServiceStatusEvent(keywords ...string) *MetricsEvent {
+	event := &MetricsEvent{
+		EventId:    EVENT_KDUMP,
+		Category:   EVENT_CATEGORY_KDUMP,
 		EventLevel: EVENT_LEVEL_INFO,
 		EventTime:  time.Now().UnixNano() / 1e6,
 		Common:     getCommonInfoStr(),

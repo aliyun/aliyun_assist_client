@@ -2,22 +2,31 @@ package main
 
 import (
 	"fmt"
-	"github.com/aliyun/aliyun_assist_client/agent/log"
-	client "github.com/aliyun/aliyun_assist_client/agent/session/plugin"
-	"github.com/aliyun/aliyun_assist_client/agent/util"
-	"github.com/spf13/pflag"
 	"os"
+	"os/signal"
+	"syscall"
 
-	"github.com/sirupsen/logrus"
+	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/cli"
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/config"
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/i18n"
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/session"
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/ssh"
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/portforward"
+	"github.com/spf13/pflag"
 )
 
-const pluginVersion  = "1.0"
+var (
+	gitHash   string
+	cliVer string = "10.0.0.1"
+)
 
 type Options struct {
 	GetHelp        bool
 	GetVersion     bool
 	WebsocketUrl            string
 	IsVerbose     bool
+	IsRawMode     bool
 }
 
 func parseOptions() Options {
@@ -28,6 +37,7 @@ func parseOptions() Options {
 	pflag.StringVarP(&options.WebsocketUrl, "WebsocketUrl", "u", "", "WebsocketUrl")
 
 	pflag.BoolVarP(&options.IsVerbose, "verbose", "V", false, "enable verbose")
+	pflag.BoolVarP(&options.IsRawMode, "rawmode", "r", false, "enable rawmode")
 
 	pflag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [options]\n", os.Args[0])
@@ -41,33 +51,70 @@ func parseOptions() Options {
 	pflag.Parse()
 	return options
 }
+
 func main() {
 	log.InitLog("aliyun_ecs_session_log", "")
-    log.GetLogger().Infoln("session plugin started")
-	options := parseOptions()
+	log.GetLogger().Infoln("session plugin started_ ", os.Args[:])
 
-	if options.IsVerbose {
-		util.SetVerboseMode(true)
-	}
-	if options.GetHelp {
-		pflag.Usage()
-		return
-	}
-	if options.GetVersion {
-		fmt.Println(pluginVersion)
-		return
-	}
+	cli.PlatformCompatible()
+	cli.Version = cliVer
+	writer := cli.DefaultWriter()
+	stderr := cli.DefaultStderrWriter()
 
-	if options.WebsocketUrl != "" {
-		url := options.WebsocketUrl
-		client, err := client.NewClient(url, "")
-		// loop
-		if err = client.Loop(); err != nil {
-			logrus.Fatalf("Communication error: %v", err)
-		}
+	// load current configuration
+	profile, err := config.LoadCurrentProfile()
+	if err != nil {
+		cli.Errorf(stderr, "ERROR: load current configuration failed %s", err)
 		return
 	}
 
+	// set language with current profile
+	i18n.SetLanguage(profile.Language)
+
+	// create root command
+	rootCmd := &cli.Command{
+		Name:              "ali-instance-cli",
+		Short:             i18n.T("Alibaba Cloud ECS DevOps Command Line Interface Version "+cli.Version, "阿里云ecs运维CLI命令行工具 "+cli.Version),
+		Usage:             "ali-instance-cli <operation> [--parameter1 value1 --parameter2 value2 ...]",
+		Sample:            "ali-instance-cli session <instance_id>",
+		EnableUnknownFlag: true,
+	}
+
+	// add default flags
+	config.AddFlags(rootCmd.Flags())
+	//openapi.AddFlags(rootCmd.Flags())
+
+	// new open api commando to process rootCmd
+	//commando := openapi.NewCommando(writer, profile)
+	//commando.InitWithCommand(rootCmd)
+
+	ctx := cli.NewCommandContext(writer, stderr)
+	ctx.EnterCommand(rootCmd)
+	ctx.SetCompletion(cli.ParseCompletionForShell())
+
+	rootCmd.AddSubCommand(config.NewConfigureCommand())
+	//rootCmd.AddSubCommand(lib.NewOssCommand())
+	rootCmd.AddSubCommand(cli.NewVersionCommand())
+	rootCmd.AddSubCommand(session.NewSessionCommand())
+	rootCmd.AddSubCommand(ssh.NewSshCommand())
+	rootCmd.AddSubCommand(portforward.NewPortForwardCommand())
+	//rootCmd.AddSubCommand(cli.NewAutoCompleteCommand())
+	rootCmd.Execute(ctx, os.Args[1:])
+}
+
+func waitSignals( ) error {
+	sigChan := make(chan os.Signal, 2)
+	signal.Notify(
+		sigChan,
+		syscall.SIGINT,
+		syscall.SIGTERM,
+	)
+
+	<-sigChan
+	log.GetLogger().Infoln("session plugin stop", sigChan)
+    os.Exit(1)
+	
+	return nil
 }
 
 

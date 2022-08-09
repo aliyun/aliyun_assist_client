@@ -31,13 +31,26 @@ type SizeData struct {
 	Rows uint32 `json:"rows"`
 }
 
-func NewShellPlugin(id string, cmdContent string, username string, passwordName string) *ShellPlugin {
+const (
+	sendPackageSize = 1024 // 发送的payload大小上限，单位 B
+	defaultSendSpeed = 200 // 默认的最大数据发送速率，单位 kbps
+	defaultSendInterval = 1000 / (defaultSendSpeed * 1024 / 8 / sendPackageSize) // writeloop的循环间隔时间 单位ms
+)
+
+func NewShellPlugin(id string, cmdContent string, username string, passwordName string, flowLimit int) *ShellPlugin {
 	plugin := &ShellPlugin{
 		id:id,
 		cmdContent:cmdContent,
 		username:username,
 		passwordName:passwordName,
+		sendInterval: defaultSendInterval,
 	}
+	if flowLimit > 0 {
+		plugin.sendInterval = 1000 / (flowLimit / 8 / sendPackageSize)
+	} else {
+		flowLimit = defaultSendSpeed * 1024
+	}
+	log.GetLogger().Infof("Init send speed, channelId[%s] speed[%d]bps sendInterval[%d]ms\n", id, flowLimit, plugin.sendInterval)
 	return plugin
 }
 
@@ -112,7 +125,7 @@ func (p *ShellPlugin) writePump() (errorCode string) {
 		}
 	}()
 
-	stdoutBytes := make([]byte, 1024)
+	stdoutBytes := make([]byte, sendPackageSize)
 	reader := bufio.NewReader(p.stdout)
 
 	// Wait for all input commands to run.
@@ -134,7 +147,7 @@ func (p *ShellPlugin) writePump() (errorCode string) {
 			return Process_data_error
 		}
 		// Wait for stdout to process more data
-		time.Sleep(time.Millisecond)
+		time.Sleep(time.Duration(p.sendInterval) * time.Millisecond)
 	}
 }
 

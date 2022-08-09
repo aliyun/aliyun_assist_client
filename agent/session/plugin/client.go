@@ -1,21 +1,26 @@
 package client
 
 import (
+	"bufio"
+	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"runtime"
+	"runtime/debug"
+	"sync"
+	"time"
+
 	"github.com/aliyun/aliyun_assist_client/agent/log"
-	"github.com/aliyun/aliyun_assist_client/agent/session/message"
-	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/message"
 	"github.com/containerd/console"
 	"github.com/creack/goselect"
 	"github.com/gorilla/websocket"
 	"github.com/sirupsen/logrus"
-	"io"
-	"net/http"
-	"os"
-	"runtime/debug"
-	"sync"
-	"time"
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 const (
@@ -23,28 +28,38 @@ const (
 	killed
 )
 
-
 type Client struct {
-	Dialer          *websocket.Dialer
-	Conn            *websocket.Conn
-	URL             string
-	token           string
-	Connected       bool
-	Output          io.Writer
-	WriteMutex      *sync.Mutex
-	EscapeKeys      []byte
-	poison          chan bool
+	Dialer                   *websocket.Dialer
+	Conn                     *websocket.Conn
+	URL                      string
+	token                    string
+	Connected                bool
+	Output                   io.Writer
+	Input 					 io.ReadCloser
+	WriteMutex               *sync.Mutex
+	EscapeKeys               []byte
+	PortForward				 bool // true means the client is for portforward
+	poison                   chan bool
 	StreamDataSequenceNumber int64
+	rawmode                  bool //true means not use console mode
+	verbosemode              bool
+	real_connected           bool
 }
 
-func NewClient(inputURL string, token string) (*Client, error) {
+func NewClient(inputURL string, input io.ReadCloser, output io.Writer, portForward bool, token string,  rawmode bool, verbosemode bool) (*Client, error) {
 	return &Client{
-		Dialer:     &websocket.Dialer{},
-		URL:        inputURL,
-		token:      token,
-		WriteMutex: &sync.Mutex{},
-		Output:     os.Stdout,
+		Dialer:                   &websocket.Dialer{},
+		URL:                      inputURL,
+		token:                    token,
+		WriteMutex:               &sync.Mutex{},
+		Output:                   output, // os.Stdout
+		Input: 					  input,  // os.Stdin
+		PortForward: 			  portForward,		
 		StreamDataSequenceNumber: 0,
+		rawmode:                  rawmode,
+		real_connected:           false,
+		verbosemode:              verbosemode,
+		poison:					  make(chan bool),
 	}, nil
 }
 
@@ -77,7 +92,7 @@ func (c *Client) Connect() error {
 
 func (c *Client) pingLoop() {
 	for {
-		if (c.Connected) {
+		if c.Connected {
 			logrus.Debugf("Sending ping")
 			err := c.Conn.WriteMessage(websocket.PingMessage, []byte("keepalive"))
 			if err != nil {
@@ -89,7 +104,7 @@ func (c *Client) pingLoop() {
 	}
 }
 
-var term_chan chan int
+
 func (c *Client) Loop() error {
 
 	if !c.Connected {
@@ -98,35 +113,72 @@ func (c *Client) Loop() error {
 			return err
 		}
 	}
-	term, err := console.ConsoleFromFile(os.Stdout)
-	if err != nil {
-		return fmt.Errorf("os.Stdout is not a valid terminal")
+
+	if !c.rawmode {
+		if runtime.GOOS == "darwin" {
+			stdin := int(os.Stdin.Fd())
+			log.GetLogger().Infoln("under darwin")
+			oldState, err := terminal.MakeRaw(stdin)
+			if err != nil {
+				log.GetLogger().Errorln(err)
+				fmt.Printf("capture stdin failed %s\r\n", err)
+			}
+			defer func() {
+				terminal.Restore(stdin, oldState)
+				if !c.PortForward {
+					os.Exit(1)
+				}
+			}()
+		} else {
+			term, err := console.ConsoleFromFile(os.Stdout)
+			if err != nil {
+				log.GetLogger().Errorln(err)
+				return fmt.Errorf("os.Stdout is not a valid terminal")
+			}
+			err = term.SetRaw()
+			if err != nil {
+				return fmt.Errorf("Error setting raw terminal: %v", err)
+			}
+			defer func() {
+				term.Reset()
+				if !c.PortForward {
+					os.Exit(1)
+				}
+			}()
+		}
+
+	} else {
+		log.GetLogger().Infoln("under rawmode")
+		defer func() {
+			if !c.PortForward {
+				os.Exit(1)
+			}
+		}()
 	}
-	err = term.SetRaw()
-	if err != nil {
-		return fmt.Errorf("Error setting raw terminal: %v", err)
-	}
-	defer func() {
-		_ = term.Reset()
-	}()
 
 	wg := &sync.WaitGroup{}
-	term_chan = make(chan int)
 
 	wg.Add(1)
 	go c.termsizeLoop(wg)
 
+	if !c.rawmode {
+		wg.Add(1)
+		go c.writeLoop(wg)
+
+	} else {
+		wg.Add(1)
+		go c.writeLoopRawMode(wg)
+	}
+
 	wg.Add(1)
 	go c.readLoop(wg)
 
-	wg.Add(1)
-	go c.writeLoop(wg)
-
 	/* Wait for all of the above goroutines to finish */
 	//wg.Wait()
-	<- term_chan
+	<-c.poison
 
 	logrus.Debug("Client.Loop() exiting")
+
 	return nil
 }
 
@@ -145,7 +197,7 @@ func (c *Client) termsizeLoop(wg *sync.WaitGroup) int {
 
 	for {
 		if b, err := syscallTIOCGWINSZ(); err != nil {
-		//	logrus.Warn(err)
+			//	logrus.Warn(err)
 		} else {
 			if err = c.SendResizeDataMessage(b); err != nil {
 				log.GetLogger().Warnf("ws.WriteMessage failed: %v", err)
@@ -160,20 +212,69 @@ func (c *Client) termsizeLoop(wg *sync.WaitGroup) int {
 	}
 }
 
+func bytesToIntU(b []byte) (int, error) {
+	if len(b) == 3 {
+		b = append([]byte{0}, b...)
+	}
+	bytesBuffer := bytes.NewBuffer(b)
+	switch len(b) {
+	case 1:
+		var tmp uint8
+		err := binary.Read(bytesBuffer, binary.BigEndian, &tmp)
+		return int(tmp), err
+	case 2:
+		var tmp uint16
+		err := binary.Read(bytesBuffer, binary.BigEndian, &tmp)
+		return int(tmp), err
+	case 4:
+		var tmp uint32
+		err := binary.Read(bytesBuffer, binary.BigEndian, &tmp)
+		return int(tmp), err
+	default:
+		return 0, fmt.Errorf("%s", "BytesToInt bytes lenth is invaild!")
+	}
+}
+
+func (c *Client) ProcessStatusDataChannel(payload []byte) error {
+	if c.verbosemode {
+		log.GetLogger().Infoln("read status data: ", payload)
+	}
+	code, err := bytesToIntU(payload[0:1])
+	if err == nil {
+		if code == 2 { //建立连接失败
+			log.GetLogger().Errorln("connect failed code 2")
+			c.Output.Write(payload)
+			return errors.New("Failed to connect. code 2")
+		} else if code == 5 { //关闭连接
+			log.GetLogger().Errorln("connect failed code 5")
+			c.Output.Write([]byte("session closed"))
+			return errors.New("Connection closed. code 5")
+		} else if code == 3 {
+
+		}
+	}
+	return nil
+}
+
 func (c *Client) readLoop(wg *sync.WaitGroup) int {
 	defer wg.Done()
 	fname := "readLoop"
 
 	type MessageNonBlocking struct {
 		Msg message.Message
-		Err  error
+		Err error
 	}
 	msgChan := make(chan MessageNonBlocking)
 
 	for {
 		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					logrus.Debug("readLoop returned so msgChan closed", r)
+				}
+			}()
 			_, data, err := c.Conn.ReadMessage()
-			if util.IsVerboseMode() {
+			if c.verbosemode {
 				log.GetLogger().Infoln("read msg: ", string(data))
 			}
 			streamDataMessage := message.Message{}
@@ -181,9 +282,12 @@ func (c *Client) readLoop(wg *sync.WaitGroup) int {
 				if err = streamDataMessage.Deserialize(data); err != nil {
 					log.GetLogger().Errorf("Cannot deserialize raw message, err: %v.", err)
 				}
+			} else {
+				log.GetLogger().Errorln("read msg err")
+				openPoison(fname, c.poison)
 			}
 
-			if util.IsVerboseMode() {
+			if c.verbosemode {
 				log.GetLogger().Infoln("read msg num : ", streamDataMessage.SequenceNumber)
 			}
 
@@ -194,13 +298,15 @@ func (c *Client) readLoop(wg *sync.WaitGroup) int {
 
 		select {
 		case <-c.poison:
+			close(msgChan)
 			return die(fname, c.poison)
 		case msg := <-msgChan:
 			if msg.Err != nil {
-                log.GetLogger().Errorln("read msg err", msg.Err)
+				log.GetLogger().Errorln("read msg err", msg.Err)
 				if _, ok := msg.Err.(*websocket.CloseError); !ok {
 					log.GetLogger().Warnf("c.Conn.ReadMessage: %v", msg.Err)
 				}
+
 				return openPoison(fname, c.poison)
 			}
 			if msg.Msg.Validate() != nil {
@@ -211,9 +317,14 @@ func (c *Client) readLoop(wg *sync.WaitGroup) int {
 
 			switch msg.Msg.MessageType {
 			case message.OutputStreamDataMessage: // data
-			     c.Output.Write(msg.Msg.Payload)
-			     break
-
+				c.real_connected = true
+				c.Output.Write(msg.Msg.Payload)
+				break
+			case message.StatusDataChannel: // data
+				if c.ProcessStatusDataChannel(msg.Msg.Payload) != nil {
+					return openPoison(fname, c.poison)
+				}
+				break
 			default:
 				// logrus.Warnf("Unhandled protocol message")
 			}
@@ -226,14 +337,74 @@ type exposeFd interface {
 	Fd() uintptr
 }
 
+func (c *Client) writeLoopRawMode(wg *sync.WaitGroup) int {
+	defer wg.Done()
+	fname := "writeLoop"
+
+	buff := make([]byte, 2048)
+	br := bufio.NewReader(c.Input)
+	if c.PortForward {
+		// wait agent build local connect
+		time.Sleep(time.Duration(2) * time.Second)
+		c.real_connected = true
+	}
+
+	var resend_buff []byte
+	for {
+		time.Sleep(time.Duration(100) * time.Millisecond)
+		size, err := br.Read(buff)
+		if err != nil {
+			log.GetLogger().Errorf("get raw input failed: %v", err)
+			// tell agent to close session
+			log.GetLogger().Infoln("local conn closed, send CloseMessage")
+			if err = c.SendCloseMessage(); err != nil {
+				log.GetLogger().Errorf("SendCloseMessage err: %v", err)
+			}
+			return openPoison(fname, c.poison)
+		}
+		if size == 0 {
+			continue
+		}
+
+		data := buff[:size]
+
+		if c.real_connected == true {
+			if len(resend_buff) > 0 {
+				time.Sleep(time.Duration(100) * time.Millisecond)
+				c.SendStreamDataMessage(resend_buff)
+				log.GetLogger().Infoln("agent ready resend user input:", string(resend_buff), len(resend_buff))
+				resend_buff = nil
+			}
+			err = c.SendStreamDataMessage(data)
+			if err != nil {
+				return openPoison(fname, c.poison)
+			}
+			if c.verbosemode {
+				log.GetLogger().Infoln("send user input:", string(data), size)
+			}
+
+		} else {
+			if len(resend_buff) == 0 {
+				resend_buff = make([]byte, size)
+				copy(resend_buff, buff[:size])
+				log.GetLogger().Infoln("store user input:", string(data), size)
+			}
+
+		}
+
+	}
+
+	return 0
+}
+
 func (c *Client) writeLoop(wg *sync.WaitGroup) int {
 	defer wg.Done()
 	fname := "writeLoop"
 
-	buff := make([]byte, 128)
+	buff := make([]byte, 2048)
 
 	rdfs := &goselect.FDSet{}
-	reader := io.ReadCloser(os.Stdin)
+	reader := io.ReadCloser(c.Input)
 
 	pr := NewEscapeProxy(reader, c.EscapeKeys)
 	defer reader.Close()
@@ -266,9 +437,8 @@ func (c *Client) writeLoop(wg *sync.WaitGroup) int {
 					// followed by EOT (a translation of Ctrl-D for terminals)
 					err = c.SendStreamDataMessage((append([]byte{}, byte(4))))
 
-					if err != nil {
-						return openPoison(fname, c.poison)
-					}
+					return openPoison(fname, c.poison)
+
 					continue
 				} else {
 					log.GetLogger().Errorln("err in input empty", err)
@@ -282,17 +452,17 @@ func (c *Client) writeLoop(wg *sync.WaitGroup) int {
 			}
 
 			data := buff[:size]
-			if util.IsVerboseMode() {
-				log.GetLogger().Infoln("begin send user input ", string(data))
+			if c.verbosemode {
+				log.GetLogger().Infoln("begin send user input:", string(data), size)
 			}
 			err = c.SendStreamDataMessage(data)
 			if err != nil {
 				return openPoison(fname, c.poison)
 			}
-			log.GetLogger().Traceln("send data:", data)
+
 		}
 	}
-    return 0
+	return 0
 }
 
 func (c *Client) SendStreamDataMessage(inputData []byte) (err error) {
@@ -303,14 +473,14 @@ func (c *Client) SendStreamDataMessage(inputData []byte) (err error) {
 
 	agentMessage := &message.Message{
 		MessageType:    message.InputStreamDataMessage,
-		SchemaVersion:  1,
+		SchemaVersion:  "1.01",
 		CreatedDate:    uint64(time.Now().UnixNano() / 1000000),
 		SequenceNumber: c.StreamDataSequenceNumber,
-		PayloadLength:   uint32(len(inputData)),
+		PayloadLength:  uint32(len(inputData)),
 		Payload:        inputData,
 	}
 
-	if util.IsVerboseMode() {
+	if c.verbosemode {
 		log.GetLogger().Infoln("SendStreamDataMessage num: ", c.StreamDataSequenceNumber)
 	}
 
@@ -324,12 +494,45 @@ func (c *Client) SendStreamDataMessage(inputData []byte) (err error) {
 		log.GetLogger().Infoln("disconnect, plugin exit")
 		// os.Exit(1)
 		c.Connected = false
-		term_chan <- 1
+		return err
 	}
 
-	if util.IsVerboseMode() {
+	if c.verbosemode {
 		log.GetLogger().Println("SendStreamDataMessage:", msg)
 	}
+
+	c.StreamDataSequenceNumber = c.StreamDataSequenceNumber + 1
+	return nil
+}
+
+func (c *Client) SendCloseMessage() (err error) {
+	inputData := []byte("1")
+	agentMessage := &message.Message{
+		MessageType:    message.CloseDataChannel,
+		SchemaVersion:  "1.01",
+		CreatedDate:    uint64(time.Now().UnixNano() / 1000000),
+		SequenceNumber: c.StreamDataSequenceNumber,
+		PayloadLength:  uint32(len(inputData)),
+		Payload:        inputData,
+	}
+
+	if c.verbosemode {
+		log.GetLogger().Infoln("SendCloseMessage num: ", c.StreamDataSequenceNumber)
+	}
+
+	msg, err := agentMessage.Serialize()
+	if err != nil {
+		return fmt.Errorf("cannot serialize StreamData message %v", agentMessage)
+	}
+
+	if err = c.sendMessage(msg, websocket.BinaryMessage); err != nil {
+		log.GetLogger().Errorf("Error sending stream data message %v", err)
+		log.GetLogger().Infoln("disconnect, plugin exit")
+		// os.Exit(1)
+		c.Connected = false
+		return err
+	}
+	log.GetLogger().Infoln("SendCloseMessage")
 
 	c.StreamDataSequenceNumber = c.StreamDataSequenceNumber + 1
 	return nil
@@ -343,10 +546,10 @@ func (c *Client) SendResizeDataMessage(inputData []byte) (err error) {
 
 	agentMessage := &message.Message{
 		MessageType:    message.SetSizeDataMessage,
-		SchemaVersion:  1,
+		SchemaVersion:  "1.01",
 		CreatedDate:    uint64(time.Now().UnixNano() / 1000000),
 		SequenceNumber: c.StreamDataSequenceNumber,
-		PayloadLength:   uint32(len(inputData)),
+		PayloadLength:  uint32(len(inputData)),
 		Payload:        inputData,
 	}
 	msg, err := agentMessage.Serialize()
@@ -379,7 +582,7 @@ func (c *Client) sendMessage(input []byte, inputType int) error {
 
 	c.WriteMutex.Lock()
 	err := c.Conn.WriteMessage(inputType, input)
-	if util.IsVerboseMode() {
+	if c.verbosemode {
 		log.GetLogger().Infoln("begin send msg: ", string(input))
 	}
 	if err != nil {
@@ -388,7 +591,6 @@ func (c *Client) sendMessage(input []byte, inputType int) error {
 	c.WriteMutex.Unlock()
 	return err
 }
-
 
 func openPoison(fname string, poison chan bool) int {
 	logrus.Debug(fname + " suicide")
@@ -405,6 +607,7 @@ func openPoison(fname string, poison chan bool) int {
 
 	/* Signal others to die */
 	close(poison)
+
 	return committedSuicide
 }
 

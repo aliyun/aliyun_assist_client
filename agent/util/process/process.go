@@ -111,6 +111,7 @@ func (p *ProcessCmd)  SyncRun(
 	commandArguments []string,
 	stdoutWriter io.Writer,
 	stderrWriter io.Writer,
+	stdinReader  io.Reader,
 	callbackFunc readCallbackFunc,
 	timeOut int)  (exitCode int, status int, err error) {
 
@@ -120,6 +121,7 @@ func (p *ProcessCmd)  SyncRun(
 	p.command = exec.Command(commandName, commandArguments...)
 	p.command.Stdout = stdoutWriter
 	p.command.Stderr = stderrWriter
+	p.command.Stdin = stdinReader
 	p.command.Dir = workingDir
 
 	if err := p.prepareProcess(); err != nil {

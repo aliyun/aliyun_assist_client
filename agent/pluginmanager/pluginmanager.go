@@ -3,7 +3,6 @@ package pluginmanager
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"io/ioutil"
 	"math/rand"
 	"os"
@@ -11,11 +10,9 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
-	"github.com/aliyun/aliyun_assist_client/agent/taskengine/timermanager"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/util/jsonutil"
 )
@@ -35,22 +32,16 @@ import (
 		1. 执行 `acs-plugin-manager --exec -P ecs_tool ----pluginVersion 1.0`。升级插件
 */
 
-const (
-	// DefaultPluginHealthIntervalSeconds 插件健康检查的间隔时间
-	DefaultPluginHealthIntervalSeconds = 30 * 60
-	// DefaultPluginUpdateCheckIntervalSeconds 插件检查升级的间隔时间
-	DefaultPluginUpdateCheckIntervalSeconds = 30 * 60
-
+var (
+	// pluginHealthIntervalSeconds 插件健康检查的间隔时间
+	pluginHealthIntervalSeconds = 15 * 60
+	// pluginUpdateCheckIntervalSeconds 插件检查升级的间隔时间
+	pluginUpdateCheckIntervalSeconds = 15 * 60
 )
 
 var (
-	_pluginHealthTimer          *timermanager.Timer
-	_pluginHealthTimerInitLock  sync.Mutex
-	pluginHealthIntervalSeconds = DefaultPluginHealthIntervalSeconds
-
-	_pluginUpdateCheck               *timermanager.Timer
-	_pluginUpdateCheckInitLock       sync.Mutex
-	pluginUpdateCheckIntervalSeconds = DefaultPluginUpdateCheckIntervalSeconds
+	pluginHealthTimer          *time.Timer
+	pluginUpdateTimer			*time.Timer
 )
 
 func loadIntervalConf() {
@@ -101,87 +92,37 @@ func setInterval(params string, interval int) {
 	}
 }
 
-func InitPluginCheckTimer() bool {
-	loadIntervalConf()
-	succ := true
-	if err := initPluginHealthTimer(); err != nil {
-		succ = false
-		log.GetLogger().Errorln("Failed to initialize plugin health timer: " + err.Error())
-	} else {
-		log.GetLogger().Infoln("Initialize plugin health timer success")
-	}
-
-	if err := initPluginUpdateCheckTimer(); err != nil {
-		succ = false
-		log.GetLogger().Errorln("Failed to initialize plugin update_check timer: " + err.Error())
-	} else {
-		log.GetLogger().Infoln("Initialize plugin update_check timer success")
-	}
-	return succ
-}
-
-func initPluginHealthTimer() error {
-	if _pluginHealthTimer == nil {
-		_pluginHealthTimerInitLock.Lock()
-		defer _pluginHealthTimerInitLock.Unlock()
-		if _pluginHealthTimer == nil {
-			log.GetLogger().Infof("initialize plugin health timer with interval %d seconds", pluginHealthIntervalSeconds)
-			timerManager := timermanager.GetTimerManager()
-			timer, err := timerManager.CreateTimerInSeconds(pluginHealthCheck, pluginHealthIntervalSeconds)
-			if err != nil {
-				log.GetLogger().WithError(err).Error("create plugin health timer failed")
-				return err
-			}
-			_pluginHealthTimer = timer
-			go func() {
-				// shuffle timer
-				mills := rand.Intn(pluginHealthIntervalSeconds * 1000)
-				time.Sleep(time.Duration(mills) * time.Millisecond)
-				log.GetLogger().Info("run plugin check health timer")
-				_, err = _pluginHealthTimer.Run()
-				if err != nil {
-					log.GetLogger().WithError(err).Error("run plugin check health timer failed")
-				}
-			}()
-			return nil
+func InitPluginCheckTimer() {
+	// health check
+	go func () {
+		randSleep := rand.Intn(60 * 1000)
+		time.Sleep(time.Duration(randSleep) * time.Millisecond)
+		pluginHealthTimer = time.NewTimer(time.Duration(pluginHealthIntervalSeconds) * time.Second)
+		pluginHealthCheck()
+		for ;; {
+			_ = <- pluginHealthTimer.C
+			pluginHealthCheck()
 		}
-		return errors.New("plugin check health timer has been initialized")
-	}
-	return errors.New("plugin check health timer has been initialized")
-}
-
-func initPluginUpdateCheckTimer() error {
-	if _pluginUpdateCheck == nil {
-		_pluginUpdateCheckInitLock.Lock()
-		defer _pluginUpdateCheckInitLock.Unlock()
-		if _pluginUpdateCheck == nil {
-			log.GetLogger().Infof("initialize plugin update check timer with interval %d seconds", pluginUpdateCheckIntervalSeconds)
-			timerManager := timermanager.GetTimerManager()
-			timer, err := timerManager.CreateTimerInSeconds(pluginUpdateCheck, pluginUpdateCheckIntervalSeconds)
-			if err != nil {
-				log.GetLogger().WithError(err).Error("create plugin update check timer failed")
-				return err
-			}
-			_pluginUpdateCheck = timer
-			go func() {
-				// shuffle timer
-				mills := rand.Intn(pluginUpdateCheckIntervalSeconds * 1000)
-				time.Sleep(time.Duration(mills) * time.Millisecond)
-				log.GetLogger().Info("run plugin check update timer")
-				_, err = _pluginUpdateCheck.Run()
-				if err != nil {
-					log.GetLogger().WithError(err).Error("run plugin check update timer failed")
-				}
-			}()
-			return nil
+	}()
+	// update check
+	go func () {
+		randSleep := rand.Intn(60 * 1000)
+		time.Sleep(time.Duration(randSleep) * time.Millisecond)
+		pluginUpdateTimer = time.NewTimer(time.Duration(pluginUpdateCheckIntervalSeconds) * time.Second)
+		pluginUpdateCheck()
+		for ;; {
+			_ = <- pluginUpdateTimer.C
+			pluginUpdateCheck()
 		}
-		return errors.New("plugin check update timer has been initialized")
-	}
-	return errors.New("plugin check update timer has been initialized")
+	}()
 }
 
 func pluginHealthCheck() {
 	log.GetLogger().Info("pluginHealthCheck start")
+	nextInterval := pluginHealthIntervalSeconds
+	defer func() {
+		pluginHealthTimer.Reset(time.Duration(nextInterval) * time.Second)
+	}()
 	// 1.检查插件列表，如果没有插件就不需要健康检查
 	pluginInfoList, err := loadPlugins()
 	if err != nil {
@@ -244,20 +185,20 @@ func pluginHealthCheck() {
 			}
 			pluginStatusRequest.Plugin = append(pluginStatusRequest.Plugin, pluginStatus)
 			// 状态异常的插件调用--start尝试拉起
-			// if pluginInfo.Status != PERSIST_RUNNING {
-			// 	log.GetLogger().Warnf("plugin[%s] is not running, try to start it", pluginInfo.Name)
-			// 	go func() {
-			// 		command := "acs-plugin-manager"
-			// 		arguments := []string{"-e", "--local", "-P", pluginInfo.Name, "-p", "--start"}
-			// 		timeout := 60
-			// 		if pluginInfoPtr, ok := pluginInfoMap[pluginInfo.Name]; ok && pluginInfoPtr.Timeout != "" {
-			// 			if t, err := strconv.Atoi(pluginInfoPtr.Timeout); err == nil {
-			// 				timeout = t
-			// 			}
-			// 		}
-			// 		syncRunKillGroup("", command, arguments, nil, nil, timeout)
-			// 	}()
-			// }
+			if pluginInfo.Status != PERSIST_RUNNING {
+				log.GetLogger().Warnf("plugin[%s] is not running, try to start it", pluginInfo.Name)
+				go func() {
+					command := "acs-plugin-manager"
+					arguments := []string{"-e", "--local", "-P", pluginInfo.Name, "-p", "--start"}
+					timeout := 60
+					if pluginInfoPtr, ok := pluginInfoMap[pluginInfo.Name]; ok && pluginInfoPtr.Timeout != "" {
+						if t, err := strconv.Atoi(pluginInfoPtr.Timeout); err == nil {
+							timeout = t
+						}
+					}
+					syncRunKillGroup("", command, arguments, nil, nil, timeout)
+				}()
+			}
 		}
 	}
 	requestPayloadBytes, err := json.Marshal(pluginStatusRequest)
@@ -267,22 +208,34 @@ func pluginHealthCheck() {
 	}
 	requestPayload := string(requestPayloadBytes)
 	url := util.GetPluginHealthService()
-	_, err = util.HttpPost(url, requestPayload, "")
+	resp, err := util.HttpPost(url, requestPayload, "")
 
 	for i := 0; i < 3 && err != nil; i++ {
 		log.GetLogger().Infof("upload pluginStatusList fail, need retry: %s", requestPayload)
 		time.Sleep(time.Duration(2) * time.Second)
-		_, err = util.HttpPost(url, requestPayload, "")
+		resp, err = util.HttpPost(url, requestPayload, "")
 	}
 	if err != nil {
 		log.GetLogger().WithError(err).Error("pluginHealthCheck fail: post pluginStatusList fail")
 		return
+	}
+	pluginStatusResp, err := parsePluginHealthCheck(resp)
+	if err != nil {
+		log.GetLogger().WithError(err).Errorf("pluginHealthCheck fail: parse PluginStatusResponse from resp fail: %s", resp)
+		return
+	}
+	if pluginStatusResp.NextInterval > 0 {
+		nextInterval = pluginStatusResp.NextInterval
 	}
 	log.GetLogger().Info("pluginHealthCheck success")
 }
 
 func pluginUpdateCheck() {
 	log.GetLogger().Info("pluginUpdateCheck start")
+	nextInterval := pluginUpdateCheckIntervalSeconds
+	defer func() {
+		pluginUpdateTimer.Reset(time.Duration(nextInterval) * time.Second)
+	}()
 	// 1.检查插件列表，如果没有插件就不需要升级检查
 	pluginInfoList, err := loadPlugins()
 	if err != nil {
@@ -343,10 +296,14 @@ func pluginUpdateCheck() {
 	}
 
 	// 3. 从check_update接口的响应数据中解析出要升级插件的信息
-	_, err = parsePluginUpdateCheck(resp)
+	var pluginUpdateCheckResp PluginUpdateCheckResponse
+	pluginUpdateCheckResp, err = parsePluginUpdateCheck(resp)
 	if err != nil {
 		log.GetLogger().WithError(err).Errorf("pluginUpdateCheck fail: parse pluginUpdateInfo from resp fail: %s", resp)
 		return
+	}
+	if pluginUpdateCheckResp.NextInterval > 0 {
+		nextInterval = pluginUpdateCheckResp.NextInterval
 	}
 
 	// 4.遍历pluginUpdateInfoList，对需要升级的插件执行升级操作
@@ -379,6 +336,16 @@ func pluginUpdateCheck() {
 	// 	}
 	// }
 	log.GetLogger().Infof("pluginUpdateCheck success response: %s", resp)
+}
+
+func parsePluginHealthCheck(content string) (PluginStatusResponse, error) {
+	// 从check_update接口的响应数据中解析出插件升级信息
+	pluginStatusResp := PluginStatusResponse{}
+	if err := json.Unmarshal([]byte(content), &pluginStatusResp); err != nil {
+		log.GetLogger().Errorf("parse pluginUpdateCheck fail: %s", content)
+		return pluginStatusResp, err
+	}
+	return pluginStatusResp, nil
 }
 
 func parsePluginUpdateCheck(content string) (PluginUpdateCheckResponse, error) {

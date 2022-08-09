@@ -28,6 +28,8 @@ type ShellPlugin struct {
 	cmd *exec.Cmd
 	first_ws_col uint32
 	first_ws_row uint32
+	flowLimit	int
+	sendInterval	int
 }
 
 const (
@@ -174,6 +176,27 @@ func (p *ShellPlugin) InputStreamMessageHandler(streamDataMessage message.Messag
 			log.GetLogger().Errorf("Unable to set pty size: %s", err)
 			return err
 		}
+		break
+	case message.StatusDataMessage:
+		if len(streamDataMessage.Payload) > 0 {
+			code, err := message.BytesToIntU(streamDataMessage.Payload[0:1])
+			if err == nil {
+				if code == 7 { // 设置agent的发送速率
+					speed, err := message.BytesToIntU(streamDataMessage.Payload[1:]) // speed 单位是 bps
+					if speed == 0 {
+						break
+					}
+					if err != nil {
+						log.GetLogger().Errorf("Invalid flowLimit: %s", err)
+						return err
+					}
+					p.sendInterval = 1000 / (speed / 8 / sendPackageSize)
+					log.GetLogger().Infof("Set send speed, channelId[%s] speed[%d]bps sendInterval[%d]ms\n", p.id, speed, p.sendInterval)
+				}
+			} else {
+				log.GetLogger().Errorf("Parse status code err: %s", err)
+			}
+		} 
 		break
 	}
 	return nil

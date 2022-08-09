@@ -2,8 +2,13 @@ package channel
 
 import (
 	"errors"
+	"io/ioutil"
+	"strconv"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/agent/util/timetool"
 	"github.com/gorilla/websocket"
+	"github.com/google/uuid"
 	"net/http"
 )
 
@@ -39,6 +44,37 @@ func NewWebsocketUtil(dialerInput *websocket.Dialer) *WebsocketUtil {
 func (u *WebsocketUtil) OpenConnection(url string, requestHeader http.Header) (*websocket.Conn, error) {
 
 	log.GetLogger().Infof("Opening websocket connection to: %s", url)
+
+	if util.IsHybrid() {
+		u4 := uuid.New()
+		str_request_id := u4.String()
+
+		timestamp := timetool.GetAccurateTime()
+		str_timestamp := strconv.FormatInt(timestamp, 10)
+
+		var instance_id string
+		path := ""
+		if util.IsSelfHosted() {
+			path, _ = util.GetSelfhostedPath()
+		} else {
+			path, _ = util.GetHybridPath()
+		}
+
+		content, _ := ioutil.ReadFile(path + "/instance-id")
+		instance_id = string(content)
+
+		mid, _ := util.GetMachineID()
+
+		input := instance_id + mid + str_timestamp + str_request_id
+		pri_key, _ := ioutil.ReadFile(path + "/pri-key")
+		output := util.RsaSign(input, string(pri_key))
+		log.GetLogger().Infoln(input, output)
+
+		requestHeader.Add("x-acs-instance-id", instance_id)
+		requestHeader.Add("x-acs-timestamp", str_timestamp)
+		requestHeader.Add("x-acs-request-id", str_request_id)
+		requestHeader.Add("x-acs-signature", output)
+	}
 
 	conn, resp, err := u.dialer.Dial(url, requestHeader)
 	if err != nil {

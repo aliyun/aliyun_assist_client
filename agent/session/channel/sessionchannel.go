@@ -156,6 +156,8 @@ func (sessionChannel *SessionChannel) inputMessageHandler(rawMessage []byte) err
 		 return sessionChannel.handleStreamDataMessage( *streamDataMessage, rawMessage)
 	case message.SetSizeDataMessage:
 		 return sessionChannel.handleStreamDataMessage( *streamDataMessage, rawMessage)
+	case message.StatusDataMessage:
+		return sessionChannel.handleStreamDataMessage( *streamDataMessage, rawMessage)
 	default:
 		log.GetLogger().Warnf("Invalid message type received: %d", streamDataMessage.MessageType)
 	}
