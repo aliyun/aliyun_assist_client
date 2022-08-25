@@ -14,6 +14,7 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/util/process"
+	libupdate "github.com/aliyun/aliyun_assist_client/common/update"
 )
 
 const (
@@ -31,7 +32,7 @@ var (
 
 func ExecuteUpdateScriptRunner(updateScriptPath string) {
 	log.GetLogger().Infof("Starting updator to execute update script %s", updateScriptPath)
-	updatorPath := GetUpdatorPathByCurrentProcess()
+	updatorPath := libupdate.GetUpdatorPathByCurrentProcess()
 
 	exitcode, status, err := process.SyncRunDetached(updatorPath, []string{"--local_install", updateScriptPath}, 120)
 	failureContext := map[string]interface{}{
@@ -45,19 +46,19 @@ func ExecuteUpdateScriptRunner(updateScriptPath string) {
 		}
 		if status == process.Timeout {
 			log.GetLogger().WithFields(logrus.Fields(failureContext)).WithError(err).Errorln("Executing update script via updator timeout")
-			ReportExecuteUpdateScriptRunnerTimeout(err, nil, failureContext)
+			libupdate.ReportExecuteUpdateScriptRunnerTimeout(err, nil, failureContext)
 		} else {
 			log.GetLogger().WithFields(logrus.Fields(failureContext)).WithError(err).Errorln("Failed to execute update script via updator")
-			ReportExecuteUpdateScriptRunnerFailed(err, nil, failureContext)
+			libupdate.ReportExecuteUpdateScriptRunnerFailed(err, nil, failureContext)
 		}
 	} else if status != process.Success {
 		failureContext["exitcode"] = exitcode
 		if status == process.Timeout {
 			log.GetLogger().WithFields(logrus.Fields(failureContext)).Errorln(errTimeoutPlaceholder.Error())
-			ReportExecuteUpdateScriptRunnerFailed(errTimeoutPlaceholder, nil, failureContext)
+			libupdate.ReportExecuteUpdateScriptRunnerFailed(errTimeoutPlaceholder, nil, failureContext)
 		} else {
 			log.GetLogger().WithFields(logrus.Fields(failureContext)).Errorln(errFailurePlaceholder.Error())
-			ReportExecuteUpdateScriptRunnerFailed(errFailurePlaceholder, nil, failureContext)
+			libupdate.ReportExecuteUpdateScriptRunnerFailed(errFailurePlaceholder, nil, failureContext)
 		}
 	}
 }
@@ -117,7 +118,7 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 		return nil
 	}
 	// Check updator existence for possible disabling, compatibile with 1.* version
-	updatorPath := GetUpdatorPathByCurrentProcess()
+	updatorPath := libupdate.GetUpdatorPathByCurrentProcess()
 	if !util.CheckFileIsExist(updatorPath) {
 		wrapErr := fmt.Errorf("%w: %s does not exist", ErrUpdatorNotFound, updatorPath)
 		log.GetLogger().WithError(wrapErr).Errorln("Updating has been disabled due to updator not found")
@@ -135,10 +136,10 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 	}
 
 	// 1. Check whether update package is avialable
-	updateInfo, err := func () (*UpdateCheckResp, error) {
+	updateInfo, err := func () (*libupdate.UpdateCheckResp, error) {
 		var lastErr error = nil
 		for i := 0; i < MaximumCheckUpdateRetries; i++ {
-			updateInfo, err := FetchUpdateInfo()
+			updateInfo, err := libupdate.FetchUpdateInfo()
 			if err != nil {
 				lastErr = err
 				log.GetLogger().WithError(err).Errorln("Failed to check update")
@@ -218,7 +219,7 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 			return ErrPreparationTimeout
 		}
 	}
-	err = DownloadPackage(updateInfo.UpdateInfo.URL, tempSavePath, downloadTimeout)
+	err = libupdate.DownloadPackage(updateInfo.UpdateInfo.URL, tempSavePath, downloadTimeout)
 	if err != nil {
 		log.GetLogger().WithFields(logrus.Fields{
 			"updateInfo": updateInfo,
@@ -230,7 +231,7 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 		// Try our best to report error encountered during downloading packages,
 		// and REMEMBER: timeout situation of such reporting action MUST be
 		// considered into preparation time.
-		ReportDownloadPackageFailed(err, updateInfo, map[string]interface{}{
+		libupdate.ReportDownloadPackageFailed(err, updateInfo, map[string]interface{}{
 			"targetSavePath": tempSavePath,
 		})
 
@@ -265,7 +266,7 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 			// NOTE: Removing downloaded update pacakge would always be performed
 			// even when preparation times out. This would be dangerous when IO
 			// operation is slow and will block task execution. Review is needed.
-			if err := RemoveUpdatePackage(tempSavePath); err != nil {
+			if err := libupdate.RemoveUpdatePackage(tempSavePath); err != nil {
 				errmsg = fmt.Sprintf("RemoveUpdatePackage error: %s", err.Error())
 				extrainfo = fmt.Sprintf("downloadedPackagePath=%s&packageURL=%s", tempSavePath, updateInfo.UpdateInfo.URL)
 				log.GetLogger().WithFields(logrus.Fields{
@@ -278,7 +279,7 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 		}()
 
 		// 3. Check MD5 checksum of downloaded update package
-		if err := CompareFileMD5(tempSavePath, updateInfo.UpdateInfo.Md5); err != nil {
+		if err := libupdate.CompareFileMD5(tempSavePath, updateInfo.UpdateInfo.Md5); err != nil {
 			log.GetLogger().WithFields(logrus.Fields{
 				"updateInfo": updateInfo,
 				"downloadedPackagePath": tempSavePath,
@@ -286,7 +287,7 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 			errmsg = fmt.Sprintf("CompareFileMD5 error: %s", err.Error())
 			extrainfo = fmt.Sprintf("downloadedPackagePath=%s&md5InUpdateInfo=%s", tempSavePath, updateInfo.UpdateInfo.Md5)
 
-			ReportCheckMD5Failed(err, updateInfo, map[string]interface{}{
+			libupdate.ReportCheckMD5Failed(err, updateInfo, map[string]interface{}{
 				"downloadedPackagePath": tempSavePath,
 			})
 
@@ -303,8 +304,8 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 		}
 
 		// 4. Remove old versions, only preserving no more than two versions after installation
-		destinationDir := GetInstallDir()
-		if err := RemoveOldVersion(destinationDir); err != nil {
+		destinationDir := libupdate.GetInstallDir()
+		if err := libupdate.RemoveOldVersion(destinationDir); err != nil {
 			log.GetLogger().WithFields(logrus.Fields{
 				"destinationDir": destinationDir,
 			}).WithError(err).Warnln("Failed to clean old versions, but not abort updating process")
@@ -319,7 +320,7 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 		}
 
 		// 5. Extract downloaded update package directly to install directory
-		if err := ExtractPackage(tempSavePath, destinationDir); err != nil {
+		if err := libupdate.ExtractPackage(tempSavePath, destinationDir); err != nil {
 			errmsg = fmt.Sprintf("ExtractPackage error: %s", err.Error())
 			extrainfo = fmt.Sprintf("destinationDir=%s&downloadedPackagePath=%s", destinationDir, tempSavePath)
 			log.GetLogger().WithFields(logrus.Fields{
@@ -328,7 +329,7 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 				"destinationDir": destinationDir,
 			}).WithError(err).Errorln("Failed to extract update package")
 
-			ReportExtractPackageFailed(err, updateInfo, map[string]interface{}{
+			libupdate.ReportExtractPackageFailed(err, updateInfo, map[string]interface{}{
 				"downloadedPackagePath": tempSavePath,
 				"destinationDir": destinationDir,
 			})
@@ -348,7 +349,7 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 		// 6. Extract package version from url of update package
 		// TODO: Extract package version from downloaded package itself, thus remove
 		// dependency on url of update package
-		newVersion, err := ExtractVersionStringFromURL(updateInfo.UpdateInfo.URL)
+		newVersion, err := libupdate.ExtractVersionStringFromURL(updateInfo.UpdateInfo.URL)
 		if err != nil {
 			errmsg = fmt.Sprintf("ExtractVersionStringFromURL error: %s", err.Error())
 			extrainfo = fmt.Sprintf("packageURL=%s", updateInfo.UpdateInfo.URL)
@@ -360,8 +361,8 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 		}
 
 		// 7. Validate agent executable file format and architecture
-		agentPath := GetAgentPathByVersion(newVersion)
-		if err := ValidateExecutable(agentPath); err != nil {
+		agentPath := libupdate.GetAgentPathByVersion(newVersion)
+		if err := libupdate.ValidateExecutable(agentPath); err != nil {
 			errmsg = fmt.Sprintf("GetAgentPathByVersion error: %s", err.Error())
 			extrainfo = fmt.Sprintf("packageURL=%s&executablePath=%s", updateInfo.UpdateInfo.URL, agentPath)
 			log.GetLogger().WithFields(logrus.Fields{
@@ -369,7 +370,7 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 				"packageURL": updateInfo.UpdateInfo.URL,
 			}).WithError(err).Errorln("Invalid agent executable downloaded from responded URL")
 
-			ReportValidateExecutableFailed(err, updateInfo, map[string]interface{}{
+			libupdate.ReportValidateExecutableFailed(err, updateInfo, map[string]interface{}{
 				"packageURL": updateInfo.UpdateInfo.URL,
 				"executablePath": agentPath,
 			})
@@ -386,7 +387,7 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 		}
 
 		// 8. Construct and return path of update script to be executed
-		updateScriptPath := GetUpdateScriptPathByVersion(newVersion)
+		updateScriptPath := libupdate.GetUpdateScriptPathByVersion(newVersion)
 		return updateScriptPath, nil
 	}()
 	if err != nil {

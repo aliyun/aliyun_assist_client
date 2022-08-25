@@ -10,6 +10,7 @@ import (
 
 	"bou.ke/monkey"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
+	libupdate "github.com/aliyun/aliyun_assist_client/common/update"
 	"github.com/jarcoal/httpmock"
 )
 
@@ -27,13 +28,13 @@ func Test_safeUpdate(t *testing.T) {
 			return httpmock.NewStringResponse(200, "success"), nil
 		})
 	flag := false
-	guard_1 := monkey.Patch(FetchUpdateInfo, func() (*UpdateCheckResp, error) {
+	guard_1 := monkey.Patch(libupdate.FetchUpdateInfo, func() (*libupdate.UpdateCheckResp, error) {
 		if !flag {
 			flag = true
 			return nil, errors.New("some error")
 		} else {
 			flag = false
-			updateCheckResp := UpdateCheckResp {
+			updateCheckResp := libupdate.UpdateCheckResp {
 				Flag: 1,
 				InstanceID: "instanceID",
 				NeedUpdate: 1,
@@ -70,124 +71,167 @@ func Test_safeUpdate(t *testing.T) {
 		{
 			name: "updatePathNotExist",
 			wantErr: true,
+			args: theArgs,
 		},
 		{
 			name: "downloadPackageError",
 			wantErr: true,
+			args: theArgs,
 		},
 		{
 			name: "checkMd5Error",
 			wantErr: true,
+			args: theArgs,
 		},
-		{
-			name: "removeOldVersionError",
-			wantErr: false,
-		},
+		// {
+		// 	name: "removeOldVersionError",
+		// 	wantErr: false,
+		// 	args: theArgs,
+		// },
 		{
 			name: "extractPackageError",
 			wantErr: true,
+			args: theArgs,
 		},
 		{
 			name: "extractVersionFromUrlError",
 			wantErr: true,
+			args: theArgs,
 		},
 		{
 			name: "validateExecuteableError",
 			wantErr: true,
+			args: theArgs,
 		},
 	}
+	guardDisableUpdate := monkey.Patch(isUpdatingDisabled, func() (bool, error) { return false, nil })
+	guardDownloadPackage := monkey.Patch(libupdate.DownloadPackage, func(string, string, time.Duration) error { return nil })
+	guardCompareFileMD5 := monkey.Patch(libupdate.CompareFileMD5, func(string, string) error { return nil })
+	guardRemoveOldVersion := monkey.Patch(libupdate.RemoveOldVersion, func(string) error { return nil })
+	guardExtractPackage := monkey.Patch(libupdate.ExtractPackage, func(string, string) error { return nil })
+	guardExtractVersionStringFromURL := monkey.Patch(libupdate.ExtractVersionStringFromURL, func(string) (string, error) { return "1.0.0.2", nil})
+	guardValidateExecutable := monkey.Patch(libupdate.ValidateExecutable, func(string) error { return nil })
+	defer func() {
+		guardDisableUpdate.Unpatch()
+		guardDownloadPackage.Unpatch()
+		guardCompareFileMD5.Unpatch()
+		guardRemoveOldVersion.Unpatch()
+		guardExtractPackage.Unpatch()
+		guardExtractVersionStringFromURL.Unpatch()
+		guardValidateExecutable.Unpatch()
+	}()
+
+	updatorPath := libupdate.GetUpdatorPathByCurrentProcess()
+	if !util.CheckFileIsExist(updatorPath) {
+		util.WriteStringToFile(updatorPath, "some")
+	}
+	defer func() {
+		if util.CheckFileIsExist(updatorPath) {
+			os.Remove(updatorPath)
+		}
+	}()
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.name == "disableUpdate" {
-				guard_1 := monkey.Patch(isUpdatingDisabled, func() (bool, error) {
+				guardDisableUpdate.Unpatch()
+				guardDisableUpdate = monkey.Patch(isUpdatingDisabled, func() (bool, error) {
 					return true, errors.New("some error")
 				})
-				defer guard_1.Unpatch()
-			} else {
-				guard_1 := monkey.Patch(isUpdatingDisabled, func() (bool, error) {
-					return false, nil
-				})
-				defer guard_1.Unpatch()
 			}
 
-			updatorPath := GetUpdatorPathByCurrentProcess()
+			
 			if tt.name == "updatePathNotExist" {
 				if util.CheckFileIsExist(updatorPath) {
 					os.Remove(updatorPath)
 				}
-			} else {
-				if !util.CheckFileIsExist(updatorPath) {
-					util.WriteStringToFile(updatorPath, "some")
-				}
-				defer func() {
-					if util.CheckFileIsExist(updatorPath) {
-						os.Remove(updatorPath)
-					}
-				}()
 			}
 
 			tempPath := ""
 			if tt.name == "downloadPackageError" {
-				guard := monkey.Patch(DownloadPackage, func(string, string, time.Duration) error {
+				guardDownloadPackage.Unpatch()
+				guardDownloadPackage = monkey.Patch(libupdate.DownloadPackage, func(string, string, time.Duration) error {
 					// tempPath = savePath
 					return errors.New("some error")
 				})
-				defer guard.Unpatch()
-			} else {	
-				guard := monkey.Patch(DownloadPackage, func(string, string, time.Duration) error {
-					// tempPath = savePath
-					return nil
-				})
-				defer guard.Unpatch()
+				defer func() {
+					if util.CheckFileIsExist(tempPath) {
+						os.Remove(tempPath)
+					}
+				}()
 			}
-			defer func() {
-				if util.CheckFileIsExist(tempPath) {
-					os.Remove(tempPath)
-				}
-			}()
+			
 
 			if tt.name == "checkMd5Error" {
-				guard := monkey.Patch(CompareFileMD5, func(string, string) error { return errors.New("some error") })
-				defer guard.Unpatch()
-			} else {
-				guard := monkey.Patch(CompareFileMD5, func(string, string) error { return nil })
-				defer guard.Unpatch()
+				guardCompareFileMD5.Unpatch()
+				guardCompareFileMD5 = monkey.Patch(libupdate.CompareFileMD5, func(string, string) error { return errors.New("some error") })
 			}
 
 			if tt.name == "removeOldVersionError" {
-				guard := monkey.Patch(RemoveOldVersion, func(string) error { return errors.New("some error") })
-				defer guard.Unpatch()
-			} else {
-				guard := monkey.Patch(RemoveOldVersion, func(string) error { return nil })
-				defer guard.Unpatch()
+				guardRemoveOldVersion.Unpatch()
+				guardRemoveOldVersion = monkey.Patch(libupdate.RemoveOldVersion, func(string) error { return errors.New("some error") })
+
+				err := libupdate.ExtractPackage("some", "some")
+				fmt.Println("ExtractPackage err: ", err)
 			}
 
 			if tt.name == "extractPackageError" {
-				guard := monkey.Patch(ExtractPackage, func(string, string) error { return errors.New("some error") })
-				defer guard.Unpatch()
-			} else {
-				guard := monkey.Patch(ExtractPackage, func(string, string) error { return nil })
-				defer guard.Unpatch()
+				guardExtractPackage.Unpatch()
+				guardExtractPackage = monkey.Patch(libupdate.ExtractPackage, func(string, string) error { return errors.New("some error") })
 			}
 
 			if tt.name == "extractVersionFromUrlError" {
-				guard := monkey.Patch(ExtractVersionStringFromURL, func(string) (string, error) { return "", errors.New("some error") })
-				defer guard.Unpatch()
-			} else {
-				guard := monkey.Patch(ExtractVersionStringFromURL, func(string) (string, error) { return "1.0.0.2", nil})
-				defer guard.Unpatch()
+				guardExtractVersionStringFromURL.Unpatch()
+				guardExtractVersionStringFromURL = monkey.Patch(libupdate.ExtractVersionStringFromURL, func(string) (string, error) { return "", errors.New("some error") })
 			}
 
 			if tt.name == "validateExecuteableError" {
-				guard := monkey.Patch(ValidateExecutable, func(string) error { return errors.New("some error") })
-				defer guard.Unpatch()
-			} else {
-				guard := monkey.Patch(ValidateExecutable, func(string) error { return nil })
-				defer guard.Unpatch()
+				guardValidateExecutable.Unpatch()
+				guardValidateExecutable = monkey.Patch(libupdate.ValidateExecutable, func(string) error { return errors.New("some error") })
 			}
 
 			if err := safeUpdate(tt.args.startTime, tt.args.preparationTimeout, tt.args.maximumDownloadTimeout); (err != nil) != tt.wantErr {
 				t.Errorf("safeUpdate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			// // 恢复
+			if tt.name == "disableUpdate" {
+				guardDisableUpdate.Unpatch()
+				guardDisableUpdate = monkey.Patch(isUpdatingDisabled, func() (bool, error) { return false, nil })
+			}
+
+			if tt.name == "updatePathNotExist"  {
+				if !util.CheckFileIsExist(updatorPath) {
+					util.WriteStringToFile(updatorPath, "some")
+				}
+			}
+
+			if tt.name == "downloadPackageError" {
+				guardDownloadPackage.Unpatch()
+				guardDownloadPackage = monkey.Patch(libupdate.DownloadPackage, func(string, string, time.Duration) error { return nil })
+			}
+
+			if tt.name == "checkMd5Error" {
+				guardCompareFileMD5.Unpatch()
+				guardCompareFileMD5 = monkey.Patch(libupdate.CompareFileMD5, func(string, string) error { return nil })
+			}
+
+			if tt.name == "removeOldVersionError" {
+				guardRemoveOldVersion.Unpatch()
+				guardRemoveOldVersion = monkey.Patch(libupdate.RemoveOldVersion, func(string) error { return nil })
+			}
+
+			if tt.name == "extractPackageError" {
+				guardExtractPackage.Unpatch()
+				guardExtractPackage = monkey.Patch(libupdate.ExtractPackage, func(string, string) error { return nil })
+			}
+
+			if tt.name == "extractVersionFromUrlError" {
+				guardExtractVersionStringFromURL.Unpatch()
+				guardExtractVersionStringFromURL = monkey.Patch(libupdate.ExtractVersionStringFromURL, func(string) (string, error) { return "1.0.0.2", nil})
+			}
+
+			if tt.name == "validateExecuteableError" {
+				guardValidateExecutable.Unpatch()
+				guardValidateExecutable = monkey.Patch(libupdate.ValidateExecutable, func(string) error { return nil })
 			}
 		})
 	}

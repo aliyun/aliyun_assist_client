@@ -7,7 +7,7 @@ import (
 )
 
 type JsonstrTest struct {
-	Test  string `json: "test"`
+	Test  string `json:"test"`
 	Test1 string
 }
 
@@ -25,7 +25,7 @@ func TestMarshal(t *testing.T) {
 	}
 	res, _ := Marshal(testResp)
 	print(res)
-	assert.Equal(t, `{"Test":"test","Test1":"test1"}`+"\n", res)
+	assert.Equal(t, `{"test":"test","Test1":"test1"}`+"\n", res)
 }
 
 func TestRemarshal(t *testing.T) {
@@ -55,5 +55,5 @@ func TestMarshalIndent(t *testing.T) {
 		Test1: "test1",
 	}
 	result, _ := MarshalIndent(cred)
-	assert.Equal(t, "{\n  \"Test\": \"test\",\n  \"Test1\": \"test1\"\n}", result)
+	assert.Equal(t, "{\n  \"test\": \"test\",\n  \"Test1\": \"test1\"\n}", result)
 }

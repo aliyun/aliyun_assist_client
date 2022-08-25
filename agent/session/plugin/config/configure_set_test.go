@@ -20,7 +20,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/cli"
 )
 
 func TestDoConfigureSet(t *testing.T) {

@@ -8,7 +8,7 @@ import (
 )
 
 func TestShellPlugin_Execute(t *testing.T) {
-	shellPlugin := NewShellPlugin("", "", "", "")
+	shellPlugin := NewShellPlugin("", "", "", "", 200)
 	go func() {
 		shellPlugin.Execute(nil, util.NewChanneledCancelFlag())
 	}()
