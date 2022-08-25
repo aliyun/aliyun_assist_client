@@ -12,6 +12,7 @@ import (
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
+	"github.com/aliyun/aliyun_assist_client/agent/taskengine/models"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/timermanager"
 	"github.com/aliyun/aliyun_assist_client/agent/util/atomicutil"
 )
@@ -131,7 +132,7 @@ func fetchTasks(reason FetchReason, taskId string, taskType int, isColdstart boo
 	return len(taskInfos.runInfos) + len(taskInfos.stopInfos) + len(taskInfos.sessionInfos) + len(taskInfos.sendFiles)
 }
 
-func dispatchRunTask(taskInfo RunTaskInfo) {
+func dispatchRunTask(taskInfo models.RunTaskInfo) {
 	fetchLogger := log.GetLogger().WithFields(logrus.Fields{
 		"TaskId": taskInfo.TaskId,
 		"Phase":  "Fetched",
@@ -151,7 +152,7 @@ func dispatchRunTask(taskInfo RunTaskInfo) {
 		"Phase":  "Scheduling",
 	})
 	switch taskInfo.Repeat {
-	case RunTaskOnce, RunTaskNextRebootOnly, RunTaskEveryReboot:
+	case models.RunTaskOnce, models.RunTaskNextRebootOnly, models.RunTaskEveryReboot:
 		t := NewTask(taskInfo, nil, nil)
 
 		scheduleLogger.Info("Schedule non-periodic task")
@@ -171,7 +172,7 @@ func dispatchRunTask(taskInfo RunTaskInfo) {
 			taskFactory.RemoveTaskByName(t.taskInfo.TaskId)
 		})
 		scheduleLogger.Info("Scheduled for pending or running")
-	case RunTaskCron, RunTaskRate, RunTaskAt:
+	case models.RunTaskCron, models.RunTaskRate, models.RunTaskAt:
 		// Periodic tasks are managed by _periodicTaskSchedules
 		err := schedulePeriodicTask(taskInfo)
 		if err != nil {
@@ -188,7 +189,7 @@ func dispatchRunTask(taskInfo RunTaskInfo) {
 	}
 }
 
-func dispatchStopTask(taskInfo RunTaskInfo) {
+func dispatchStopTask(taskInfo models.RunTaskInfo) {
 	log.GetLogger().WithFields(logrus.Fields{
 		"TaskId": taskInfo.TaskId,
 		"Phase":  "Fetched",
@@ -200,7 +201,7 @@ func dispatchStopTask(taskInfo RunTaskInfo) {
 	})
 	taskFactory := GetTaskFactory()
 	switch taskInfo.Repeat {
-	case RunTaskOnce, RunTaskNextRebootOnly, RunTaskEveryReboot:
+	case models.RunTaskOnce, models.RunTaskNextRebootOnly, models.RunTaskEveryReboot:
 		scheduledTask, ok := taskFactory.GetTask(taskInfo.TaskId)
 		if ok {
 			cancelLogger.Info("Cancel task and invocation")
@@ -212,7 +213,7 @@ func dispatchStopTask(taskInfo RunTaskInfo) {
 				"response": response,
 			}).WithError(err).Warning("Force cancelling task not found due to finished or error")
 		}
-	case RunTaskCron, RunTaskRate, RunTaskAt:
+	case models.RunTaskCron, models.RunTaskRate, models.RunTaskAt:
 		// Periodic tasks are managed by _periodicTaskSchedules
 		err := cancelPeriodicTask(taskInfo)
 		if err != nil {
@@ -229,7 +230,7 @@ func dispatchStopTask(taskInfo RunTaskInfo) {
 	}
 }
 
-func dispatchTestTask(taskInfo RunTaskInfo) {
+func dispatchTestTask(taskInfo models.RunTaskInfo) {
 	fetchLogger := log.GetLogger().WithFields(logrus.Fields{
 		"TaskId": taskInfo.TaskId,
 		"Phase":  "Fetched",
@@ -249,7 +250,7 @@ func dispatchTestTask(taskInfo RunTaskInfo) {
 		"Phase":  "Scheduling",
 	})
 	switch taskInfo.Repeat {
-	case RunTaskOnce, RunTaskCron, RunTaskNextRebootOnly, RunTaskEveryReboot, RunTaskRate, RunTaskAt:
+	case models.RunTaskOnce, models.RunTaskCron, models.RunTaskNextRebootOnly, models.RunTaskEveryReboot, models.RunTaskRate, models.RunTaskAt:
 		t := NewTask(taskInfo, nil, nil)
 
 		scheduleLogger.Info("Schedule testing task to be pre-checked")
@@ -299,7 +300,7 @@ func (s *PeriodicTaskSchedule) startExclusiveInvocation() {
 	invocateLogger.Info("Scheduled new pending or running invocation")
 }
 
-func schedulePeriodicTask(taskInfo RunTaskInfo) error {
+func schedulePeriodicTask(taskInfo models.RunTaskInfo) error {
 	timerManager := timermanager.GetTimerManager()
 	if timerManager == nil {
 		return errors.New("Global TimerManager instance is not initialized")
@@ -338,14 +339,14 @@ func schedulePeriodicTask(taskInfo RunTaskInfo) error {
 	var err error
 	var scheduleLocation *time.Location = nil
 	var onFinish FinishCallback = nil
-	if taskInfo.Repeat == RunTaskRate {
+	if taskInfo.Repeat == models.RunTaskRate {
 		creationTimeSeconds := taskInfo.CreationTime / 1000
 		creationTimeMs := taskInfo.CreationTime % 1000
 		creationTime := time.Unix(creationTimeSeconds, creationTimeMs * int64(time.Millisecond))
 		timer, err = timerManager.CreateRateTimer(func() {
 			periodicTaskSchedule.startExclusiveInvocation()
 		}, taskInfo.Cronat, creationTime)
-	} else if taskInfo.Repeat == RunTaskAt {
+	} else if taskInfo.Repeat == models.RunTaskAt {
 		timer, err = timerManager.CreateAtTimer(func() {
 			periodicTaskSchedule.startExclusiveInvocation()
 		}, taskInfo.Cronat)
@@ -372,7 +373,7 @@ func schedulePeriodicTask(taskInfo RunTaskInfo) error {
 		return err
 	}
 	// Special attributes for additional reporting of cron tasks
-	if taskInfo.Repeat == RunTaskCron {
+	if taskInfo.Repeat == models.RunTaskCron {
 		cronScheduled, ok := timer.Schedule.(*timermanager.CronScheduled)
 		if !ok {
 			// Should never run into logic here
@@ -424,7 +425,7 @@ func schedulePeriodicTask(taskInfo RunTaskInfo) error {
 	return nil
 }
 
-func cancelPeriodicTask(taskInfo RunTaskInfo) error {
+func cancelPeriodicTask(taskInfo models.RunTaskInfo) error {
 	timerManager := timermanager.GetTimerManager()
 	if timerManager == nil {
 		return errors.New("Global TimerManager instance is not initialized")

@@ -9,6 +9,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/agent/taskengine/models"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/util/timetool"
 )
@@ -20,14 +21,14 @@ const (
 )
 
 type taskInfo struct {
-	TaskInfo   RunTaskInfo `json:"task"`
-	OutputInfo OutputInfo  `json:"output"`
-	Repeat     RunTaskRepeatType `json:"repeat"`
+	TaskInfo   models.RunTaskInfo `json:"task"`
+	OutputInfo models.OutputInfo  `json:"output"`
+	Repeat     models.RunTaskRepeatType `json:"repeat"`
 }
 
 type sendFileInfo struct {
-	TaskInfo   SendFileTaskInfo `json:"task"`
-	OutputInfo OutputInfo       `json:"output"`
+	TaskInfo   models.SendFileTaskInfo `json:"task"`
+	OutputInfo models.OutputInfo       `json:"output"`
 }
 
 type tasks struct {
@@ -35,25 +36,25 @@ type tasks struct {
 	StopTasks     []taskInfo     `json:"stop"`
 	TestTasks     []taskInfo     `json:"test"`
 	SendFileTasks []sendFileInfo `json:"file"`
-	SessionTasks      []SessionTaskInfo     `json:"session"`
+	SessionTasks  []models.SessionTaskInfo     `json:"session"`
 	InstanceId    string         `json:"instanceId"`
 }
 
 type taskCollection struct {
-	runInfos []RunTaskInfo
-	stopInfos []RunTaskInfo
-	testInfos []RunTaskInfo
-	sendFiles []SendFileTaskInfo
-	sessionInfos []SessionTaskInfo
+	runInfos []models.RunTaskInfo
+	stopInfos []models.RunTaskInfo
+	testInfos []models.RunTaskInfo
+	sendFiles []models.SendFileTaskInfo
+	sessionInfos []models.SessionTaskInfo
 }
 
 func newTaskCollection() *taskCollection {
 	taskInfos := taskCollection{
-		runInfos: []RunTaskInfo{},
-		stopInfos: []RunTaskInfo{},
-		testInfos: []RunTaskInfo{},
-		sendFiles: []SendFileTaskInfo{},
-		sessionInfos: []SessionTaskInfo{},
+		runInfos: []models.RunTaskInfo{},
+		stopInfos: []models.RunTaskInfo{},
+		testInfos: []models.RunTaskInfo{},
+		sendFiles: []models.SendFileTaskInfo{},
+		sessionInfos: []models.SessionTaskInfo{},
 	}
 	return &taskInfos
 }
@@ -167,7 +168,7 @@ func FetchTaskList(reason FetchReason, taskId string, taskType int, isColdstart 
 	return taskInfos
 }
 
-func (t *taskInfo) toRunTaskInfo(instanceId string) (RunTaskInfo, error) {
+func (t *taskInfo) toRunTaskInfo(instanceId string) (models.RunTaskInfo, error) {
 	runTaskInfo := t.TaskInfo
 	runTaskInfo.InstanceId = instanceId
 	runTaskInfo.Output = t.OutputInfo
@@ -177,9 +178,9 @@ func (t *taskInfo) toRunTaskInfo(instanceId string) (RunTaskInfo, error) {
 	// TODO: Remove compatibility code when `Repeat` field fully available
 	if runTaskInfo.Repeat == "" {
 		if runTaskInfo.Cronat != "" {
-			runTaskInfo.Repeat = RunTaskCron
+			runTaskInfo.Repeat = models.RunTaskCron
 		} else {
-			runTaskInfo.Repeat = RunTaskOnce
+			runTaskInfo.Repeat = models.RunTaskOnce
 		}
 	}
 

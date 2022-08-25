@@ -3,14 +3,16 @@ package taskengine
 import (
 	"errors"
 	"fmt"
+	"strconv"
+	"time"
+
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	"github.com/aliyun/aliyun_assist_client/agent/session/channel"
 	"github.com/aliyun/aliyun_assist_client/agent/session/port"
 	"github.com/aliyun/aliyun_assist_client/agent/session/shell"
+	"github.com/aliyun/aliyun_assist_client/agent/taskengine/models"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
-	"strconv"
-	"time"
 )
 
 const portTaskType = "PortForwardTask"
@@ -148,7 +150,7 @@ func (sessionTask *SessionTask) runTask() (string, error){
 	return error_code,nil
 }
 
-func DoSessionTask(tasks [] SessionTaskInfo) {
+func DoSessionTask(tasks [] models.SessionTaskInfo) {
 	go func() {
 		for _, s := range tasks {
 			session := NewSessionTask(s.SessionId,

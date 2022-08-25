@@ -1,0 +1,49 @@
+on:
+  push:
+    branches: [ "github_action_test" ]
+  pull_request:
+    branches: [ "github_action_test" ]
+
+jobs:
+  build: 
+    name: Run unit tests and build binary files
+    runs-on: self-hosted-linux
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Prepare golang env
+      uses: actions/setup-go@v3
+      with:
+        go-version: '1.17.x'
+        cache: true
+
+    - name: Vendor
+      run: go mod vendor
+
+    - name: Go Test
+      run: |
+        go test --coverprofile=cover.out -covermode=count -gcflags=-l ./...
+    - uses: seriousben/go-patch-cover-action@v1
+
+    - name: Go Vet
+      run: go vet ./...
+
+    - name: Build binary file
+      run: |
+        GOOS=windows GOARCH=amd64 go build -v -o aliyun_assist_service.exe &&
+        GOOS=linux GOARCH=386 go build -v -o aliyun-service &&
+        GOOS=linux GOARCH=arm64 go build -v -o aliyun-service-arm
+    
+    - name: Build acs-plugin-manager
+      run: |
+        cd agent/pluginmanager/acspluginmanager/main
+        GOOS=windows GOARCH=amd64 go build -v -o acs-plugin-manager.exe &&
+        GOOS=linux GOARCH=386 go build -v -o acs-plugin-manager &&
+        GOOS=linux GOARCH=arm64 go build -v -o acs-plugin-manager-arm
+
+    - name: Build ali-instance-cli
+      run: |
+        cd agent/session/plugin/main
+        GOOS=windows GOARCH=amd64 go build -v -o ali-instance-cli.exe &&
+        GOOS=linux GOARCH=386 go build -v -o ali-instance-cli &&
+        GOOS=linux GOARCH=arm64 go build -v -o ali-instance-cli-arm

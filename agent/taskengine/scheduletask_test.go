@@ -9,6 +9,9 @@ import (
 
 	"bou.ke/monkey"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/timermanager"
+	"github.com/aliyun/aliyun_assist_client/agent/taskengine/models"
+	"github.com/aliyun/aliyun_assist_client/agent/taskengine/taskerrors"
+	"github.com/aliyun/aliyun_assist_client/agent/taskengine/host"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
@@ -125,11 +128,11 @@ func Test_fetchTasks(t *testing.T) {
 			if tt.name == "normal" {
 				monkey.Patch(FetchTaskList, func(reason FetchReason, taskId string, taskType int, isColdstart bool) *taskCollection {
 					return &taskCollection{
-						runInfos:     []RunTaskInfo{RunTaskInfo{}},
-						stopInfos:    []RunTaskInfo{RunTaskInfo{}},
-						testInfos:    []RunTaskInfo{RunTaskInfo{}},
-						sendFiles:    []SendFileTaskInfo{SendFileTaskInfo{}},
-						sessionInfos: []SessionTaskInfo{SessionTaskInfo{}},
+						runInfos:     []models.RunTaskInfo{models.RunTaskInfo{}},
+						stopInfos:    []models.RunTaskInfo{models.RunTaskInfo{}},
+						testInfos:    []models.RunTaskInfo{models.RunTaskInfo{}},
+						sendFiles:    []models.SendFileTaskInfo{models.SendFileTaskInfo{}},
+						sessionInfos: []models.SessionTaskInfo{models.SessionTaskInfo{}},
 					}
 				})
 			}
@@ -145,7 +148,7 @@ func Test_dispatchRunTask(t *testing.T) {
 	defer util.NilRequest.Clear()
 	defer httpmock.DeactivateAndReset()
 	type args struct {
-		taskInfo RunTaskInfo
+		taskInfo models.RunTaskInfo
 	}
 	tests := []struct {
 		name string
@@ -154,7 +157,7 @@ func Test_dispatchRunTask(t *testing.T) {
 		{
 			name: "taskHasExist",
 			args: args{
-				taskInfo: RunTaskInfo{
+				taskInfo: models.RunTaskInfo{
 					TaskId: "abc",
 				},
 			},
@@ -162,27 +165,27 @@ func Test_dispatchRunTask(t *testing.T) {
 		{
 			name: "taskRepeatOnce",
 			args: args{
-				taskInfo: RunTaskInfo{
+				taskInfo: models.RunTaskInfo{
 					TaskId: "abc",
-					Repeat: RunTaskOnce,
+					Repeat: models.RunTaskOnce,
 				},
 			},
 		},
 		{
 			name: "taskPeriod",
 			args: args{
-				taskInfo: RunTaskInfo{
+				taskInfo: models.RunTaskInfo{
 					TaskId: "abc",
-					Repeat: RunTaskCron,
+					Repeat: models.RunTaskCron,
 				},
 			},
 		},
 		{
 			name: "taskUnknown",
 			args: args{
-				taskInfo: RunTaskInfo{
+				taskInfo: models.RunTaskInfo{
 					TaskId: "abc",
-					Repeat: RunTaskRepeatType("unknown"),
+					Repeat: models.RunTaskRepeatType("unknown"),
 				},
 			},
 		},
@@ -198,8 +201,8 @@ func Test_dispatchRunTask(t *testing.T) {
 				defer taskFactory.RemoveTaskByName(tt.args.taskInfo.TaskId)
 			} else if tt.name == "taskRepeatOnce" {
 				var t *Task
-				guard := monkey.PatchInstanceMethod(reflect.TypeOf(t), "Run", func(*Task) (presetWrapErrorCode, error) {
-					return wrapErrUnknownCommandType, errors.New("some error")
+				guard := monkey.PatchInstanceMethod(reflect.TypeOf(t), "Run", func(*Task) (taskerrors.ErrorCode, error) {
+					return 1, errors.New("some error")
 				})
 				defer guard.Unpatch()
 			}
@@ -213,7 +216,7 @@ func Test_dispatchStopTask(t *testing.T) {
 	defer util.NilRequest.Clear()
 	defer httpmock.DeactivateAndReset()
 	type args struct {
-		taskInfo RunTaskInfo
+		taskInfo models.RunTaskInfo
 	}
 	tests := []struct {
 		name string
@@ -222,36 +225,36 @@ func Test_dispatchStopTask(t *testing.T) {
 		{
 			name: "taskHasExist",
 			args: args{
-				taskInfo: RunTaskInfo{
+				taskInfo: models.RunTaskInfo{
 					TaskId: "abc",
-					Repeat: RunTaskOnce,
+					Repeat: models.RunTaskOnce,
 				},
 			},
 		},
 		{
 			name: "taskRepeatOnce",
 			args: args{
-				taskInfo: RunTaskInfo{
+				taskInfo: models.RunTaskInfo{
 					TaskId: "abc",
-					Repeat: RunTaskOnce,
+					Repeat: models.RunTaskOnce,
 				},
 			},
 		},
 		{
 			name: "taskPeriod",
 			args: args{
-				taskInfo: RunTaskInfo{
+				taskInfo: models.RunTaskInfo{
 					TaskId: "abc",
-					Repeat: RunTaskCron,
+					Repeat: models.RunTaskCron,
 				},
 			},
 		},
 		{
 			name: "taskUnknown",
 			args: args{
-				taskInfo: RunTaskInfo{
+				taskInfo: models.RunTaskInfo{
 					TaskId: "abc",
-					Repeat: RunTaskRepeatType("unknown"),
+					Repeat: models.RunTaskRepeatType("unknown"),
 				},
 			},
 		},
@@ -262,6 +265,7 @@ func Test_dispatchStopTask(t *testing.T) {
 				taskFactory := GetTaskFactory()
 				task := &Task{
 					taskInfo: tt.args.taskInfo,
+					processer: &host.HostProcessor{},
 				}
 				taskFactory.AddTask(task)
 				defer taskFactory.RemoveTaskByName(tt.args.taskInfo.TaskId)
@@ -280,7 +284,7 @@ func Test_dispatchTestTask(t *testing.T) {
 	defer util.NilRequest.Clear()
 	defer httpmock.DeactivateAndReset()
 	type args struct {
-		taskInfo RunTaskInfo
+		taskInfo models.RunTaskInfo
 	}
 	tests := []struct {
 		name string
@@ -288,27 +292,27 @@ func Test_dispatchTestTask(t *testing.T) {
 	}{{
 		name: "taskHasExist",
 		args: args{
-			taskInfo: RunTaskInfo{
+			taskInfo: models.RunTaskInfo{
 				TaskId: "abc",
-				Repeat: RunTaskOnce,
+				Repeat: models.RunTaskOnce,
 			},
 		},
 	},
 		{
 			name: "taskRepeatOnce",
 			args: args{
-				taskInfo: RunTaskInfo{
+				taskInfo: models.RunTaskInfo{
 					TaskId: "abc",
-					Repeat: RunTaskOnce,
+					Repeat: models.RunTaskOnce,
 				},
 			},
 		},
 		{
 			name: "taskUnknown",
 			args: args{
-				taskInfo: RunTaskInfo{
+				taskInfo: models.RunTaskInfo{
 					TaskId: "abc",
-					Repeat: RunTaskRepeatType("unknown"),
+					Repeat: models.RunTaskRepeatType("unknown"),
 				},
 			},
 		}, // TODO: Add test cases.
@@ -349,7 +353,7 @@ func TestPeriodicTaskSchedule_startExclusiveInvocation(t *testing.T) {
 			fields: fields{
 				timer: nil,
 				reusableInvocation: &Task{
-					taskInfo: RunTaskInfo{
+					taskInfo: models.RunTaskInfo{
 						TaskId: "abc",
 					},
 				},
@@ -360,7 +364,7 @@ func TestPeriodicTaskSchedule_startExclusiveInvocation(t *testing.T) {
 			fields: fields{
 				timer: nil,
 				reusableInvocation: &Task{
-					taskInfo: RunTaskInfo{
+					taskInfo: models.RunTaskInfo{
 						TaskId: "abc",
 					},
 				},
@@ -378,8 +382,8 @@ func TestPeriodicTaskSchedule_startExclusiveInvocation(t *testing.T) {
 				defer taskFactory.RemoveTaskByName(tt.fields.reusableInvocation.taskInfo.TaskId)
 			} else if tt.name == "normal" {
 				var t *Task
-				guard := monkey.PatchInstanceMethod(reflect.TypeOf(t), "Run", func(*Task) (presetWrapErrorCode, error) {
-					return wrapErrUnknownCommandType, errors.New("some error")
+				guard := monkey.PatchInstanceMethod(reflect.TypeOf(t), "Run", func(*Task) (taskerrors.ErrorCode, error) {
+					return 1, errors.New("some error")
 				})
 				defer guard.Unpatch()
 			}
@@ -397,7 +401,7 @@ func Test_schedulePeriodicTask(t *testing.T) {
 	defer util.NilRequest.Clear()
 	defer httpmock.DeactivateAndReset()
 	type args struct {
-		taskInfo RunTaskInfo
+		taskInfo models.RunTaskInfo
 	}
 	tests := []struct {
 		name    string
@@ -411,7 +415,7 @@ func Test_schedulePeriodicTask(t *testing.T) {
 		{
 			name: "taskExist",
 			args: args{
-				taskInfo: RunTaskInfo{
+				taskInfo: models.RunTaskInfo{
 					TaskId: "abc",
 				},
 			},
@@ -420,7 +424,7 @@ func Test_schedulePeriodicTask(t *testing.T) {
 		{
 			name: "normal",
 			args: args{
-				taskInfo: RunTaskInfo{
+				taskInfo: models.RunTaskInfo{
 					TaskId: "abc",
 					Cronat: "0 0 0 1 1 1",
 				},
@@ -466,30 +470,30 @@ func Test_cancelPeriodicTask(t *testing.T) {
 	defer util.NilRequest.Clear()
 	defer httpmock.DeactivateAndReset()
 	type args struct {
-		taskInfo RunTaskInfo
+		taskInfo models.RunTaskInfo
 	}
 	tests := []struct {
 		name    string
 		args    args
 		wantErr bool
 	}{
-		{
-			name:    "TimerManagerNotInitialized",
-			wantErr: true,
-		},
-		{
-			name: "taskNotExist",
-			args: args{
-				taskInfo: RunTaskInfo{
-					TaskId: "abc",
-				},
-			},
-			wantErr: true,
-		},
+		// {
+		// 	name:    "TimerManagerNotInitialized",
+		// 	wantErr: true,
+		// },
+		// {
+		// 	name: "taskNotExist",
+		// 	args: args{
+		// 		taskInfo: models.RunTaskInfo{
+		// 			TaskId: "abc",
+		// 		},
+		// 	},
+		// 	wantErr: true,
+		// },
 		{
 			name: "cancleTask",
 			args: args{
-				taskInfo: RunTaskInfo{
+				taskInfo: models.RunTaskInfo{
 					TaskId: "abc",
 				},
 			},
@@ -498,7 +502,7 @@ func Test_cancelPeriodicTask(t *testing.T) {
 		{
 			name: "noNeedCancelTask",
 			args: args{
-				taskInfo: RunTaskInfo{
+				taskInfo: models.RunTaskInfo{
 					TaskId: "abc",
 				},
 			},

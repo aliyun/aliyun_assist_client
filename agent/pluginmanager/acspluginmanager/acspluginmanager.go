@@ -8,12 +8,13 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/util/process"
 
-	"github.com/aliyun/aliyun_assist_client/agent/pluginmanager/acspluginmanager/thirdparty/table"
 	"github.com/aliyun/aliyun_assist_client/agent/pluginmanager/acspluginmanager/thirdparty/shlex"
+	"github.com/aliyun/aliyun_assist_client/agent/pluginmanager/acspluginmanager/thirdparty/table"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/versionutil"
@@ -127,10 +128,14 @@ func dumpInstalledPlugins(pluginInfoList []pluginInfo) error {
 }
 
 func printPluginInfo(pluginInfoList *[]pluginInfo) {
-	tbl := table.New("Name", "Version", "Publisher", "OsType")
+	tbl := table.New("Name", "Version", "Publisher", "OsType", "PluginType", "Arch")
 	for i := 0; i < len(*pluginInfoList); i++ {
 		pluginInfo := (*pluginInfoList)[i]
-		tbl.AddRow(pluginInfo.Name, pluginInfo.Version, pluginInfo.Publisher, pluginInfo.OsType)
+		pluginType := "OneTime"
+		if pluginInfo.PluginType == PLUGIN_PERSIST {
+			pluginType = "Persist"
+		}
+		tbl.AddRow(pluginInfo.Name, pluginInfo.Version, pluginInfo.Publisher, pluginInfo.OsType, pluginType, pluginInfo.Arch)
 	}
 	tbl.Print()
 	fmt.Println()
@@ -138,14 +143,17 @@ func printPluginInfo(pluginInfoList *[]pluginInfo) {
 
 // get pluginInfo by name from online
 func getPackageInfo(pluginName, version string) ([]pluginInfo, error) {
+	arch, _ := getArch()
 	postValue := struct {
 		OsType     string `json:"osType"`
 		PluginName string `json:"pluginName"`
 		Version    string `json:"version"`
+		Arch 	   string `json:"arch"`
 	}{
 		OsType:     "linux",
 		PluginName: pluginName,
 		Version:    version,
+		Arch:       arch,
 	}
 	listRet := ListRet{}
 	if osutil.GetOsType() == osutil.OSWin {
@@ -156,11 +164,14 @@ func getPackageInfo(pluginName, version string) ([]pluginInfo, error) {
 		return listRet.PluginList, err
 	}
 	// http 请求尝试3次
+	log.GetLogger().Infof("Request /plugin/list, params[%s]", string(postValueStr))
 	ret, err := util.HttpPost(util.GetPluginListService(), postValueStr, "json")
 	if err != nil {
 		retry := 2
 		for ; retry > 0 && err != nil; {
 			retry--
+			// pluginlist接口有流控，等一下再重试
+			time.Sleep(time.Duration(3)*time.Second)
 			ret, err = util.HttpPost(util.GetPluginListService(), postValueStr, "json")
 		}
 	}
@@ -295,6 +306,7 @@ func (pm *PluginManager) ExecutePlugin(file, pluginName, pluginId, params, separ
 func (pm *PluginManager) executePluginFromFile(file string, paramList []string, timeout int) (exitCode int, err error) {
 	log.GetLogger().Infof("Enter executePluginFromFile")
 	fmt.Println("Execute plugin from file: ", file)
+	localArch, _ := getArch()
 	exitCode = SUCCESS
 	if !util.CheckFileIsExist(file) {
 		err = errors.New("File not exist: " + file)
@@ -354,10 +366,18 @@ func (pm *PluginManager) executePluginFromFile(file string, paramList []string, 
 		fmt.Print("ExecutePluginFromFile " + PLUGIN_FORMAT_ERR_STR + "The config.Name is empty.")
 		return
 	}
-	if config.OsType != osutil.GetOsType() {
+	// 检查系统类型和架构是否符合
+	if strings.ToLower(config.OsType) != osutil.GetOsType() {
 		err = errors.New("Plugin ostype not suit for this system")
 		exitCode = PLUGIN_FORMAT_ERR
 		tip := fmt.Sprintf("Plugin ostype[%s] not suit for this system[%s]\n", config.OsType, osutil.GetOsType())
+		fmt.Print("ExecutePluginFromFile " + PLUGIN_FORMAT_ERR_STR + tip)
+		return
+	}
+	if strings.ToLower(config.Arch) != "all" && strings.ToLower(config.Arch) != localArch {
+		err = errors.New("Plugin arch not suit for this system")
+		exitCode = PLUGIN_FORMAT_ERR
+		tip := fmt.Sprintf("Plugin arch[%s] not suit for this system[%s]\n", config.Arch, localArch)
 		fmt.Print("ExecutePluginFromFile " + PLUGIN_FORMAT_ERR_STR + tip)
 		return
 	}
@@ -461,6 +481,7 @@ func (pm *PluginManager) executePluginOnlineOrLocal(pluginName string, pluginId 
 	log.GetLogger().Info("Enter executePluginOnlineOrLocal")
 	useLocal := false
 	cmdPath := ""
+	localArch, _ := getArch()
 	if !local {
 		// didn't set --local, so local & online both try
 		var localInfo *pluginInfo = nil
@@ -488,12 +509,15 @@ func (pm *PluginManager) executePluginOnlineOrLocal(pluginName string, pluginId 
 		} else {
 			if onlineInfo == nil {
 				exitCode = PACKAGE_NOT_FOUND
-				tip := fmt.Sprintf("Could not found package [%s] version[%s]", pluginName, version)
+				tip := fmt.Sprintf("Could not found both local and online, package[%s] version[%s]\n", pluginName, version)
 				fmt.Print("ExecutePluginOnlineOrLocal " + PACKAGE_NOT_FOUND_STR + tip)
 				return
 			}
 		}
 		if useLocal {
+			if t, err := strconv.Atoi(localInfo.Timeout); err == nil {
+				timeout = t
+			}
 			pluginPath := PLUGINDIR + Separator
 			pluginPath = pluginPath + localInfo.Name + Separator + localInfo.Version + Separator
 			cmdPath = pluginPath + localInfo.RunPath
@@ -509,7 +533,7 @@ func (pm *PluginManager) executePluginOnlineOrLocal(pluginName string, pluginId 
 				}
 				if err != nil {
 					exitCode = DOWNLOAD_FAIL
-					tip := fmt.Sprintf("Downloading package failed, url is [%s], err is [%s]", onlineInfo.Url, err.Error())
+					tip := fmt.Sprintf("Downloading package failed, plugin.Url is [%s], err is [%s]\n", onlineInfo.Url, err.Error())
 					fmt.Print("ExecutePluginOnlineOrLocal " + DOWNLOAD_FAIL_STR + tip)
 					return
 				}
@@ -519,14 +543,15 @@ func (pm *PluginManager) executePluginOnlineOrLocal(pluginName string, pluginId 
 			md5Str, err = util.ComputeMd5(filePath)
 			if err != nil {
 				exitCode = MD5_CHECK_FAIL
-				fmt.Print("ExecutePluginOnlineOrLocal " + MD5_CHECK_FAIL_STR + "Compute md5 of plugin file err: " + err.Error())
+				tip := fmt.Sprintf("Compute md5 of plugin file err, plugin.Url is [%s], err is [%s]\n", onlineInfo.Url, err.Error())
+				fmt.Print("ExecutePluginOnlineOrLocal " + MD5_CHECK_FAIL_STR + tip)
 				return
 			}
 			if strings.ToLower(md5Str) != strings.ToLower(onlineInfo.Md5) {
 				log.GetLogger().Errorf("Md5 not match, onlineInfo.Md5[%s], package file md5[%s]\n", onlineInfo.Md5, md5Str)
 				err = errors.New("Md5 not macth")
 				exitCode = MD5_CHECK_FAIL
-				tip := fmt.Sprintf("Md5 not match, onlineInfo.Md5 is [%s], real md5 is [%s]", onlineInfo.Md5, md5Str)
+				tip := fmt.Sprintf("Md5 not match, onlineInfo.Md5 is [%s], real md5 is [%s], plugin.Url is [%s]\n", onlineInfo.Md5, md5Str, onlineInfo.Url)
 				fmt.Print("ExecutePluginOnlineOrLocal " + MD5_CHECK_FAIL_STR + tip)
 				return
 			}
@@ -535,15 +560,35 @@ func (pm *PluginManager) executePluginOnlineOrLocal(pluginName string, pluginId 
 			log.GetLogger().Infoln("Unzip package...")
 			if err = util.Unzip(filePath, unzipdir); err != nil {
 				exitCode = UNZIP_ERR
-				fmt.Print("ExecutePluginOnlineOrLocal " + UNZIP_ERR_STR + "Unzip package err: ", err.Error())
+				tip := fmt.Sprintf("Unzip package err, plugin.Url is [%s], err is [%s]\n", onlineInfo.Url, err.Error())
+				fmt.Print("ExecutePluginOnlineOrLocal " + UNZIP_ERR_STR + tip)
 				return
 			}
 			os.RemoveAll(filePath)
+			if t, err := strconv.Atoi(onlineInfo.Timeout); err == nil {
+				timeout = t
+			}
 			cmdPath = unzipdir + Separator + onlineInfo.RunPath
+			// 检查系统类型和架构是否符合
+			if strings.ToLower(onlineInfo.OsType) != osutil.GetOsType() {
+				err = errors.New("Plugin ostype not suit for this system")
+				exitCode = PLUGIN_FORMAT_ERR
+				tip := fmt.Sprintf("Plugin ostype[%s] not suit for this system[%s], plugin.Url is [%s]\n", onlineInfo.OsType, osutil.GetOsType(), onlineInfo.Url)
+				fmt.Print("ExecutePluginOnlineOrLocal " + PLUGIN_FORMAT_ERR_STR + tip)
+				return
+			}
+			if strings.ToLower(onlineInfo.Arch) != "all" && strings.ToLower(onlineInfo.Arch) != localArch {
+				err = errors.New("Plugin arch not suit for this system")
+				exitCode = PLUGIN_FORMAT_ERR
+				tip := fmt.Sprintf("Plugin arch[%s] not suit for this system[%s], plugin.Url is [%s]\n", onlineInfo.Arch, localArch, onlineInfo.Url)
+				fmt.Print("ExecutePluginOnlineOrLocal " + PLUGIN_FORMAT_ERR_STR + tip)
+				return
+			}
 			if osutil.GetOsType() != osutil.OSWin {
 				if err = exec.Command("chmod", "744", cmdPath).Run(); err != nil {
 					exitCode = EXECUTABLE_PERMISSION_ERR
-					fmt.Print("ExecutePluginOnlineOrLocal " + EXECUTABLE_PERMISSION_ERR_STR + "Make plugin file executable err: " + err.Error())
+					tip := fmt.Sprintf("Make plugin file executable err, plugin.Url is [%s], err is [%s]\n", onlineInfo.Url, err.Error())
+					fmt.Print("ExecutePluginOnlineOrLocal " + EXECUTABLE_PERMISSION_ERR_STR + tip)
 					return
 				}
 			}
@@ -589,6 +634,9 @@ func (pm *PluginManager) executePluginOnlineOrLocal(pluginName string, pluginId 
 			fmt.Print("ExecutePluginOnlineOrLocal " + PACKAGE_NOT_FOUND_STR + tip)
 			return
 		}
+		if t, err := strconv.Atoi(localInfo.Timeout); err == nil {
+			timeout = t
+		}
 		cmdPath = PLUGINDIR + Separator + localInfo.Name + Separator + localInfo.Version + Separator + localInfo.RunPath
 	}
 	return pm.executePlugin(cmdPath, paramList, timeout)
@@ -618,6 +666,7 @@ func (pm *PluginManager) VerifyPlugin(url, params, separator, paramsV2 string) (
 	var paramList []string
 	timeout := 60
 	cmdPath := ""
+	localArch, _ := getArch()
 	if paramsV2 != "" {
 		paramList, _ = shlex.Split(paramsV2)
 	} else {
@@ -656,7 +705,8 @@ func (pm *PluginManager) VerifyPlugin(url, params, separator, paramsV2 string) (
 	log.GetLogger().Infoln("Unzip package...")
 	if err = util.Unzip(filePath, unzipdir); err != nil {
 		exitCode = UNZIP_ERR
-		fmt.Print("VerifyPlugin " + UNZIP_ERR_STR + "Unzip package err: ", err.Error())
+		tip := fmt.Sprintf("Unzip package err, url is [%s], err is [%s]\n", url, err.Error())
+		fmt.Print("VerifyPlugin " + UNZIP_ERR_STR + tip)
 		return
 	}
 	os.RemoveAll(filePath)
@@ -674,6 +724,21 @@ func (pm *PluginManager) VerifyPlugin(url, params, separator, paramsV2 string) (
 		exitCode = UNMARSHAL_ERR
 		tip := fmt.Sprintf("Unmarshal config.json err, config.json is [%s], err is [%s]", string(content), err.Error())
 		fmt.Print("VerifyPlugin " + UNMARSHAL_ERR_STR + tip)
+		return
+	}
+	// 检查系统类型和架构是否符合
+	if strings.ToLower(config.OsType) != osutil.GetOsType() {
+		err = errors.New("Plugin ostype not suit for this system")
+		exitCode = PLUGIN_FORMAT_ERR
+		tip := fmt.Sprintf("Plugin ostype[%s] not suit for this system[%s], url is [%s]\n", config.OsType, osutil.GetOsType(), url)
+		fmt.Print("VerifyPlugin " + PLUGIN_FORMAT_ERR_STR + tip)
+		return
+	}
+	if strings.ToLower(config.Arch) != "all" && strings.ToLower(config.Arch) != localArch {
+		err = errors.New("Plugin arch not suit for this system")
+		exitCode = PLUGIN_FORMAT_ERR
+		tip := fmt.Sprintf("Plugin arch[%s] not suit for this system[%s], url is [%s]\n", config.Arch, localArch, url)
+		fmt.Print("VerifyPlugin " + PLUGIN_FORMAT_ERR_STR + tip)
 		return
 	}
 
