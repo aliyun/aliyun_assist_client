@@ -9,7 +9,7 @@ on:
 jobs:
 
   build:
-    runs-on: ecs-win
+    runs-on: ecs_win
     steps:
     - uses: actions/checkout@v3
 
