@@ -26,6 +26,8 @@ require (
 	github.com/lestrrat-go/file-rotatelogs v2.4.0+incompatible
 	github.com/lestrrat-go/strftime v1.0.4 // indirect
 	github.com/marcsauter/single v0.0.0-20201009143647-9f8d81240be2
+	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd
+	github.com/modern-go/reflect2 v1.0.1
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.19.0
 	github.com/pborman/uuid v1.2.1 // indirect
