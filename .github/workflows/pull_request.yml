@@ -26,8 +26,8 @@ jobs:
 
     - name: Go Test
       run: |
-        go test --coverprofile=coverage.out -covermode=count -gcflags=-l ./...
-    - uses: seriousben/go-patch-cover-action@v1
+        go test --coverprofile=cover.out -gcflags=-l ./...
+        go tool cover -func=cover.out
 
     - name: Go Vet
       run: go vet ./...
