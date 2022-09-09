@@ -26,13 +26,13 @@ jobs:
 
     - name: Go Test
       run: |
-        go test --coverprofile=cover.out -covermode=count -gcflags=-l ./...
+        go test --coverprofile=coverage.out -covermode=count -gcflags=-l ./...
     - uses: seriousben/go-patch-cover-action@v1
 
     - name: Go Vet
       run: go vet ./...
 
-    - name: Build binary file
+    - name: Build aliyun_assist
       run: |
         GOOS=windows GOARCH=amd64 go build -v -o aliyun_assist_service.exe &&
         GOOS=linux GOARCH=386 go build -v -o aliyun-service &&
