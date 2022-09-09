@@ -4,6 +4,10 @@ on:
   pull_request:
     branches: [ "github_action_test" ]
 
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   build: 
     name: Run unit tests and build binary files
