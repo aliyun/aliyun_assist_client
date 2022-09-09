@@ -5,7 +5,7 @@ package appconfig
 import (
 	"path/filepath"
 
-	"github.com/aliyun/aliyun_assist_client/agent/update"
+	libupdate "github.com/aliyun/aliyun_assist_client/common/update"
 )
 
-var DefaultDataStorePath string = filepath.Join(update.DefaultWindowsInstallDir, "data")
+var DefaultDataStorePath string = filepath.Join(libupdate.DefaultWindowsInstallDir, "data")

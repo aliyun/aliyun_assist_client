@@ -4,8 +4,6 @@ bou.ke/monkey
 # github.com/StackExchange/wmi v0.0.0-20210224194228-fe8f1750fd46
 ## explicit
 github.com/StackExchange/wmi
-# github.com/agiledragon/gomonkey v2.0.2+incompatible
-## explicit
 # github.com/aliyun/alibaba-cloud-sdk-go v1.61.1491
 ## explicit
 github.com/aliyun/alibaba-cloud-sdk-go/sdk
@@ -20,10 +18,6 @@ github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses
 github.com/aliyun/alibaba-cloud-sdk-go/sdk/utils
 github.com/aliyun/alibaba-cloud-sdk-go/services/ecs
 github.com/aliyun/alibaba-cloud-sdk-go/services/oos
-# github.com/aliyun/aliyun-cli v3.0.25+incompatible
-## explicit
-github.com/aliyun/aliyun-cli/cli
-github.com/aliyun/aliyun-cli/i18n
 # github.com/containerd/console v1.0.2
 ## explicit
 github.com/containerd/console
@@ -34,18 +28,18 @@ github.com/creack/goselect
 ## explicit
 github.com/creack/pty
 # github.com/davecgh/go-spew v1.1.1
+## explicit
 github.com/davecgh/go-spew/spew
 # github.com/fabiokung/shm v0.0.0-20150728212823-2852b0d79bae
 ## explicit
 github.com/fabiokung/shm
 # github.com/fsnotify/fsnotify v1.4.9
+## explicit
 github.com/fsnotify/fsnotify
 # github.com/go-ole/go-ole v1.2.5
 ## explicit
 github.com/go-ole/go-ole
 github.com/go-ole/go-ole/oleutil
-# github.com/golang/mock v1.6.0
-## explicit
 # github.com/google/uuid v1.2.0
 ## explicit
 github.com/google/uuid
@@ -68,9 +62,8 @@ github.com/jarcoal/httpmock/internal
 github.com/jmespath/go-jmespath
 # github.com/jonboulle/clockwork v0.2.2
 ## explicit
-# github.com/josephspurrier/goversioninfo v1.4.0
-## explicit
 # github.com/json-iterator/go v1.1.5
+## explicit
 github.com/json-iterator/go
 # github.com/kirinlabs/HttpRequest v1.1.1
 ## explicit
@@ -86,10 +79,13 @@ github.com/lestrrat-go/strftime
 ## explicit
 github.com/marcsauter/single
 # github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd
+## explicit
 github.com/modern-go/concurrent
 # github.com/modern-go/reflect2 v1.0.1
+## explicit
 github.com/modern-go/reflect2
 # github.com/nxadm/tail v1.4.8
+## explicit
 github.com/nxadm/tail
 github.com/nxadm/tail/ratelimiter
 github.com/nxadm/tail/util
@@ -135,9 +131,8 @@ github.com/onsi/gomega/types
 ## explicit
 github.com/pkg/errors
 # github.com/pmezard/go-difflib v1.0.0
-github.com/pmezard/go-difflib/difflib
-# github.com/robfig/cron/v3 v3.0.1
 ## explicit
+github.com/pmezard/go-difflib/difflib
 # github.com/shirou/gopsutil v3.21.4+incompatible
 ## explicit
 github.com/shirou/gopsutil/cpu
@@ -155,17 +150,20 @@ github.com/spf13/pflag
 # github.com/stretchr/testify v1.7.0
 ## explicit
 github.com/stretchr/testify/assert
-# github.com/tidwall/gjson v1.7.5
+# github.com/tidwall/gjson v1.9.3
 ## explicit
 github.com/tidwall/gjson
-# github.com/tidwall/match v1.0.3
+# github.com/tidwall/match v1.1.1
+## explicit
 github.com/tidwall/match
-# github.com/tidwall/pretty v1.1.0
+# github.com/tidwall/pretty v1.2.0
+## explicit
 github.com/tidwall/pretty
 # github.com/tklauser/go-sysconf v0.3.5
 ## explicit
 github.com/tklauser/go-sysconf
 # github.com/tklauser/numcpus v0.2.2
+## explicit
 github.com/tklauser/numcpus
 # github.com/viney-shih/go-lock v1.0.1
 ## explicit
@@ -184,6 +182,7 @@ golang.org/x/net/html/charset
 golang.org/x/net/http/httpproxy
 golang.org/x/net/idna
 # golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
+## explicit
 golang.org/x/sync/semaphore
 # golang.org/x/sys v0.0.0-20211216021012-1d35b9e2eb4e
 ## explicit
@@ -220,8 +219,11 @@ golang.org/x/text/unicode/norm
 ## explicit
 gopkg.in/ini.v1
 # gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7
+## explicit
 gopkg.in/tomb.v1
 # gopkg.in/yaml.v2 v2.4.0
+## explicit
 gopkg.in/yaml.v2
 # gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
+## explicit
 gopkg.in/yaml.v3

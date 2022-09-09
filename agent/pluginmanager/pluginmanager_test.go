@@ -100,8 +100,7 @@ func TestPluginManager(t *testing.T) {
 	pluginHealthIntervalSeconds = 5
 	pluginUpdateCheckIntervalSeconds = 5
 	timermanager.InitTimerManager()
-	ret := InitPluginCheckTimer()
-	assert.Equal(t, ret, true)
+	InitPluginCheckTimer()
 	time.Sleep(time.Duration(10) * time.Second)
 	assert.Equal(t, healthCheck, true)
 	assert.Equal(t, updateCheck, true)

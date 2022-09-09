@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
-	libupdate "github.com/aliyun/aliyun_assist_client/agent/update"
+	libupdate "github.com/aliyun/aliyun_assist_client/common/update"
 )
 
 func doCheckUpdate() error {

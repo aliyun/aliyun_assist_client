@@ -14,6 +14,7 @@ import (
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
+	"github.com/aliyun/aliyun_assist_client/agent/taskengine/models"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 )
 
@@ -51,13 +52,13 @@ func init() {
 	}
 }
 
-func SendFiles(sendFileTasks []SendFileTaskInfo) {
+func SendFiles(sendFileTasks []models.SendFileTaskInfo) {
 	for _, s := range sendFileTasks {
 		doSendFile(s)
 	}
 }
 
-func SendFileFinished(sendFile SendFileTaskInfo, status int) {
+func SendFileFinished(sendFile models.SendFileTaskInfo, status int) {
 	url := util.GetFinishOutputService()
 	reportStatus := "Success"
 	if status != ESuccess {
@@ -79,7 +80,7 @@ func SendFileFinished(sendFile SendFileTaskInfo, status int) {
 	}
 }
 
-func SendFileInvalid(sendFile SendFileTaskInfo, status int) {
+func SendFileInvalid(sendFile models.SendFileTaskInfo, status int) {
 	url := util.GetInvalidTaskService()
 	key := ""
 	value := ""
@@ -118,7 +119,7 @@ func SendFileInvalid(sendFile SendFileTaskInfo, status int) {
 	}
 }
 
-func doSendFile(task SendFileTaskInfo) {
+func doSendFile(task models.SendFileTaskInfo) {
 	ret := sendFile(task)
 	log.GetLogger().Println("sendFile ret: ", ret)
 	if ret <= ECreateDirFailed {
@@ -128,7 +129,7 @@ func doSendFile(task SendFileTaskInfo) {
 	}
 }
 
-func sendFile(sendFile SendFileTaskInfo) int {
+func sendFile(sendFile models.SendFileTaskInfo) int {
 	if sendFile.Name == "" {
 		return EInvalidFilePath
 	}

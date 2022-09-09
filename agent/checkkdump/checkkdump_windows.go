@@ -39,6 +39,7 @@ func doCheck() {
 	).ReportEvent()
 }
 
+// 参考 http://gitlab.alibaba-inc.com/ecs-image/imgtools/blob/master/aliyun_plug/ecs_dump_config/windows/1.3/windump.ps1
 func serviceStatus() (status string, err error) {
 	status = "OFF"
 	out := bytes.Buffer{}
