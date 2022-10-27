@@ -11,7 +11,7 @@ permissions:
 jobs:
   build: 
     name: Run unit tests and build binary files
-    runs-on: self-hosted-linux
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
 
