@@ -21,7 +21,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/cli"
+	"github.com/aliyun/aliyun-cli/cli"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -217,8 +217,7 @@ func TestSaveConfiguration(t *testing.T) {
 	assert.Nil(t, err)
 	err = SaveConfiguration(conf)
 	assert.Nil(t, err)
-	filePath := GetConfigPath() + "/" + configFile
-	file, err := os.Open(filePath)
+	file, err := os.Open(GetConfigPath() + "/" + configFile)
 	assert.Nil(t, err)
 	buf := make([]byte, 1024)
 	n, _ := file.Read(buf)

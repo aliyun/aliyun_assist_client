@@ -186,11 +186,12 @@ func (t *taskInfo) toRunTaskInfo(instanceId string) (models.RunTaskInfo, error) 
 
 	// Prepare values of environment parameters if enableParameter is true
 	if runTaskInfo.EnableParameter {
-		runTaskInfo.EnvironmentArguments = map[string]string{
-			"InstanceId": instanceId,
-			"CommandId": runTaskInfo.CommandId,
-			"InvokeId": runTaskInfo.TaskId,
+		if runTaskInfo.BuiltinParameters == nil {
+			runTaskInfo.BuiltinParameters = make(map[string]string, 3)
 		}
+		runTaskInfo.BuiltinParameters["InstanceId"] = instanceId
+		runTaskInfo.BuiltinParameters["CommandId"] = runTaskInfo.CommandId
+		runTaskInfo.BuiltinParameters["InvokeId"] = runTaskInfo.TaskId
 	}
 
 	return runTaskInfo, nil

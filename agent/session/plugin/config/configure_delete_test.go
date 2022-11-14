@@ -18,7 +18,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/cli"
+	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/stretchr/testify/assert"
 )
 

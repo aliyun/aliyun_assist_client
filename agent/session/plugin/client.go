@@ -330,6 +330,7 @@ func (c *Client) readLoop(wg *sync.WaitGroup) int {
 			}
 		}
 	}
+	return 0
 }
 
 type exposeFd interface {
@@ -393,6 +394,7 @@ func (c *Client) writeLoopRawMode(wg *sync.WaitGroup) int {
 
 	}
 
+	return 0
 }
 
 func (c *Client) writeLoop(wg *sync.WaitGroup) int {
@@ -437,6 +439,7 @@ func (c *Client) writeLoop(wg *sync.WaitGroup) int {
 
 					return openPoison(fname, c.poison)
 
+					continue
 				} else {
 					log.GetLogger().Errorln("err in input empty", err)
 					return openPoison(fname, c.poison)
@@ -459,6 +462,7 @@ func (c *Client) writeLoop(wg *sync.WaitGroup) int {
 
 		}
 	}
+	return 0
 }
 
 func (c *Client) SendStreamDataMessage(inputData []byte) (err error) {

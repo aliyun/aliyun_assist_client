@@ -17,6 +17,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/agent/taskengine/cri"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/host"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/models"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/parameters"
@@ -58,16 +59,27 @@ func NewTask(taskInfo models.RunTaskInfo, scheduleLocation *time.Location, onFin
 		timeout = 3600
 	}
 
-	processor := &host.HostProcessor{
-		TaskId: taskInfo.TaskId,
-		CommandType: taskInfo.CommandType,
-		Repeat: taskInfo.Repeat,
-		Timeout: timeout,
+	var processor TaskProcessor
+	if taskInfo.ContainerId != "" || taskInfo.ContainerName != "" {
+		processor = &cri.CRIProcessor{
+			TaskId: taskInfo.TaskId,
+			ContainerIdentifier: taskInfo.ContainerId,
+			ContainerName: taskInfo.ContainerName,
+			CommandType: taskInfo.CommandType,
+			Timeout: timeout,
+		}
+	} else {
+		processor = &host.HostProcessor{
+			TaskId: taskInfo.TaskId,
+			CommandType: taskInfo.CommandType,
+			Repeat: taskInfo.Repeat,
+			Timeout: timeout,
 
-		CommandName: taskInfo.CommandName,
-		WorkingDirectory: taskInfo.WorkingDir,
-		Username: taskInfo.Username,
-		WindowsUserPassword: taskInfo.Password,
+			CommandName: taskInfo.CommandName,
+			WorkingDirectory: taskInfo.WorkingDir,
+			Username: taskInfo.Username,
+			WindowsUserPassword: taskInfo.Password,
+		}
 	}
 
 	task := &Task{
@@ -129,7 +141,9 @@ func (task *Task) PreCheck(reportVerified bool) error {
 	}
 
 	if invalidParameter, err := task.processer.PreCheck(); err != nil {
-		if settingErr, ok := err.(taskerrors.InvalidSettingError); ok {
+		if validationErr, ok := err.(taskerrors.NormalizedValidationError); ok {
+			task.SendInvalidTask(validationErr.Param(), validationErr.Value())
+		} else if settingErr, ok := err.(taskerrors.InvalidSettingError); ok {
 			task.SendInvalidTask(invalidParameter, settingErr.ShortMessage())
 		} else {
 			task.SendInvalidTask(invalidParameter, err.Error())
@@ -165,9 +179,17 @@ func (task *Task) Run() (taskerrors.ErrorCode, error) {
 	ScriptToDelete := false
 	content := string(decodeBytes)
 	if task.taskInfo.EnableParameter {
-		content, err = parameters.ResolveEnvironmentParameters(content, task.taskInfo.EnvironmentArguments)
+		content, err = parameters.ResolveBuiltinParameters(content, task.taskInfo.BuiltinParameters)
 		if err != nil {
-			task.SendInvalidTask("InvalidEnvironmentParameter", err.Error())
+			if invalidErr, ok := err.(taskerrors.InvalidSettingError); ok {
+				task.SendInvalidTask("InvalidEnvironmentParameter", invalidErr.ShortMessage())
+			} else if taskErr, ok := err.(taskerrors.ExecutionError); ok {
+				task.SendError("", taskErr.Code(), taskErr.Error())
+				return taskErr.Code(), err
+			} else {
+				task.SendError("", taskerrors.WrapErrResolveEnvironmentParameterFailed, err.Error())
+			}
+
 			return taskerrors.WrapErrResolveEnvironmentParameterFailed, err
 		}
 
@@ -192,7 +214,13 @@ func (task *Task) Run() (taskerrors.ErrorCode, error) {
 
 	if err := task.processer.Prepare(content); err != nil {
 		taskLogger.WithError(err).Errorln("Failed to prepare command process")
-		if taskErr, ok := err.(taskerrors.ExecutionError); ok {
+		if executionErr, ok := err.(taskerrors.NormalizedExecutionError); ok {
+			task.SendError("", taskerrors.Stringer(executionErr.Code()), executionErr.Description())
+			return taskerrors.WrapGeneralError, err
+		} else if validationErr, ok := err.(taskerrors.NormalizedValidationError); ok {
+			task.SendInvalidTask(validationErr.Param(), validationErr.Value())
+			return taskerrors.WrapGeneralError, err
+		} else if taskErr, ok := err.(taskerrors.ExecutionError); ok {
 			task.SendError("", taskErr.Code(), taskErr.Error())
 			return taskErr.Code(), err
 		} else {
@@ -282,6 +310,8 @@ func (task *Task) Run() (taskerrors.ErrorCode, error) {
 	if status == process.Fail {
 		if err == nil {
 			task.sendOutput("failed", task.getReportString(task.output))
+		} else if executionErr, ok := err.(taskerrors.NormalizedExecutionError); ok {
+			task.SendError(task.getReportString(task.output), taskerrors.Stringer(executionErr.Code()), executionErr.Description())
 		} else if taskErr, ok := err.(taskerrors.ExecutionError); ok {
 			task.SendError(task.getReportString(task.output), taskErr.Code(), taskErr.Error())
 		} else {
@@ -328,6 +358,7 @@ func (task *Task) sendTaskStart() {
 	url := util.GetRunningOutputService()
 	url += "?taskId=" + task.taskInfo.TaskId + "&start=" + strconv.FormatInt(task.monotonicStartTimestamp, 10)
 	url += task.wallClockQueryParams()
+	url += task.processer.ExtraLubanParams()
 
 	util.HttpPost(url, "", "text")
 }
@@ -363,6 +394,7 @@ func (task *Task) sendOutput(status string, output string) {
 	url += "?taskId=" + task.taskInfo.TaskId + "&start=" + strconv.FormatInt(task.monotonicStartTimestamp, 10)
 	url += "&end=" + strconv.FormatInt(task.monotonicEndTimestamp, 10) + "&exitCode=" + strconv.Itoa(task.exit_code) + "&dropped=" + strconv.Itoa(task.droped)
 	url += task.wallClockQueryParams()
+	url += task.processer.ExtraLubanParams()
 
 	var err error
 	_, err = util.HttpPost(url, output, "text")
@@ -377,13 +409,14 @@ func (task *Task) sendOutput(status string, output string) {
 	}
 }
 
-func (task *Task) SendError(output string, errCode taskerrors.ErrorCode, errDesc string) {
+func (task *Task) SendError(output string, errCode fmt.Stringer, errDesc string) {
 	safelyTruncatedErrDesc := langutil.SafeTruncateStringInBytes(errDesc, 255)
 	escapedErrDesc := url.QueryEscape(safelyTruncatedErrDesc)
-	queryString := fmt.Sprintf("?taskId=%s&start=%d&end=%d&exitCode=%d&dropped=%d&errCode=%d&errDesc=%s",
+	queryString := fmt.Sprintf("?taskId=%s&start=%d&end=%d&exitCode=%d&dropped=%d&errCode=%s&errDesc=%s",
 		task.taskInfo.TaskId, task.monotonicStartTimestamp, task.monotonicEndTimestamp, task.exit_code,
-		task.droped, errCode, escapedErrDesc)
+		task.droped, errCode.String(), escapedErrDesc)
 	queryString += task.wallClockQueryParams()
+	queryString += task.processer.ExtraLubanParams()
 
 	requestURL := util.GetErrorOutputService() + queryString
 
@@ -438,6 +471,7 @@ func (task *Task) sendRunningOutput(data string) {
 	url := util.GetRunningOutputService()
 	url += "?taskId=" + task.taskInfo.TaskId + "&start=" + strconv.FormatInt(task.monotonicStartTimestamp, 10)
 	url += task.wallClockQueryParams()
+	url += task.processer.ExtraLubanParams()
 
 	if len(data) == 0 && task.taskInfo.Output.SkipEmpty {
 		return

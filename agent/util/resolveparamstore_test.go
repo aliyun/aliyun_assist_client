@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestIsValidParameterStore(t *testing.T) {
+func TestisValidParameterStore(t *testing.T) {
 	references := []string{
 		"ss{{oos-secret:test}}",
 		"{{ oos-secret : test }}",

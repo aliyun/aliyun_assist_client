@@ -16,8 +16,8 @@ package config
 import (
 	"testing"
 
-	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/cli"
-	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/i18n"
+	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/aliyun/aliyun-cli/i18n"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -48,8 +48,8 @@ func TestAddFlag(t *testing.T) {
 			DefaultValue: "AK",
 			Persistent:   true,
 			Short: i18n.T(
-				"use `--mode {AK|StsToken|CredentialsURI}` to assign authenticate mode",
-				"使用 `--mode {AK|StsToken|CredentialsURI}` 指定认证方式"),
+				"use `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair|RamRoleArnWithRoleName}` to assign authenticate mode",
+				"使用 `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair|RamRoleArnWithRoleName}` 指定认证方式"),
 			Long:         nil,
 			Required:     false,
 			Aliases:      nil,
@@ -76,7 +76,7 @@ func TestAddFlag(t *testing.T) {
 			ExcludeWith:  nil,
 			Shorthand:    0,
 			DefaultValue: "",
-			Persistent:   true,
+			Persistent:   false,
 		}
 		newAccessKeySecretFlag = &cli.Flag{
 			Category:     "config",
@@ -94,7 +94,7 @@ func TestAddFlag(t *testing.T) {
 			ExcludeWith:  nil,
 			Shorthand:    0,
 			DefaultValue: "",
-			Persistent:   true,
+			Persistent:   false,
 		}
 		newStsTokenFlag = &cli.Flag{
 			Category:     "config",
@@ -112,7 +112,7 @@ func TestAddFlag(t *testing.T) {
 			ExcludeWith:  nil,
 			Shorthand:    0,
 			DefaultValue: "",
-			Persistent:   true,
+			Persistent:   false,
 		}
 		newRamRoleNameFlag = &cli.Flag{
 			Category:     "config",
@@ -239,7 +239,7 @@ func TestAddFlag(t *testing.T) {
 			ExcludeWith:  nil,
 			Shorthand:    0,
 			DefaultValue: "",
-			Persistent:   true,
+			Persistent:   false,
 		}
 		newLanguageFlag = &cli.Flag{
 			Category:     "config",

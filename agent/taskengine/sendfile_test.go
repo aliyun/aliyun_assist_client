@@ -6,7 +6,6 @@ import (
 
 	"bou.ke/monkey"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
-	"github.com/aliyun/aliyun_assist_client/agent/taskengine/models"
 	"github.com/jarcoal/httpmock"
 )
 
@@ -19,7 +18,7 @@ func TestSendFileFinished(t *testing.T) {
 	})
 	defer guard.Unpatch()
 	type args struct {
-		sendFile models.SendFileTaskInfo
+		sendFile SendFileTaskInfo
 		status   int
 	}
 	tests := []struct {
@@ -29,7 +28,7 @@ func TestSendFileFinished(t *testing.T) {
 		{
 			name: "status-success",
 			args: args{
-				sendFile: models.SendFileTaskInfo{
+				sendFile: SendFileTaskInfo{
 					TaskID: "abc",
 				},
 				status: ESuccess,
@@ -38,7 +37,7 @@ func TestSendFileFinished(t *testing.T) {
 		{
 			name: "status-fail",
 			args: args{
-				sendFile: models.SendFileTaskInfo{
+				sendFile: SendFileTaskInfo{
 					TaskID: "abc",
 				},
 				status: EFileCreateFail,
@@ -61,7 +60,7 @@ func TestSendFileInvalid(t *testing.T) {
 	})
 	defer guard.Unpatch()
 	type args struct {
-		sendFile models.SendFileTaskInfo
+		sendFile SendFileTaskInfo
 		status   int
 	}
 	type TT struct {
@@ -69,7 +68,7 @@ func TestSendFileInvalid(t *testing.T) {
 		args args
 	}
 	tests := []TT{}
-	sendFile := models.SendFileTaskInfo{
+	sendFile := SendFileTaskInfo{
 		Name:      "abc",
 		Signature: "signature",
 		Mode:      "mode",

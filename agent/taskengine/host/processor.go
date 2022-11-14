@@ -59,7 +59,11 @@ func (p *HostProcessor) PreCheck() (string, error) {
 
 	if len(p.Username) > 0 {
 		if _, err := p.checkCredentials(); err != nil {
-			return "UsernameOrPasswordInvalid", fmt.Errorf("UserInvalid_%s", p.Username)
+			if validationErr, ok := err.(taskerrors.NormalizedValidationError); ok {
+				return validationErr.Param(), err
+			} else {
+				return "UsernameOrPasswordInvalid", err
+			}
 		}
 	}
 
@@ -227,4 +231,8 @@ func (p *HostProcessor) SideEffect() error {
 	}
 
 	return nil
+}
+
+func (p *HostProcessor) ExtraLubanParams() string {
+	return ""
 }

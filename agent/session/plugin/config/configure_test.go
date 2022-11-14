@@ -20,10 +20,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"bou.ke/monkey"
 
-	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/cli"
-	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/i18n"
+	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/aliyun/aliyun-cli/i18n"
 )
 
 func TestNewConfigureCommand(t *testing.T) {
@@ -108,20 +107,15 @@ func TestNewConfigureCommand(t *testing.T) {
 	stderr.Reset()
 	err = cmd.Run(ctx, []string{})
 	assert.Nil(t, err)
-	// assert.Equal(t, "Configuring profile 'default' in 'AK' authenticate mode...\nAccess Key Id [*************************_id]: Access Key Secret [*****************************ret]: Default Region Id []: Default Output Format [json]: json (Only support json)\nDefault Language [zh|en] : Saving profile[default] ...Done.\n-----------------------------------------------\n!!! Configure Failed please configure again !!!\n-----------------------------------------------\ndefault RegionId is empty! run `aliyun configure` first\n-----------------------------------------------\n!!! Configure Failed please configure again !!!\n-----------------------------------------------\n", w.String())
-	assert.Equal(t, "Configuring profile 'default' in 'AK' authenticate mode...\nAccess Key Id [*************************_id]: Access Key Secret [*****************************ret]: Default Region Id []: Default Output Format [json]: json (Only support json)\nDefault Language [zh|en] : Saving profile[default] ...Done.\n", w.String())
+	assert.Equal(t, "Configuring profile 'default' in 'AK' authenticate mode...\nAccess Key Id [*************************_id]: Access Key Secret [*****************************ret]: Default Region Id []: Default Output Format [json]: json (Only support json)\nDefault Language [zh|en] : Saving profile[default] ...Done.\n-----------------------------------------------\n!!! Configure Failed please configure again !!!\n-----------------------------------------------\ndefault RegionId is empty! run `aliyun configure` first\n-----------------------------------------------\n!!! Configure Failed please configure again !!!\n-----------------------------------------------\n", w.String())
 }
 
 func TestDoConfigure(t *testing.T) {
 	originhook := hookLoadConfiguration
 	originhookSave := hookSaveConfiguration
-	guard := monkey.Patch(ReadInput, func(defaultValue string) string {
-		return defaultValue
-	})
 	defer func() {
 		hookLoadConfiguration = originhook
 		hookSaveConfiguration = originhookSave
-		guard.Unpatch()
 	}()
 	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
 		return func(path string) (*Configuration, error) {
@@ -157,68 +151,37 @@ func TestDoConfigure(t *testing.T) {
 	AddFlags(ctx.Flags())
 	err := doConfigure(ctx, "profile", "AK")
 	assert.Nil(t, err)
-	// assert.Equal(t, "Configuring profile 'profile' in 'AK' authenticate mode...\nAccess Key Id []: Access Key Secret []: Default Region Id []: Default Output Format [json]: json (Only support json)\nDefault Language [zh|en] en: Saving profile[profile] ...Done.\n-----------------------------------------------\n!!! Configure Failed please configure again !!!\n-----------------------------------------------\nAccessKeyId/AccessKeySecret is empty! run `aliyun configure` first\n-----------------------------------------------\n!!! Configure Failed please configure again !!!\n-----------------------------------------------\n", w.String())
-	assert.Equal(t, "Configuring profile 'profile' in 'AK' authenticate mode...\nAccess Key Id []: Access Key Secret []: Default Region Id []: Default Output Format [json]: json (Only support json)\nDefault Language [zh|en] en: Saving profile[profile] ...Done.\n", w.String())
+	assert.Equal(t, "Configuring profile 'profile' in 'AK' authenticate mode...\nAccess Key Id []: Access Key Secret []: Default Region Id []: Default Output Format [json]: json (Only support json)\nDefault Language [zh|en] en: Saving profile[profile] ...Done.\n-----------------------------------------------\n!!! Configure Failed please configure again !!!\n-----------------------------------------------\nAccessKeyId/AccessKeySecret is empty! run `aliyun configure` first\n-----------------------------------------------\n!!! Configure Failed please configure again !!!\n-----------------------------------------------\n", w.String())
 	w.Reset()
 
 	err = doConfigure(ctx, "", "")
 	assert.Nil(t, err)
-	// assert.Equal(t, "Configuring profile 'default' in 'AK' authenticate mode...\nAccess Key Id [*************************_id]: Access Key Secret [*****************************ret]: Default Region Id []: Default Output Format [json]: json (Only support json)\nDefault Language [zh|en] : Saving profile[default] ...Done.\n-----------------------------------------------\n!!! Configure Failed please configure again !!!\n-----------------------------------------------\ndefault RegionId is empty! run `aliyun configure` first\n-----------------------------------------------\n!!! Configure Failed please configure again !!!\n-----------------------------------------------\n", w.String())
-	assert.Equal(t, "Configuring profile 'default' in 'AK' authenticate mode...\nAccess Key Id [*************************_id]: Access Key Secret [*****************************ret]: Default Region Id []: Default Output Format [json]: json (Only support json)\nDefault Language [zh|en] : Saving profile[default] ...Done.\n", w.String())
+	assert.Equal(t, "Configuring profile 'default' in 'AK' authenticate mode...\nAccess Key Id [*************************_id]: Access Key Secret [*****************************ret]: Default Region Id []: Default Output Format [json]: json (Only support json)\nDefault Language [zh|en] : Saving profile[default] ...Done.\n-----------------------------------------------\n!!! Configure Failed please configure again !!!\n-----------------------------------------------\ndefault RegionId is empty! run `aliyun configure` first\n-----------------------------------------------\n!!! Configure Failed please configure again !!!\n-----------------------------------------------\n", w.String())
 	w.Reset()
 
 	err = doConfigure(ctx, "", "StsToken")
 	assert.Nil(t, err)
-	wstr := w.String()
-	// assert.True(t, strings.Contains(wstr, "Warning: You are changing the authentication type of profile 'default' from 'AK' to 'StsToken'\nConfiguring profile 'default' in 'StsToken' authenticate mode...\nAccess Key Id [*************************_id]: Access Key Secret [*****************************ret]: Sts Token []: Default Region Id []: Default Output Format [json]: json (Only support json)\nDefault Language [zh|en] : Saving profile[default] ...Done.\n-----------------------------------------------\n!!! Configure Failed please configure again !!!\n-----------------------------------------------\n"))
-	assert.True(t, strings.Contains(wstr, "Warning: You are changing the authentication type of profile 'default' from 'AK' to 'StsToken'\nConfiguring profile 'default' in 'StsToken' authenticate mode...\nAccess Key Id [*************************_id]: Access Key Secret [*****************************ret]: Sts Token []: Default Region Id []: Default Output Format [json]: json (Only support json)\nDefault Language [zh|en] : Saving profile[default] ...Done.\n"))
+	assert.True(t, strings.Contains(w.String(), "Warning: You are changing the authentication type of profile 'default' from 'AK' to 'StsToken'\nConfiguring profile 'default' in 'StsToken' authenticate mode...\nAccess Key Id [*************************_id]: Access Key Secret [*****************************ret]: Sts Token []: Default Region Id []: Default Output Format [json]: json (Only support json)\nDefault Language [zh|en] : Saving profile[default] ...Done.\n-----------------------------------------------\n!!! Configure Failed please configure again !!!\n-----------------------------------------------\n"))
 	w.Reset()
 }
 
 func TestConfigureAK(t *testing.T) {
-	guard := monkey.Patch(ReadInput, func(defaultValue string) string {
-		return defaultValue
-	})
-	defer func() {
-		guard.Unpatch()
-	}()
 	w := new(bytes.Buffer)
-	stderr := new(bytes.Buffer)
-	ctx := cli.NewCommandContext(w, stderr)
-	AddFlags(ctx.Flags())
-	err := configureAK(w, &Profile{Name: "default", Mode: AK, AccessKeyId: "access_key_id", AccessKeySecret: "access_key_secret", RegionId: "cn-hangzhou", OutputFormat: "json"}, ctx)
+	err := configureAK(w, &Profile{Name: "default", Mode: AK, AccessKeyId: "access_key_id", AccessKeySecret: "access_key_secret", RegionId: "cn-hangzhou", OutputFormat: "json"})
 	assert.Nil(t, err)
 	assert.Equal(t, "Access Key Id [**********_id]: Access Key Secret [**************ret]: ", w.String())
 }
 
 func TestConfigureStsToken(t *testing.T) {
-	guard := monkey.Patch(ReadInput, func(defaultValue string) string {
-		return defaultValue
-	})
-	defer func() {
-		guard.Unpatch()
-	}()
 	w := new(bytes.Buffer)
-	stderr := new(bytes.Buffer)
-	ctx := cli.NewCommandContext(w, stderr)
-	AddFlags(ctx.Flags())
-	err := configureStsToken(w, &Profile{Name: "default", Mode: AK, AccessKeyId: "access_key_id", AccessKeySecret: "access_key_secret", StsToken: "ststoken", RegionId: "cn-hangzhou", OutputFormat: "json"}, ctx)
+	err := configureStsToken(w, &Profile{Name: "default", Mode: AK, AccessKeyId: "access_key_id", AccessKeySecret: "access_key_secret", StsToken: "ststoken", RegionId: "cn-hangzhou", OutputFormat: "json"})
 	assert.Equal(t, "Access Key Id [**********_id]: Access Key Secret [**************ret]: Sts Token [ststoken]: ", w.String())
 	assert.Nil(t, err)
 }
 
 func TestConfigureRamRoleArn(t *testing.T) {
-	guard := monkey.Patch(ReadInput, func(defaultValue string) string {
-		return defaultValue
-	})
-	defer func() {
-		guard.Unpatch()
-	}()
 	w := new(bytes.Buffer)
-	stderr := new(bytes.Buffer)
-	ctx := cli.NewCommandContext(w, stderr)
-	AddFlags(ctx.Flags())
-	err := configureRamRoleArn(w, &Profile{Name: "default", Mode: AK, AccessKeyId: "access_key_id", AccessKeySecret: "access_key_secret", RamRoleArn: "RamRoleArn", RoleSessionName: "RoleSessionName", RegionId: "cn-hangzhou", OutputFormat: "json"}, ctx)
+	err := configureRamRoleArn(w, &Profile{Name: "default", Mode: AK, AccessKeyId: "access_key_id", AccessKeySecret: "access_key_secret", RamRoleArn: "RamRoleArn", RoleSessionName: "RoleSessionName", RegionId: "cn-hangzhou", OutputFormat: "json"})
 	assert.Equal(t, "Access Key Id [**********_id]: Access Key Secret [**************ret]: Sts Region []: Ram Role Arn [RamRoleArn]: Role Session Name [RoleSessionName]: Expired Seconds [900]: ", w.String())
 	assert.Nil(t, err)
 }

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"syscall"
 	"unsafe"
+	"os"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
@@ -27,7 +28,18 @@ func (p *ProcessCmd) prepareProcess() error {
 	// if p.command.SysProcAttr == nil {
 	// 	p.command.SysProcAttr = &windows.SysProcAttr{}
 	// }
-
+	// 1. Duplicate current environment variable settings as base
+	var env []string
+	if p.command.Env == nil || len(p.command.Env) == 0 {
+		env = os.Environ()
+	} else {
+		// append specific envs to osEnv, the value of repetitive key will be covered
+		env = os.Environ()
+		for i:=0; i<len(p.command.Env); i++ {
+			env = append(env, p.command.Env[i])
+		}
+	}
+	p.command.Env = env
 	return nil
 }
 
@@ -78,6 +90,7 @@ func IsUserValid (userName string, password string) error {
 	}
 	token, err := logonUser(userName, vm_password)
 	if err != nil {
+		log.GetLogger().WithError(err).Errorf("Authentication failed for user %s with password", userName)
 		return errors.New("UsernameOrPasswordInvalid")
 	}
 	defer mustCloseHandle(token)

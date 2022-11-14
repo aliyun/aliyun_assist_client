@@ -2,6 +2,7 @@ package taskerrors
 
 import (
 	"fmt"
+	"strconv"
 )
 
 // ErrorCode defines and MUST contain all error codes that will be reported
@@ -26,7 +27,17 @@ const (
 	WrapErrResolveEnvironmentParameterFailed
 
 	WrapGeneralError
+	wrapErrConnectContainerRuntimeFailed
+	wrapErrNoAvailableContainerRuntime
+	wrapErrContainerRuntimeInternalFailed
+	wrapErrContainerNotFoundById
+	wrapErrManyContainersFoundById
+	wrapErrContainerNotRunning
 )
+
+func (c ErrorCode) String() string {
+	return strconv.Itoa(int(c))
+}
 
 type baseError struct {
 	categoryCode ErrorCode
@@ -110,6 +121,14 @@ func NewPowershellNotFoundError(cause error) ExecutionError {
 	return &baseError{
 		categoryCode: wrapErrPowershellNotFound,
 		category: "PowershellNotFound",
+		cause: cause,
+	}
+}
+
+func NewResolvingInstanceNameError(cause error) ExecutionError {
+	return &baseError{
+		categoryCode: WrapErrResolveEnvironmentParameterFailed,
+		category: "ResolvingInstanceNameFailed",
 		cause: cause,
 	}
 }

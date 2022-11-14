@@ -186,7 +186,7 @@ func (p *PortPlugin) InputStreamMessageHandler(streamDataMessage message.Message
 		return nil
 	}
 	if p.reconnectToPort {
-		log.GetLogger().Infof("InputStreamMessageHandler:Reconnect to port: %d", p.portNumber)
+		log.GetLogger().Infof("InputStreamMessageHandler:Reconnect to port: %s", p.portNumber)
 		var err error
 		p.conn, err = net.Dial("tcp", "localhost:"+strconv.Itoa(p.portNumber));
 		p.reconnectToPortErr <- err

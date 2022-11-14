@@ -19,7 +19,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/i18n"
+	"github.com/aliyun/aliyun-cli/i18n"
 )
 
 var cmd = &Command{

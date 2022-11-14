@@ -33,8 +33,6 @@ var testServiceOutputData = []model.ServiceData{
 	},
 }
 
-var testServiceOutputDataEmpty = []model.ServiceData{}
-
 // type Mock struct {
 // 	mock.Mock
 // }
@@ -77,7 +75,7 @@ func TestServiceDataCmdErr(t *testing.T) {
 
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "Command failed with error")
-	assert.Equal(t, testServiceOutputDataEmpty, data)
+	assert.Nil(t, data)
 }
 func TestServiceDataInvalidOutput(t *testing.T) {
 
@@ -85,7 +83,7 @@ func TestServiceDataInvalidOutput(t *testing.T) {
 	data, err := collectServiceData(model.Config{})
 
 	assert.NotNil(t, err)
-	assert.Equal(t, testServiceOutputDataEmpty, data)
+	assert.Nil(t, data)
 }
 
 func TestServiceDataInvalidMarker(t *testing.T) {
@@ -96,5 +94,5 @@ func TestServiceDataInvalidMarker(t *testing.T) {
 	data, err := collectServiceData(model.Config{})
 
 	assert.NotNil(t, err)
-	assert.Equal(t, testServiceOutputDataEmpty, data)
+	assert.Nil(t, data)
 }

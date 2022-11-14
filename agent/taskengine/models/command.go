@@ -33,9 +33,10 @@ type RunTaskInfo struct {
 	Username        string `json:"username"`
 	Password        string `json:"windowsPasswordName"`
 	CreationTime    int64 `json:"creationTime"`
+	ContainerId     string `json:"containerId"`
 	ContainerName   string `json:"containerName"`
+	BuiltinParameters map[string]string `json:"builtInParameter"`
 
 	Output          OutputInfo
 	Repeat          RunTaskRepeatType
-	EnvironmentArguments map[string]string
 }

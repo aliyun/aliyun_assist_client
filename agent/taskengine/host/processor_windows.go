@@ -1,6 +1,7 @@
 package host
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/taskerrors"
@@ -15,7 +16,14 @@ var (
 
 func (p *HostProcessor) checkCredentials() (bool, error) {
 	if err := process.IsUserValid(p.Username, p.WindowsUserPassword); err != nil {
-		return false, taskerrors.NewInvalidUsernameOrPasswordError(err, fmt.Sprintf("UsernameOrPasswordInvalid_%s", p.Username))
+		// TODO: REFACTORME: Unify so many concrete error objects
+		if errors.Is(err, util.ErrRoleNameFailed) ||
+			errors.Is(err, util.ErrParameterStoreNotAccessible) ||
+			errors.Is(err, util.ErrParameterFailed) {
+			return false, taskerrors.NormalizeValidationError(err.Error(), nil)
+		} else {
+			return false, taskerrors.NewInvalidUsernameOrPasswordError(err, fmt.Sprintf("UsernameOrPasswordInvalid_%s", p.Username))
+		}
 	}
 
 	return true, nil
