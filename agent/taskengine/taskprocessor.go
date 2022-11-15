@@ -18,4 +18,6 @@ type TaskProcessor interface {
 	Cleanup(removeScriptFile bool) error
 
 	SideEffect() error
+
+	ExtraLubanParams() string
 }

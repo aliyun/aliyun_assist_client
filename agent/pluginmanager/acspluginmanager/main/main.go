@@ -17,12 +17,12 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/aliyun/aliyun_assist_client/agent/pluginmanager/acspluginmanager/thirdparty/aliyun-cli/cli"
-	"github.com/aliyun/aliyun_assist_client/agent/pluginmanager/acspluginmanager/thirdparty/aliyun-cli/i18n"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	pm "github.com/aliyun/aliyun_assist_client/agent/pluginmanager/acspluginmanager"
 	"github.com/aliyun/aliyun_assist_client/agent/pluginmanager/acspluginmanager/flag"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/aliyun-cli/cli"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/aliyun-cli/i18n"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/single"
 )
 
@@ -74,6 +74,7 @@ func execute(ctx *cli.Context, args []string) error {
 	verify := flag.VerifyFlag(ctx.Flags()).IsAssigned()
 	status := flag.StatusFlag(ctx.Flags()).IsAssigned()
 	exec := flag.ExecFlag(ctx.Flags()).IsAssigned()
+	remove := flag.RemoveFlag(ctx.Flags()).IsAssigned()
 
 	plugin, _ := flag.PluginFlag(ctx.Flags()).GetValue()
 	pluginId, _ := flag.PluginIdFlag(ctx.Flags()).GetValue()
@@ -102,13 +103,15 @@ func execute(ctx *cli.Context, args []string) error {
 	if version {
 		fmt.Println(assistVer)
 	} else if list {
-		err = pluginManager.List(plugin, local)
+		exitCode, err = pluginManager.List(plugin, local)
 	} else if verify {
 		exitCode, err = pluginManager.VerifyPlugin(url, params, separator, paramsV2)
 	} else if status {
-		err = pluginManager.ShowPluginStatus()
+		exitCode, err = pluginManager.ShowPluginStatus()
 	} else if exec {
 		exitCode, err = pluginManager.ExecutePlugin(file, plugin, pluginId, params, separator, paramsV2, pluginVersion, local)
+	} else if remove {
+		exitCode, err = pluginManager.RemovePlugin(plugin)
 	} else {
 		ctx.Command().PrintFlags(ctx)
 	}

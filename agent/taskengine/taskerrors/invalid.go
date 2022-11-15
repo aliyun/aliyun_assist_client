@@ -62,3 +62,12 @@ func NewDefaultWorkingDirectoryNotAvailableError(message string) InvalidSettingE
 		cause: nil,
 	}
 }
+
+func NewInvalidEnvironmentParameterError(message string) InvalidSettingError {
+	return &settingError{
+		name: "InvalidEnvironmentParameter",
+		shortMessage: message,
+		message: message,
+		cause: nil,
+	}
+}

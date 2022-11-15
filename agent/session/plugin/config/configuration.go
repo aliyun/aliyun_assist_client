@@ -26,7 +26,7 @@ import (
 
 const (
 	configPath               = "/.aliyun"
-	configFile               = "config.json"
+	configFile               = "config_ecs.json"
 	DefaultConfigProfileName = "default"
 )
 

@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"testing"
 	"time"
-	"github.com/aliyun/aliyun_assist_client/agent/taskengine/models"
 )
 
 func addMockServer() {
@@ -53,7 +52,7 @@ func TestRunTask(t *testing.T) {
 	rand_num := rand.Intn(10000000)
 	rand_str := strconv.Itoa(rand_num)
 
-	info := models.RunTaskInfo{
+	info := RunTaskInfo{
 		InstanceId:  "i-test",
 		CommandType: commandType,
 		TaskId:  "t-test" + rand_str,
@@ -62,7 +61,7 @@ func TestRunTask(t *testing.T) {
 		WorkingDir:workingDir,
 		Content:content,
 	}
-	task := NewTask(info, nil, nil)
+	task := NewTask(info)
 
 	errcode, err := task.Run()
 

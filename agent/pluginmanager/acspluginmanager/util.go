@@ -2,7 +2,6 @@ package acspluginmanager
 
 import (
 	"bytes"
-	"os/exec"
 	"io"
 	"io/fs"
 	"io/ioutil"
@@ -13,7 +12,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/aliyun/aliyun_assist_client/agent/log"
+	. "github.com/aliyun/aliyun_assist_client/agent/pluginmanager"
 	jsoniter "github.com/aliyun/aliyun_assist_client/agent/pluginmanager/acspluginmanager/thirdparty/json-iterator/go"
 	"github.com/aliyun/aliyun_assist_client/agent/pluginmanager/acspluginmanager/thirdparty/json-iterator/go/extra"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
@@ -55,7 +54,11 @@ func marshal(obj interface{}) (result string, err error) {
 	bf := bytes.NewBuffer([]byte{})
 	jsonEncoder := json.NewEncoder(bf)
 	jsonEncoder.SetEscapeHTML(false)
-	jsonEncoder.Encode(obj)
+	jsonEncoder.SetIndent("", "    ")
+	err = jsonEncoder.Encode(obj)
+	if err != nil {
+		return
+	}
 	result = bf.String()
 	return
 }
@@ -117,41 +120,14 @@ func FileProtocolDownload(url, filePath string) error {
 	return err
 }
 
-func getArch() (formatArch string, rawArch string) {
-	defer func() {
-		log.GetLogger().Errorf("Get Arch: formatArch[%s] rawArch[%s]: ", formatArch, rawArch)
-	}()
-	formatArch = ARCH_UNKNOWN
-	if runtime.GOOS == "windows" {
-		// 云助手的windows版架构只有amd64的
-		formatArch = ARCH_64
-		rawArch = "windows arch"
-		return
-	} else {
-		// 执行 uname -m 获得系统的架构名称
-		var outInfo bytes.Buffer
-		cmd := exec.Command("uname", "-m")
-
-		cmd.Stdout = &outInfo
-		if err := cmd.Run(); err != nil {
-			log.GetLogger().Errorln("Get Arch err: ", err.Error())
-			return
-		}
-		arch := outInfo.String()
-		arch = strings.TrimSpace(arch)
-		arch = strings.ToLower(arch)
-		rawArch = arch
-
-		if strings.Contains(arch, "aarch") || strings.Contains(arch, "arm"){ // arm: aarch arm
-			formatArch = ARCH_ARM
-		} else if strings.Contains(arch, "386") || strings.Contains(arch, "686") { // x86: i386 i686
-			formatArch = ARCH_32
-		} else if  arch == "x86_64" { // x64: x86_64
-			formatArch = ARCH_64
-		} else {
-			log.GetLogger().Errorln("Get Arch: unknown arch: ", arch)
-			formatArch = ARCH_UNKNOWN
-		}
-	}
-	return
+// DeleteSlice 删除指定元素。
+func DeletePluginInfoByIdx(pluginInfos []PluginInfo, idx int) []PluginInfo {
+    j := 0
+    for i, p := range pluginInfos {
+        if i != idx {
+            pluginInfos[j] = p
+            j++
+        }
+    }
+    return pluginInfos[:j]
 }

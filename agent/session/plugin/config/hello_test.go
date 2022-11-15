@@ -16,12 +16,12 @@ package config
 import (
 	"bytes"
 	"os"
-	// "strings"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/cli"
+	"github.com/aliyun/aliyun-cli/cli"
 )
 
 func TestDoHello(t *testing.T) {
@@ -33,14 +33,13 @@ func TestDoHello(t *testing.T) {
 	ctx.Flags().AddByName("skip-secure-verify")
 	profile := NewProfile("default")
 
-	// exw := "-----------------------------------------------\n" +
-	// 	"!!! Configure Failed please configure again !!!\n" +
-	// 	"-----------------------------------------------\n" +
-	// 	"AccessKeyId/AccessKeySecret is empty! run `aliyun configure` first\n" +
-	// 	"-----------------------------------------------\n" +
-	// 	"!!! Configure Failed please configure again !!!\n" +
-	// 	"-----------------------------------------------\n"
-	exw := ""
+	exw := "-----------------------------------------------\n" +
+		"!!! Configure Failed please configure again !!!\n" +
+		"-----------------------------------------------\n" +
+		"AccessKeyId/AccessKeySecret is empty! run `aliyun configure` first\n" +
+		"-----------------------------------------------\n" +
+		"!!! Configure Failed please configure again !!!\n" +
+		"-----------------------------------------------\n"
 	DoHello(ctx, &profile)
 	assert.Equal(t, exw, w.String())
 
@@ -50,6 +49,5 @@ func TestDoHello(t *testing.T) {
 	profile.AccessKeySecret = "AccessKeySecret"
 	profile.RegionId = "cn-hangzhou"
 	DoHello(ctx, &profile)
-	// assert.True(t, strings.Contains(w.String(), "-----------------------------------------------\n!!! Configure Failed please configure again !!!\n-----------------------------------------------"))
-	assert.Equal(t, w.String(), "")
+	assert.True(t, strings.Contains(w.String(), "-----------------------------------------------\n!!! Configure Failed please configure again !!!\n-----------------------------------------------"))
 }

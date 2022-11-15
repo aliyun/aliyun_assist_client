@@ -30,11 +30,8 @@ func TestRegister(t *testing.T) {
 	url := "https://" + region + util.HYBRID_DOMAIN + "/luban/api/instance/register";
 	httpmock.RegisterResponder("POST", url,
 		httpmock.NewStringResponder(200, `{"code":200,"instanceId":"xx-123"}`))
-	url = "https://" + region + util.HYBRID_DOMAIN_VPC + "/luban/api/instance/register";
-	httpmock.RegisterResponder("POST", url,
-		httpmock.NewStringResponder(200, `{"code":200,"instanceId":"xx-123"}`))
-	UnRegister(false)
-	ret := Register(region, "test_code", "test_id", "test_machine", "vpc", false)
+
+	ret := Register(region, "test_code", "test_id", "test_machine", false)
 
 	assert.True(t, ret)
 	path,_ := util.GetHybridPath()

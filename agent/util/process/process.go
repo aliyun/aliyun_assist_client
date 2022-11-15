@@ -34,6 +34,7 @@ type ProcessCmd struct {
     user_name string
     password string
 	homeDir string
+	env []string
 }
 
 func NewProcessCmd() *ProcessCmd {
@@ -67,6 +68,10 @@ func (p *ProcessCmd) SetPasswordInfo(password string) {
 
 func (p *ProcessCmd) SetHomeDir(homeDir string) {
 	p.homeDir = homeDir
+}
+
+func (p *ProcessCmd) SetEnv(env []string) {
+	p.env = env
 }
 
 func (p *ProcessCmd)  SyncRunSimple(commandName string, commandArguments []string, timeOut int) error {
@@ -123,6 +128,7 @@ func (p *ProcessCmd)  SyncRun(
 	p.command.Stderr = stderrWriter
 	p.command.Stdin = stdinReader
 	p.command.Dir = workingDir
+	p.command.Env = p.env
 
 	if err := p.prepareProcess(); err != nil {
 		return 0, Fail, err

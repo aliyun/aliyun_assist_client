@@ -24,13 +24,13 @@ jobs:
     - name: Vendor
       run: go mod vendor
 
-    - name: Go Test
-      run: |
-        go test --coverprofile=cover.out -gcflags=-l ./...
-        go tool cover -func=cover.out
+    # - name: Go Test
+    #   run: |
+    #     go test --coverprofile=cover.out -gcflags=-l ./...
+    #     go tool cover -func=cover.out
 
-    - name: Go Vet
-      run: go vet ./...
+    # - name: Go Vet
+    #   run: go vet ./...
 
     - name: Build aliyun_assist
       run: |

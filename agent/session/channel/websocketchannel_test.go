@@ -19,7 +19,7 @@ func TestChannel(t *testing.T) {
 		log.GetLogger().Errorf("failed to initialize websocket channel for datachannel, error: %s", err)
 	}
 	if err := wsChannel.Open(); err != nil {
-		fmt.Printf("failed to connect data channel with error: %s", err)
+		fmt.Errorf("failed to connect data channel with error: %s", err)
 	}
 	time.Sleep(3*time.Second)
 	wsChannel.SendMessage([]byte("123"), websocket.BinaryMessage)

@@ -1,8 +1,8 @@
 package flag
 
 import (
-	"github.com/aliyun/aliyun_assist_client/agent/pluginmanager/acspluginmanager/thirdparty/aliyun-cli/cli"
-	"github.com/aliyun/aliyun_assist_client/agent/pluginmanager/acspluginmanager/thirdparty/aliyun-cli/i18n"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/aliyun-cli/cli"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/aliyun-cli/i18n"
 )
 
 const (
@@ -22,6 +22,7 @@ const (
 	SeparatorFlagName     = "separator"
 	FileFlagName          = "file"
 	ExecFlagName          = "exec"
+	RemoveFlagName        = "remove"
 )
 
 func AddFlags(fs *cli.FlagSet) {
@@ -41,6 +42,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewVerifyFlag())
 	fs.Add(NewStatusFlag())
 	fs.Add(NewExecFlag())
+	fs.Add(NewRemoveFlag())
 }
 
 func VerboseFlag(fs *cli.FlagSet) *cli.Flag {
@@ -101,6 +103,10 @@ func FileFlag(fs *cli.FlagSet) *cli.Flag {
 
 func ExecFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(ExecFlagName)
+}
+
+func RemoveFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(RemoveFlagName)
 }
 
 func NewHelpFlag() *cli.Flag {
@@ -300,9 +306,20 @@ func NewExecFlag() *cli.Flag {
 		AssignedMode: cli.AssignedNone,
 		Short: i18n.T(
 			`--exec --plugin <> --params <>, execute plugin online
-	-- exec --local --plugin <> --params <>, execute plugin from local
+	--exec --local --plugin <> --params <>, execute plugin from local
 	--exec --file <> --params <>, execute plugin from file`,
 			`--exec --plugin <> --params <>, 执行插件，优先从线上查找插件
-	-- exec --local --plugin <> --params <>, 仅从本地查找执行插件
+	--exec --local --plugin <> --params <>, 仅从本地查找执行插件
 	--exec --file <> --params <>, 从插件包文件执行插件`)}
+}
+
+func NewRemoveFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         RemoveFlagName,
+		Shorthand:    'r',
+		AssignedMode: cli.AssignedNone,
+		Short: i18n.T(
+			`--remove --plugin <>, remove local plugin, will delete plugin's directories`,
+			`--remove --plugin <>, 移除本地插件，会删除掉该插件的目录文件`)}
 }

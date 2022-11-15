@@ -93,7 +93,7 @@ func getClientByCredentialsURI(credentialsURI string) (Response, error) {
 func GetEcsClient(ctx *cli.Context) (*ecs.Client, error) {
 	profile, err := config.LoadProfileWithContext(ctx)
 	if err != nil {
-		fmt.Printf("load configuration failed %s", err)
+		fmt.Errorf("load configuration failed %s", err)
 		return nil, fmt.Errorf("load configuration failed %s", err)
 	}
 	if profile.Mode == "AK" {
@@ -107,11 +107,11 @@ func GetEcsClient(ctx *cli.Context) (*ecs.Client, error) {
 		if err != nil {
 			return nil, err
 		}
-		log.GetLogger().Infof("CredentialsURI: %s, %s, %s,%s", profile.RegionId, res.AccessKeyId, res.AccessKeySecret, res.SecurityToken)
+		log.GetLogger().Infoln("CredentialsURI: %s, %s, %s,%s", profile.RegionId, res.AccessKeyId, res.AccessKeySecret, res.SecurityToken)
 		client, err := ecs.NewClientWithStsToken(profile.RegionId, res.AccessKeyId, res.AccessKeySecret, res.SecurityToken)
 		return client, err
 	} else {
-		fmt.Printf("load configuration failed")
+		fmt.Errorf("load configuration failed")
 		return nil, fmt.Errorf("cound not support current auth mode")
 	}
 
