@@ -102,12 +102,8 @@ func Register(region string, code string, id string, name string, networkmode st
 		Id:              id,
 	}
 	jsonBytes, _ := json.Marshal(*info)
- 	var response string
-	domain := util.HYBRID_DOMAIN
-	if networkmode == "vpc" {
-		domain = util.HYBRID_DOMAIN_VPC
-	}
-	url := "https://" + region + domain + "/luban/api/instance/register"	
+	var response string
+	url := util.GetRegisterService()
 	response, err = util.HttpPost(url, string(jsonBytes), "")
 	if err != nil {
 		ret = false
@@ -177,8 +173,7 @@ func UnRegister(need_restart bool) bool {
 		}
 	}()
 
-	url := "https://" + util.GetServerHost()
-	url += "/luban/api/instance/deregister"
+	url := util.GetDeRegisterService()
 
 	response, err := util.HttpPost(url, "", "")
 	if err != nil {

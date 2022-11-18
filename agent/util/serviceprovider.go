@@ -143,6 +143,12 @@ func GetPutInstanceStateReportService() string {
 
 func GetDeRegisterService() string {
 	url := "https://" + GetServerHost()
+	url += "/luban/api/instance/deregister"
+	return url
+}
+
+func GetRegisterService() string {
+	url := "https://" + GetServerHost()
 	url += "/luban/api/instance/register"
 	return url
 }
