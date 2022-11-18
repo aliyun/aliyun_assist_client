@@ -147,8 +147,14 @@ func GetDeRegisterService() string {
 	return url
 }
 
-func GetRegisterService() string {
-	url := "https://" + GetServerHost()
+func GetRegisterService(networkmode string) string {
+	var serverHost string
+	if networkmode == "vpc" {
+		serverHost = GetVpcServerHost()
+	} else {
+		serverHost = GetServerHost()
+	}
+	url := "https://" + serverHost
 	url += "/luban/api/instance/register"
 	return url
 }

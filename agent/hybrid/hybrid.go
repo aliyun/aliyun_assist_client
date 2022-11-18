@@ -103,7 +103,7 @@ func Register(region string, code string, id string, name string, networkmode st
 	}
 	jsonBytes, _ := json.Marshal(*info)
 	var response string
-	url := util.GetRegisterService()
+	url := util.GetRegisterService(networkmode)
 	response, err = util.HttpPost(url, string(jsonBytes), "")
 	if err != nil {
 		ret = false

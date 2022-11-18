@@ -303,6 +303,26 @@ func GetServerHost() string {
 
 }
 
+func GetVpcServerHost() string {
+	g_domainIdInitLock.Lock()
+	defer g_domainIdInitLock.Unlock()
+	if g_domainId != "" {
+		return g_domainId
+	}
+	if IsSelfHosted() {
+		return os.Getenv("ALIYUN_ASSIST_SERVER_HOST")
+	}
+	regionId := GetRegionId()
+	if regionId != "" {
+		if IsHybrid() {
+			return regionId + HYBRID_DOMAIN_VPC
+		}
+		return regionId + ".axt.aliyun.com"
+	} else {
+		return ""
+	}
+}
+
 func GetDeamonUrl() string {
 	url := "https://" + GetServerHost() + "/luban/api/assist_deamon"
 	return url
