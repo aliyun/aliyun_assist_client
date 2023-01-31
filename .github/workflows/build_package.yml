@@ -100,14 +100,14 @@ jobs:
     - name: Upload package
       uses: actions/upload-artifact@v3
       with:
-        name: aliyun-assist_${{ linux_version }}.deb
-        path: deb/aliyun-assist_${{ linux_version }}.deb
+        name: aliyun-assist_${{ env.linux_version }}.deb
+        path: deb/aliyun-assist_${{ env.linux_version }}.deb
         retention-days: 3
     - name: Upload package
       uses: actions/upload-artifact@v3
       with:
-        name: aliyun-assist_${{ linux_version }}.rpm
-        path: rpm/aliyun-assist_${{ linux_version }}.rpm
+        name: aliyun-assist_${{ env.linux_version }}.rpm
+        path: rpm/aliyun-assist_${{ env.linux_version }}.rpm
         retention-days: 3
 
 
