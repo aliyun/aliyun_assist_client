@@ -1,4 +1,6 @@
 on:
+  push:
+    branches: [ "release" ]
   pull_request:
     branches: [ "release" ]
 
@@ -9,7 +11,7 @@ permissions:
 jobs:
   build: 
     name: build
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux]
     steps:
     - uses: actions/checkout@v3
 
@@ -55,7 +57,8 @@ jobs:
 
   package:
     name: package
-    runs-on: self-hosted, Linux
+    needs: build
+    runs-on: [self-hosted, Linux]
     steps:
     - uses: actions/checkout@v3
 
