@@ -30,9 +30,9 @@ jobs:
         root_dir=$(pwd)
         res_dir=$root_dir/build_result_${GITHUB_SHA}
         mkdir $res_dir
-        win_version=$(cat version | grep windows | awk '{print$2}')
-        linux_version=$(cat version | grep linux | awk '{print$2}')
-        linux_arm_version=$(cat version | grep linux_arm | awk '{print$2}')
+        win_version=$(cat version | grep 'windows ' | awk '{print$2}')
+        linux_version=$(cat version | grep 'linux ' | awk '{print$2}')
+        linux_arm_version=$(cat version | grep 'linux_arm ' | awk '{print$2}')
         GOOS=windows GOARCH=amd64 go build -v -o $res_dir/aliyun_assist_service.exe -ldflags "-X main.assistVer=$win_version -X main.gitHash=${GITHUB_SHA}"
         GOOS=linux GOARCH=386 go build -v -o $res_dir/aliyun-service -ldflags "-X main.assistVer=$linux_version -X main.gitHash=${GITHUB_SHA}"
         GOOS=linux GOARCH=arm64 go build -v -o $res_dir/aliyun-service-arm -ldflags "-X main.assistVer=$linux_arm_version -X main.gitHash=${GITHUB_SHA}"
@@ -113,9 +113,3 @@ jobs:
         name: aliyun-assist_${{ env.linux_version }}.rpm
         path: rpm/aliyun-assist_${{ env.linux_version }}.rpm
         retention-days: 3
-
-
-
-
-
-        
