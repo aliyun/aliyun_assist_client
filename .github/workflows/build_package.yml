@@ -79,7 +79,7 @@ jobs:
         echo "linux_version=$linux_version" >> $GITHUB_ENV
         echo "linux_arm_version=$linux_arm_version" >> $GITHUB_ENV
 
-        $version=$linux_version
+        version=$linux_version
         mkdir -p output/init
         cp ~/packfile/update_install output/init/install
         cp ~/packfile/uninstall output/init/uninstall
