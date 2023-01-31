@@ -33,6 +33,7 @@ jobs:
         win_version=$(cat version | grep 'windows ' | awk '{print$2}')
         linux_version=$(cat version | grep 'linux ' | awk '{print$2}')
         linux_arm_version=$(cat version | grep 'linux_arm ' | awk '{print$2}')
+        cp version $res_dir/
         GOOS=windows GOARCH=amd64 go build -v -o $res_dir/aliyun_assist_service.exe -ldflags "-X main.assistVer=$win_version -X main.gitHash=${GITHUB_SHA}"
         GOOS=linux GOARCH=386 go build -v -o $res_dir/aliyun-service -ldflags "-X main.assistVer=$linux_version -X main.gitHash=${GITHUB_SHA}"
         GOOS=linux GOARCH=arm64 go build -v -o $res_dir/aliyun-service-arm -ldflags "-X main.assistVer=$linux_arm_version -X main.gitHash=${GITHUB_SHA}"
@@ -61,7 +62,6 @@ jobs:
     needs: build
     runs-on: [self-hosted, Linux]
     steps:
-    - uses: actions/checkout@v3
 
     - name: Download file
       uses: actions/download-artifact@v3
@@ -71,9 +71,10 @@ jobs:
     - name: package
       run: |
         root_dir=$(pwd)
-        win_version=$(cat version | grep windows | awk '{print$2}')
-        linux_version=$(cat version | grep linux | awk '{print$2}')
-        linux_arm_version=$(cat version | grep linux_arm | awk '{print$2}')
+        cp files${GITHUB_SHA}/version version
+        win_version=$(cat version | grep 'windows ' | awk '{print$2}')
+        linux_version=$(cat version | grep 'linux ' | awk '{print$2}')
+        linux_arm_version=$(cat version | grep 'linux_arm ' | awk '{print$2}')
         echo "win_version=$win_version" >> $GITHUB_ENV
         echo "linux_version=$linux_version" >> $GITHUB_ENV
         echo "linux_arm_version=$linux_arm_version" >> $GITHUB_ENV
