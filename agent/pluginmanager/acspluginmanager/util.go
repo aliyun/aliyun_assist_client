@@ -12,12 +12,20 @@ import (
 	"runtime"
 	"strings"
 
+	. "github.com/aliyun/aliyun_assist_client/agent/pluginmanager"
 	jsoniter "github.com/aliyun/aliyun_assist_client/agent/pluginmanager/acspluginmanager/thirdparty/json-iterator/go"
 	"github.com/aliyun/aliyun_assist_client/agent/pluginmanager/acspluginmanager/thirdparty/json-iterator/go/extra"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 )
 
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
+
+const (
+	ARCH_64 = "x64"
+	ARCH_32 = "x86"
+	ARCH_ARM = "arm"
+	ARCH_UNKNOWN = "unknown"
+)
 
 func init() {
 	// 插件版本号字段定义为string，但是一些插件该字段是int。这个开关打开后能够把json中的int float类型转换成string
@@ -46,7 +54,11 @@ func marshal(obj interface{}) (result string, err error) {
 	bf := bytes.NewBuffer([]byte{})
 	jsonEncoder := json.NewEncoder(bf)
 	jsonEncoder.SetEscapeHTML(false)
-	jsonEncoder.Encode(obj)
+	jsonEncoder.SetIndent("", "    ")
+	err = jsonEncoder.Encode(obj)
+	if err != nil {
+		return
+	}
 	result = bf.String()
 	return
 }
@@ -106,4 +118,16 @@ func FileProtocolDownload(url, filePath string) error {
 	}
 	_, err = io.Copy(f, res.Body)
 	return err
+}
+
+// DeleteSlice 删除指定元素。
+func DeletePluginInfoByIdx(pluginInfos []PluginInfo, idx int) []PluginInfo {
+    j := 0
+    for i, p := range pluginInfos {
+        if i != idx {
+            pluginInfos[j] = p
+            j++
+        }
+    }
+    return pluginInfos[:j]
 }

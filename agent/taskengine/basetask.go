@@ -8,25 +8,22 @@ import (
 	"fmt"
 	"io"
 	"net/url"
-	"os"
-	"os/exec"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/hectane/go-acl"
 	"github.com/sirupsen/logrus"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/agent/taskengine/cri"
+	"github.com/aliyun/aliyun_assist_client/agent/taskengine/host"
+	"github.com/aliyun/aliyun_assist_client/agent/taskengine/models"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/parameters"
-	"github.com/aliyun/aliyun_assist_client/agent/taskengine/scriptmanager"
+	"github.com/aliyun/aliyun_assist_client/agent/taskengine/taskerrors"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
-	"github.com/aliyun/aliyun_assist_client/agent/util/errnoutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/langutil"
-	"github.com/aliyun/aliyun_assist_client/agent/util/powerutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/process"
 	"github.com/aliyun/aliyun_assist_client/agent/util/timetool"
 )
@@ -36,27 +33,14 @@ const (
 	defaultQuotoPre = 6000
 )
 
-type RunTaskRepeatType string
-
-const (
-	RunTaskOnce           RunTaskRepeatType = "Once"
-	RunTaskCron           RunTaskRepeatType = "Period"
-	RunTaskNextRebootOnly RunTaskRepeatType = "NextRebootOnly"
-	RunTaskEveryReboot    RunTaskRepeatType = "EveryReboot"
-	RunTaskRate           RunTaskRepeatType = "Rate"
-	RunTaskAt             RunTaskRepeatType = "At"
-)
-
 type FinishCallback func ()
 
 type Task struct {
-	taskInfo             RunTaskInfo
-	realWorkingDir       string
-	envHomeDir           string
+	taskInfo             models.RunTaskInfo
 	scheduleLocation     *time.Location
 	onFinish             FinishCallback
 
-	processer               process.ProcessCmd
+	processer               TaskProcessor
 	startTime               time.Time
 	endTime                 time.Time
 	monotonicStartTimestamp int64
@@ -69,76 +53,46 @@ type Task struct {
 	data_sended             uint32
 }
 
-func NewTask(taskInfo RunTaskInfo, scheduleLocation *time.Location, onFinish FinishCallback) *Task {
+func NewTask(taskInfo models.RunTaskInfo, scheduleLocation *time.Location, onFinish FinishCallback) *Task {
+	timeout, err := strconv.Atoi(taskInfo.TimeOut)
+	if err != nil {
+		timeout = 3600
+	}
+
+	var processor TaskProcessor
+	if taskInfo.ContainerId != "" || taskInfo.ContainerName != "" {
+		processor = &cri.CRIProcessor{
+			TaskId: taskInfo.TaskId,
+			ContainerIdentifier: taskInfo.ContainerId,
+			ContainerName: taskInfo.ContainerName,
+			CommandType: taskInfo.CommandType,
+			Timeout: timeout,
+		}
+	} else {
+		processor = &host.HostProcessor{
+			TaskId: taskInfo.TaskId,
+			CommandType: taskInfo.CommandType,
+			Repeat: taskInfo.Repeat,
+			Timeout: timeout,
+
+			CommandName: taskInfo.CommandName,
+			WorkingDirectory: taskInfo.WorkingDir,
+			Username: taskInfo.Username,
+			WindowsUserPassword: taskInfo.Password,
+		}
+	}
+
 	task := &Task{
 		taskInfo:  taskInfo,
 		scheduleLocation: scheduleLocation,
 		onFinish:  onFinish,
-		processer: process.ProcessCmd{},
+		processer: processor,
 		canceled:  false,
 		droped:    0,
 	}
 
 	return task
 }
-
-type RunTaskInfo struct {
-	InstanceId      string `json:"instanceId"`
-	CommandType     string `json:"type"`
-	TaskId          string `json:"taskID"`
-	CommandId       string `json:"commandId"`
-	EnableParameter bool   `json:"enableParameter"`
-	TimeOut         string `json:"timeOut"`
-	CommandName     string `json:"commandName"`
-	Content         string `json:"commandContent"`
-	WorkingDir      string `json:"workingDirectory"`
-	Args            string `json:"args"`
-	Cronat          string `json:"cron"`
-	Username        string `json:"username"`
-	Password        string `json:"windowsPasswordName"`
-	CreationTime    int64 `json:"creationTime"`
-	Output          OutputInfo
-	Repeat          RunTaskRepeatType
-	EnvironmentArguments map[string]string
-}
-
-type SendFileTaskInfo struct {
-	Content     string `json:"content"`
-	ContentType string `json:"contentType"`
-	Destination string `json:"destination"`
-	Group       string `json:"group"`
-	Mode        string `json:"mode"`
-	Name        string `json:"name"`
-	Overwrite   bool   `json:"overwrite"`
-	Owner       string `json:"owner"`
-	Signature   string `json:"signature"`
-	TaskID      string `json:"taskID"`
-	Timeout     int64  `json:"timeout"`
-	Output      OutputInfo
-}
-
-type SessionTaskInfo struct {
-	CmdContent   string `json:"cmdContent"`
-	Username     string `json:"username"`
-	Password     string `json:"windowsPasswordName"`
-	SessionId    string `json:"channelId"`
-	WebsocketUrl string `json:"websocketUrl"`
-	PortNumber  string `json:"portNumber"`
-	FlowLimit	 int    `json:"flowLimit"` // 最大流量 单位 bps
-}
-
-type OutputInfo struct {
-	Interval  int  `json:"interval"`
-	LogQuota  int  `json:"logQuota"`
-	SkipEmpty bool `json:"skipEmpty"`
-	SendStart bool `json:"sendStart"`
-}
-
-var (
-	ErrHomeDirectoryNotAvailable           = errors.New("HomeDirectoryNotAvailable")
-	ErrWorkingDirectoryNotExist            = errors.New("WorkingDirectoryNotExist")
-	ErrDefaultWorkingDirectoryNotAvailable = errors.New("DefaultWorkingDirectoryNotAvailable")
-)
 
 func tryRead(stdoutWrite, stderrWrite io.Reader, out *bytes.Buffer) {
 	buf_stdout := make([]byte, 1024)
@@ -170,26 +124,6 @@ func (task *Task) PreCheck(reportVerified bool) error {
 		"Phase":  "Pre-checking",
 	})
 
-	if len(task.taskInfo.Username) > 0 {
-		if runtime.GOOS == "linux" {
-			_, _, _, err := process.GetUserCredentials(task.taskInfo.Username)
-			if err != nil {
-				info := "UserInvalid_" + task.taskInfo.Username
-				task.SendInvalidTask("UsernameOrPasswordInvalid", info)
-				taskLogger.Errorln("UsernameOrPasswordInvalid", info)
-				return err
-			}
-		} else if runtime.GOOS == "windows" {
-			err := process.IsUserValid(task.taskInfo.Username, task.taskInfo.Password)
-			if err != nil {
-				info := "UsernameOrPasswordInvalid_" + task.taskInfo.Username
-				task.SendInvalidTask(err.Error(), info)
-				taskLogger.Errorln("UsernameOrPasswordInvalid", err.Error(), info)
-				return err
-			}
-		}
-	}
-
 	if task.taskInfo.CommandType != "RunBatScript" &&
 		task.taskInfo.CommandType != "RunPowerShellScript" &&
 		task.taskInfo.CommandType != "RunShellScript" {
@@ -206,26 +140,17 @@ func (task *Task) PreCheck(reportVerified bool) error {
 		return wrapErr
 	}
 
-	envHomeDir, err := task.detectHomeDirectory()
-	if err != nil {
-		taskLogger.WithError(err).Warningln("Invalid HOME directory for invocation")
-	} else {
-		task.envHomeDir = envHomeDir
-	}
-
-	realWorkingDir, err := task.detectWorkingDirectory()
-	if err != nil {
-		if errors.Is(err, ErrWorkingDirectoryNotExist) {
-			task.SendInvalidTask("workingDirectory", ErrWorkingDirectoryNotExist.Error())
-		} else if errors.Is(err, ErrDefaultWorkingDirectoryNotAvailable) {
-			task.SendInvalidTask("workingDirectory", ErrDefaultWorkingDirectoryNotAvailable.Error())
+	if invalidParameter, err := task.processer.PreCheck(); err != nil {
+		if validationErr, ok := err.(taskerrors.NormalizedValidationError); ok {
+			task.SendInvalidTask(validationErr.Param(), validationErr.Value())
+		} else if settingErr, ok := err.(taskerrors.InvalidSettingError); ok {
+			task.SendInvalidTask(invalidParameter, settingErr.ShortMessage())
 		} else {
-			task.SendInvalidTask("workingDirectory", err.Error())
+			task.SendInvalidTask(invalidParameter, err.Error())
 		}
-		taskLogger.WithError(err).Errorln("Invalid working directory for invocation")
+		taskLogger.WithError(err).Errorf("Invalid parameter \"%s\" for invocation", invalidParameter)
 		return err
 	}
-	task.realWorkingDir = realWorkingDir
 
 	if reportVerified == true {
 		task.sendTaskVerified()
@@ -233,7 +158,7 @@ func (task *Task) PreCheck(reportVerified bool) error {
 	return nil
 }
 
-func (task *Task) Run() (presetWrapErrorCode, error) {
+func (task *Task) Run() (taskerrors.ErrorCode, error) {
 	if err := task.PreCheck(false); err != nil {
 		return 0, err
 	}
@@ -246,60 +171,30 @@ func (task *Task) Run() (presetWrapErrorCode, error) {
 	taskLogger.Info("Run task")
 
 	taskLogger.Info("Prepare script file of task")
-	var fileName string
-	var err error
-	if fileName, err = util.GetScriptPath(); err != nil {
-		taskLogger.WithError(err).Errorln("script path is error")
-		if errnoutil.IsNoEnoughSpaceError(err) {
-			task.sendPresetError("", wrapErrNoEnoughSpace, err)
-			return wrapErrNoEnoughSpace, err
-		} else {
-			errCode, errDescPrefix := task.categorizeSyscallErrno(err, wrapErrGetScriptPathFailed)
-			task.SendError("", errCode, fmt.Sprintf("%s: %s", errDescPrefix, err.Error()))
-			return errCode, err
-		}
-	}
-
-	cmdType := task.taskInfo.CommandType
-	var cmdTypeName string
-	if cmdType == "RunBatScript" {
-		cmdTypeName = ".bat"
-	} else if cmdType == "RunShellScript" {
-		cmdTypeName = ".sh"
-		if len(task.taskInfo.Username) > 0 {
-			fileName = "/tmp"
-		}
-	} else if cmdType == "RunPowerShellScript" {
-		cmdTypeName = ".ps1"
-	} else {
-		taskLogger.Errorln("unkwown command type")
-		task.SendError("", wrapErrUnknownCommandType, fmt.Sprintf("UnknownCommandType: %s", cmdType))
-		return wrapErrUnknownCommandType, errors.New("unkwown command type")
-	}
-	commandName := task.taskInfo.CommandName
-	if commandName == "" {
-		fileName = fileName + "/" + task.taskInfo.TaskId + cmdTypeName
-	} else {
-		fileName = fileName + "/" + commandName + "-" + task.taskInfo.TaskId + cmdTypeName
-	}
-	
-
 	decodeBytes, err := base64.StdEncoding.DecodeString(task.taskInfo.Content)
 	if err != nil {
-		task.sendPresetError("", wrapErrBase64DecodeFailed, err)
-		return wrapErrBase64DecodeFailed, errors.New("decode error")
+		task.SendError("", taskerrors.WrapErrBase64DecodeFailed, fmt.Sprintf("Base64DecodeFailed: %s", err.Error()))
+		return taskerrors.WrapErrBase64DecodeFailed, errors.New("decode error")
 	}
-	ScriptToDelete := ""
+	ScriptToDelete := false
 	content := string(decodeBytes)
 	if task.taskInfo.EnableParameter {
-		content, err = parameters.ResolveEnvironmentParameters(content, task.taskInfo.EnvironmentArguments)
+		content, err = parameters.ResolveBuiltinParameters(content, task.taskInfo.BuiltinParameters)
 		if err != nil {
-			task.SendInvalidTask("InvalidEnvironmentParameter", err.Error())
-			return wrapErrResolveEnvironmentParameterFailed, err
+			if invalidErr, ok := err.(taskerrors.InvalidSettingError); ok {
+				task.SendInvalidTask("InvalidEnvironmentParameter", invalidErr.ShortMessage())
+			} else if taskErr, ok := err.(taskerrors.ExecutionError); ok {
+				task.SendError("", taskErr.Code(), taskErr.Error())
+				return taskErr.Code(), err
+			} else {
+				task.SendError("", taskerrors.WrapErrResolveEnvironmentParameterFailed, err.Error())
+			}
+
+			return taskerrors.WrapErrResolveEnvironmentParameterFailed, err
 		}
 
 		if strings.Contains(content, "oos-secret") {
-			ScriptToDelete = fileName
+			ScriptToDelete = true
 		}
 		content, err = util.ReplaceAllParameterStore(content)
 		if err != nil {
@@ -307,7 +202,7 @@ func (task *Task) Run() (presetWrapErrorCode, error) {
 			return 0, errors.New("ReplaceAllParameterStore error")
 		}
 	}
-	if cmdType == "RunBatScript" {
+	if task.taskInfo.CommandType == "RunBatScript" {
 		content = "@echo off\r\n" + content
 	}
 	if G_IsWindows {
@@ -317,81 +212,29 @@ func (task *Task) Run() (presetWrapErrorCode, error) {
 		}
 	}
 
-	if err := scriptmanager.SaveScriptFile(fileName, content); err != nil {
-		// NOTE: Only non-repeated tasks need to check whether command script
-		// file exists.
-		if (task.taskInfo.Repeat != RunTaskCron && task.taskInfo.Repeat != RunTaskEveryReboot &&
-			task.taskInfo.Repeat != RunTaskRate && task.taskInfo.Repeat != RunTaskAt) ||
-			!errors.Is(err, scriptmanager.ErrScriptFileExists) {
-			wrapErr := fmt.Errorf("Saving script to %s failed: %w", fileName, err)
-			taskLogger.WithError(wrapErr).Errorln("Saving script file failed")
-			// NOTE: Due to some utility functions, report error message may not
-			// be so precise as expected.
-			switch {
-			case errors.Is(err, scriptmanager.ErrScriptFileExists):
-				task.sendPresetError("", wrapErrScriptFileExisted, wrapErr)
-				return wrapErrScriptFileExisted, wrapErr
-			case errnoutil.IsNoEnoughSpaceError(err):
-				task.sendPresetError("", wrapErrNoEnoughSpace, wrapErr)
-				return wrapErrNoEnoughSpace, wrapErr
-			default:
-				errCode, errDescPrefix := task.categorizeSyscallErrno(err, wrapErrSaveScriptFileFailed)
-				task.SendError("", errCode, fmt.Sprintf("%s: %s", errDescPrefix, wrapErr.Error()))
-				return errCode, err
-			}
+	if err := task.processer.Prepare(content); err != nil {
+		taskLogger.WithError(err).Errorln("Failed to prepare command process")
+		if executionErr, ok := err.(taskerrors.NormalizedExecutionError); ok {
+			task.SendError("", taskerrors.Stringer(executionErr.Code()), executionErr.Description())
+			return taskerrors.WrapGeneralError, err
+		} else if validationErr, ok := err.(taskerrors.NormalizedValidationError); ok {
+			task.SendInvalidTask(validationErr.Param(), validationErr.Value())
+			return taskerrors.WrapGeneralError, err
+		} else if taskErr, ok := err.(taskerrors.ExecutionError); ok {
+			task.SendError("", taskErr.Code(), taskErr.Error())
+			return taskErr.Code(), err
+		} else {
+			return taskerrors.WrapGeneralError, err
 		}
-	}
 
-	// Set executable permission bit of shell script file
-	if cmdType == "RunShellScript" {
-		if err := acl.Chmod(fileName, 0755); err != nil {
-			task.SendError("", wrapErrSetExecutablePermissionFailed, fmt.Sprintf("SetExecutablePermissionFailed: Failed to set executable permission of shell script: %s", err.Error()))
-			taskLogger.WithError(err).Errorf("Failed to set executable permission of shell script")
-		}
-	} else {
-		if len(task.taskInfo.Username) > 0 {
-			if err := acl.Chmod(fileName, 0755); err != nil {
-				task.SendError("", wrapErrSetWindowsPermissionFailed, fmt.Sprintf("SetWindowsPermissionFailed: Failed to set permission of script on Windows: %s", err.Error()))
-				taskLogger.WithError(err).Errorf("Failed to set permission of script on Windows")
-			}
-		}
 	}
 
 	taskLogger.Info("Prepare command process")
 	var stdoutWrite process.SafeBuffer
 	var stderrWrite process.SafeBuffer
-	timeout, err := strconv.Atoi(task.taskInfo.TimeOut)
-	if err != nil {
-		timeout = 3600
-	}
 
 	task.startTime = time.Now()
 	task.monotonicStartTimestamp = timetool.ToAccurateTime(task.startTime.Local())
-	args := make([]string, 2)
-	if cmdType == "RunPowerShellScript" {
-		args[0] = "-file"
-		args[1] = fileName
-		fileName = "powershell"
-
-		if _, err := exec.LookPath(fileName); err != nil {
-			task.sendPresetError("", wrapErrPowershellNotFound, err)
-			return wrapErrPowershellNotFound, err
-		}
-		if err := task.processer.SyncRunSimple("powershell.exe",
-			strings.Split("Set-ExecutionPolicy RemoteSigned", " "), 10); err != nil {
-			taskLogger.WithError(err).Warningln("Failed to set powershell execution policy")
-		}
-	} else if cmdType == "RunShellScript" {
-		args[0] = "-c" // TODO: 兼容freebsd
-		args[1] = fileName
-		fileName = "sh"
-
-		if _, err := exec.LookPath(fileName); err != nil {
-			task.sendPresetError("", wrapErrSystemDefaultShellNotFound, err)
-			return wrapErrSystemDefaultShellNotFound, err
-		}
-	}
-
 	task.sendTaskStart()
 	taskLogger.Infof("Sent starting event")
 
@@ -435,21 +278,7 @@ func (task *Task) Run() (presetWrapErrorCode, error) {
 
 	taskLogger.Info("Start command process")
 	var status int
-	if len(task.taskInfo.Username) > 0 {
-		task.processer.SetUserInfo(task.taskInfo.Username)
-	}
-	if len(task.taskInfo.Password) > 0 {
-		task.processer.SetPasswordInfo(task.taskInfo.Password)
-	}
-	// Fix $HOME environment variable undex *nix
-	if task.envHomeDir != "" {
-		task.processer.SetHomeDir(task.envHomeDir)
-	}
-
-	task.exit_code, status, err = task.processer.SyncRun(task.realWorkingDir,
-		fileName, args,
-		&stdoutWrite, &stderrWrite, nil,
-		nil, timeout)
+	task.exit_code, status, err = task.processer.SyncRun(&stdoutWrite, &stderrWrite, nil)
 	if status == process.Success {
 		taskLogger.WithFields(logrus.Fields{
 			"exitcode":   task.exit_code,
@@ -481,9 +310,12 @@ func (task *Task) Run() (presetWrapErrorCode, error) {
 	if status == process.Fail {
 		if err == nil {
 			task.sendOutput("failed", task.getReportString(task.output))
+		} else if executionErr, ok := err.(taskerrors.NormalizedExecutionError); ok {
+			task.SendError(task.getReportString(task.output), taskerrors.Stringer(executionErr.Code()), executionErr.Description())
+		} else if taskErr, ok := err.(taskerrors.ExecutionError); ok {
+			task.SendError(task.getReportString(task.output), taskErr.Code(), taskErr.Error())
 		} else {
-			errCode, errDescPrefix := task.categorizeSyscallErrno(err, wrapErrExecuteScriptFailed)
-			task.SendError(task.getReportString(task.output), errCode, fmt.Sprintf("%s: %s", errDescPrefix, err.Error()))
+			task.SendError(task.getReportString(task.output), taskerrors.WrapErrExecuteScriptFailed, fmt.Sprintf("ExecuteScriptFailed: %s", err.Error()))
 		}
 	} else if status == process.Timeout {
 		task.sendOutput("timeout", task.getReportString(task.output))
@@ -500,19 +332,14 @@ func (task *Task) Run() (presetWrapErrorCode, error) {
 
 	task.output.Reset()
 	endTaskLogger.Info("Clean task output")
-	if ScriptToDelete != "" {
-		os.Remove(ScriptToDelete)
+	// Perform cleanup actions after task finished
+	if err := task.processer.Cleanup(ScriptToDelete); err != nil {
+		endTaskLogger.WithError(err).Errorln("Failed to cleanup after command finished")
 	}
 
 	// Perform instructed poweroff/reboot action after task finished
-	if status == process.Success {
-		if task.exit_code == exitcodePoweroff {
-			endTaskLogger.Infof("Poweroff the instance due to the special task exitcode %d", task.exit_code)
-			powerutil.Powerdown()
-		} else if task.exit_code == exitcodeReboot {
-			endTaskLogger.Infof("Reboot the instance due to the special task exitcode %d", task.exit_code)
-			powerutil.Reboot()
-		}
+	if err := task.processer.SideEffect(); err != nil {
+		endTaskLogger.WithError(err).Errorln("Failed to apply side-effect of command after finished")
 	}
 
 	return 0, nil
@@ -531,6 +358,7 @@ func (task *Task) sendTaskStart() {
 	url := util.GetRunningOutputService()
 	url += "?taskId=" + task.taskInfo.TaskId + "&start=" + strconv.FormatInt(task.monotonicStartTimestamp, 10)
 	url += task.wallClockQueryParams()
+	url += task.processer.ExtraLubanParams()
 
 	util.HttpPost(url, "", "text")
 }
@@ -566,6 +394,7 @@ func (task *Task) sendOutput(status string, output string) {
 	url += "?taskId=" + task.taskInfo.TaskId + "&start=" + strconv.FormatInt(task.monotonicStartTimestamp, 10)
 	url += "&end=" + strconv.FormatInt(task.monotonicEndTimestamp, 10) + "&exitCode=" + strconv.Itoa(task.exit_code) + "&dropped=" + strconv.Itoa(task.droped)
 	url += task.wallClockQueryParams()
+	url += task.processer.ExtraLubanParams()
 
 	var err error
 	_, err = util.HttpPost(url, output, "text")
@@ -580,13 +409,14 @@ func (task *Task) sendOutput(status string, output string) {
 	}
 }
 
-func (task *Task) SendError(output string, errCode presetWrapErrorCode, errDesc string) {
+func (task *Task) SendError(output string, errCode fmt.Stringer, errDesc string) {
 	safelyTruncatedErrDesc := langutil.SafeTruncateStringInBytes(errDesc, 255)
 	escapedErrDesc := url.QueryEscape(safelyTruncatedErrDesc)
-	queryString := fmt.Sprintf("?taskId=%s&start=%d&end=%d&exitCode=%d&dropped=%d&errCode=%d&errDesc=%s",
+	queryString := fmt.Sprintf("?taskId=%s&start=%d&end=%d&exitCode=%d&dropped=%d&errCode=%s&errDesc=%s",
 		task.taskInfo.TaskId, task.monotonicStartTimestamp, task.monotonicEndTimestamp, task.exit_code,
-		task.droped, errCode, escapedErrDesc)
+		task.droped, errCode.String(), escapedErrDesc)
 	queryString += task.wallClockQueryParams()
+	queryString += task.processer.ExtraLubanParams()
 
 	requestURL := util.GetErrorOutputService() + queryString
 
@@ -641,6 +471,7 @@ func (task *Task) sendRunningOutput(data string) {
 	url := util.GetRunningOutputService()
 	url += "?taskId=" + task.taskInfo.TaskId + "&start=" + strconv.FormatInt(task.monotonicStartTimestamp, 10)
 	url += task.wallClockQueryParams()
+	url += task.processer.ExtraLubanParams()
 
 	if len(data) == 0 && task.taskInfo.Output.SkipEmpty {
 		return
@@ -664,9 +495,9 @@ func (task *Task) IsCancled() bool {
 // cron/rate tasks, and timezone name of schedule clock for only cron tasks
 func (task *Task) wallClockQueryParams() string {
 	switch task.taskInfo.Repeat {
-	case RunTaskRate:
+	case models.RunTaskRate:
 		return fmt.Sprintf("&currentTime=%d", timetool.GetAccurateTime())
-	case RunTaskCron:
+	case models.RunTaskCron:
 		if task.scheduleLocation != nil {
 			// NOTE: The time stdlib of golang hopelessly mixes nil pointer and
 			// pointer to pre-defined utcLoc for some Location methods, e.g.,
@@ -684,9 +515,4 @@ func (task *Task) wallClockQueryParams() string {
 	}
 
 	return ""
-}
-
-func (task *Task) sendPresetError(output string, errCode presetWrapErrorCode, err error) {
-	errDescPrefix := presetErrorPrefixes[errCode]
-	task.SendError(output, errCode, fmt.Sprintf("%s: %s", errDescPrefix, err.Error()))
 }

@@ -29,7 +29,11 @@ func (p *ProcessCmd) prepareProcess() error {
 	if p.command.Env == nil || len(p.command.Env) == 0 {
 		env = os.Environ()
 	} else {
-		env = p.command.Env
+		// append specific envs to osEnv, the value of repetitive key will be covered
+		env = os.Environ()
+		for i:=0; i<len(p.command.Env); i++ {
+			env = append(env, p.command.Env[i])
+		}
 	}
 	// 2. Append correct $HOME environment variable value
 	if p.homeDir != "" {

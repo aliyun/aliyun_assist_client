@@ -1,8 +1,6 @@
 package util
 
 import (
-	"errors"
-
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/oos"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 )
@@ -21,13 +19,13 @@ func GetSecretParam(name string) (string, error) {
 	roleName, err := GetRoleName()
 	if err != nil {
 		log.GetLogger().Errorln("GetRoleName failed ", "error:", err.Error())
-		return "", errors.New("RoleNameFailed")
+		return "", ErrRoleNameFailed
 	}
 
 	ecs_client, err := oos.NewClientWithEcsRamRole(region, roleName)
 	if err != nil {
 		log.GetLogger().Errorln("NewClientWithEcsRamRole failed:", roleName, " error:", err.Error())
-		return "", errors.New("NewClientWithEcsRamRoleFailed")
+		return "", ErrParameterStoreNotAccessible
 	}
 
 	// GetSecretParameter
@@ -38,7 +36,7 @@ func GetSecretParam(name string) (string, error) {
 	response, err := ecs_client.GetSecretParameter(request)
 	if err != nil {
 		log.GetLogger().Errorln("GetSecretParameter failed:", roleName, " error:", err.Error())
-		return "", errors.New("ParameterFailed")
+		return "", ErrParameterFailed
 	}
 
 	value := response.Parameter.Value
@@ -51,13 +49,13 @@ func GetParam(name string) (string, error) {
 	roleName, err := GetRoleName()
 	if err != nil {
 		log.GetLogger().Errorln("GetRoleName failed ", "error:", err.Error())
-		return "", errors.New("RoleNameFailed")
+		return "", ErrRoleNameFailed
 	}
 
 	ecs_client, err := oos.NewClientWithEcsRamRole(region, roleName)
 	if err != nil {
 		log.GetLogger().Errorln("NewClientWithEcsRamRole failed:", roleName, " error:", err.Error())
-		return "", errors.New("NewClientWithEcsRamRoleFailed")
+		return "", ErrParameterStoreNotAccessible
 	}
 
 	request := oos.CreateGetParameterRequest()
@@ -67,7 +65,7 @@ func GetParam(name string) (string, error) {
 	response, err := ecs_client.GetParameter(request)
 	if err != nil {
 		log.GetLogger().Errorln("GetParameter failed:", roleName, " error:", err.Error())
-		return "", errors.New("ParameterFailed")
+		return "", ErrParameterFailed
 	}
 
 	value := response.Parameter.Value

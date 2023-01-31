@@ -101,7 +101,7 @@ func GetPluginListService() string {
 
 func GetPluginHealthService() string {
 	url := "https://" + GetServerHost()
-	url += "/luban/api/v1/plugin/status"
+	url += "/luban/api/v1/plugin/report_status"
 	return url
 }
 

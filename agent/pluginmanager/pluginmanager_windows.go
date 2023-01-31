@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"unsafe"
 	"errors"
+	"strings"
 	"golang.org/x/sys/windows"
 	"github.com/aliyun/aliyun_assist_client/agent/util/process"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
@@ -49,7 +50,6 @@ func NewProcessExitGroup() (ProcessExitGroup, error) {
 }
 
 func (g ProcessExitGroup) Dispose() error {
-	log.GetLogger().Errorf("command done, child processes will be kill by terminate the job object")
 	return windows.CloseHandle(windows.Handle(g))
 }
 
@@ -66,7 +66,11 @@ func syncRunKillGroup(workingDir string, commandName string, commandArguments []
 		return 1, process.Fail, err
 	}
 	defer func() {
-		g.Dispose()
+		log.GetLogger().Infof("syncRunKillGroup: done, workingDir[%s] commandName[%s] commandArguments[%s] timeout[%d]", workingDir, commandName, strings.Join(commandArguments, " "), timeOut)
+		if exitCode != 0 || status != process.Success || err != nil {
+			log.GetLogger().Errorf("syncRunKillGroup: exitCode[%d] status[%d] err[%v], not success, will kill all child process", exitCode, status, err)
+			g.Dispose()
+		}
 	}()
 
 	cmd := exec.Command(commandName, commandArguments...)
@@ -75,7 +79,7 @@ func syncRunKillGroup(workingDir string, commandName string, commandArguments []
 	cmd.Dir = workingDir
 
 	if err = cmd.Start(); err != nil {
-		exitCode = 1
+		exitCode = -1
 		return exitCode, process.Fail, err
 	}
 
@@ -106,12 +110,12 @@ func syncRunKillGroup(workingDir string, commandName string, commandArguments []
 			// Explicitly break select statement in case timer also times out
 			break
 		} else {
-			exitCode = 1
+			exitCode = -1
 			return exitCode, process.Fail, waitProcessResult.err
 		}
 	case <-time.After(time.Duration(timeOut) * time.Second):
 		log.GetLogger().Errorln("Timeout in run command.", commandName)
-		exitCode = 1
+		exitCode = -1
 		status = process.Timeout
 		err = errors.New("timeout")
 	}

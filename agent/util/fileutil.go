@@ -25,7 +25,7 @@ func WriteStringToFile(path string, content string) error {
 	return err
 }
 
-// copy srcPath/* to destPath/, srcPath,destPath need exist
+// 将 srcPath/目录下的文件拷贝到 destPath/目录， srcPath 和 destPath 需要是已经存在的路径，如果 destPath 下存在同名文件将会被覆盖
 func CopyDir(srcPath string, destPath string) error {
 	if !filepath.IsAbs(srcPath) {
 		srcPath, _ = filepath.Abs(srcPath)
