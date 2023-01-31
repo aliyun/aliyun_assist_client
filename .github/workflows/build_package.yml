@@ -51,8 +51,8 @@ jobs:
     - name: Upload file
       uses: actions/upload-artifact@v3
       with:
-        name: files${{ github.GITHUB_SHA }}
-        path: build_result_${{ github.GITHUB_SHA }}
+        name: files${{ github.sha }}
+        path: build_result_${{ github.sha }}
         retention-days: 3
 
 
@@ -66,7 +66,7 @@ jobs:
     - name: Download file
       uses: actions/download-artifact@v3
       with:
-        name: files${{ env.GITHUB_SHA }}
+        name: files${{ github.sha }}
 
     - name: package
       run: |
