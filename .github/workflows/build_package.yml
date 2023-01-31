@@ -26,6 +26,7 @@ jobs:
 
     - name: Build binary
       run: |
+        set -x
         root_dir=$(pwd)
         res_dir=$root_dir/build_result_${GITHUB_SHA}
         mkdir $res_dir
