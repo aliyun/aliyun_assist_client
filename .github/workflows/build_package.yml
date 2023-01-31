@@ -70,8 +70,8 @@ jobs:
 
     - name: package
       run: |
+        set -x
         root_dir=$(pwd)
-        cp files${GITHUB_SHA}/version version
         win_version=$(cat version | grep 'windows ' | awk '{print$2}')
         linux_version=$(cat version | grep 'linux ' | awk '{print$2}')
         linux_arm_version=$(cat version | grep 'linux_arm ' | awk '{print$2}')
@@ -85,9 +85,9 @@ jobs:
         cp ~/packfile/uninstall output/init/uninstall
         cp ~/packfile/clean output/init/clean
         cp ~/packfile/aliyun_installer output/aliyun_installer
-        cp files${GITHUB_SHA}/aliyun-service output/aliyun-service
-        cp files${GITHUB_SHA}/acs-plugin-manager output/acs-plugin-manager
-        cp files${GITHUB_SHA}/aliyun_assist_update output/aliyun_assist_update
+        cp aliyun-service output/aliyun-service
+        cp acs-plugin-manager output/acs-plugin-manager
+        cp aliyun_assist_update output/aliyun_assist_update
 
         mkdir -p deb/usr/local/share/aliyun-assist/$version
         cp -r output/* deb/usr/local/share/aliyun-assist/$version
