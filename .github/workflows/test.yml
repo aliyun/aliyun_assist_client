@@ -1,0 +1,19 @@
+on:
+  push:
+    branches: ["release"]
+  pull_request:
+    branches: ["release"]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  build:
+    name: build
+    runs-on: ["self-hosted", "macOS"]
+    steps:
+
+      - name: Build binary
+        run: |
+          echo "the githash is ${GITHUB_SHA}"
