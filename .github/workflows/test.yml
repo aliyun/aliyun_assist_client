@@ -9,11 +9,15 @@ permissions:
   pull-requests: write
 
 jobs:
-  build:
-    name: build
+  testRun:
+    name: testRun
     runs-on: ["self-hosted", "mac"]
     steps:
 
-      - name: Test Runner
+      - name: Step One
         run: |
-          echo "the githash is ${GITHUB_SHA}"
+          echo "this is step 1"
+
+      - name: Step Two
+        run: |
+          echo "this is step 2"
