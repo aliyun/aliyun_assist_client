@@ -11,7 +11,7 @@ permissions:
 jobs:
   build:
     name: build
-    runs-on: ["self-hosted", "macOS"]
+    runs-on: ["self-hosted", "mac"]
     steps:
 
       - name: Build binary
