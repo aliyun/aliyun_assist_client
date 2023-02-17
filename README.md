@@ -19,7 +19,7 @@ For example, you can create a command using aliyun openapi, then select some vir
 -   RedHat
 -   SUSE Linux Enterprise Server
 -   OpenSUSE
--   Aliyun Linux
+-   Alibaba Cloud Linux
 -   FreeBSD
 -   CoreOS
 
