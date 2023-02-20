@@ -78,6 +78,7 @@ jobs:
           echo "linux_arm_version=$linux_arm_version" >> $GITHUB_ENV
 
           version=$linux_version
+          rm -rf output
           mkdir -p output/init
           cp ~/packfile/update_install output/init/install
           cp ~/packfile/uninstall output/init/uninstall
@@ -87,6 +88,7 @@ jobs:
           cp acs-plugin-manager output/acs-plugin-manager
           cp aliyun_assist_update output/aliyun_assist_update
 
+          rm -rf dec
           mkdir -p deb/usr/local/share/aliyun-assist/$version
           cp -r output/* deb/usr/local/share/aliyun-assist/$version
           echo "$version" > deb/usr/local/share/aliyun-assist/version
@@ -94,6 +96,7 @@ jobs:
           fpm -s dir -t deb -n aliyun_assist -v $version -a all --vendor 'Aliyun Software Foundation' --description 'aliyun assist client' -p aliyun-assist_$version.deb --license 'GPL' -C ./ --after-install usr/local/share/aliyun-assist/$version/init/install --before-remove usr/local/share/aliyun-assist/$version/init/uninstall --after-remove usr/local/share/aliyun-assist/$version/init/clean
           cd ..
 
+          rm -rf rpm
           mkdir -p rpm/usr/local/share/aliyun-assist/$version
           cp -r output/* rpm/usr/local/share/aliyun-assist/$version
           echo "$version" > rpm/usr/local/share/aliyun-assist/version
