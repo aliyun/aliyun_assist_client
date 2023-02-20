@@ -130,7 +130,7 @@ func execute(ctx *cli.Context, args []string) error {
 
 func checkEndpoint() {
 	if hostServer := util.GetServerHost(); hostServer == "" {
-		fmt.Print("CheckEndPoint " + pm.CHECK_ENDPOINT_FAIL_STR + "Could not find a endpoint to connect server.")
+		fmt.Print("CheckEndPoint " + pm.ErrorStrMap[pm.CHECK_ENDPOINT_FAIL] + "Could not find a endpoint to connect server.")
 		os.Exit(pm.CHECK_ENDPOINT_FAIL)
 	}
 }

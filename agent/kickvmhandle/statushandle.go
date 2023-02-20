@@ -41,7 +41,6 @@ func (h *StatusHandle) DoAction() error {
 	} else {
 		return errors.New("no action found")
 	}
-	return nil
 }
 
 func (h *StatusHandle) CheckAction() bool {

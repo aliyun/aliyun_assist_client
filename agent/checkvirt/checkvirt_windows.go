@@ -3,6 +3,7 @@ package checkvirt
 import (
 	"errors"
 	"fmt"
+	"path"
 	"strconv"
 	"syscall"
 	"unsafe"
@@ -10,6 +11,7 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/timermanager"
+	"golang.org/x/sys/windows"
 )
 
 const (
@@ -137,22 +139,34 @@ func CheckVirtIoVersion(Index int) (error, bool) {
 }
 
 func doCheck() {
-	viostor, err := GetFileVersion("C:\\Windows\\System32\\drivers\\viostor.sys")
+	system32, err := windows.GetSystemDirectory()
 	if err != nil {
-		log.GetLogger().Infoln("get viostor.sys version failed,err=", err.Error())
+		system32 = "C:\\Windows\\System32"
 	}
-	netkvm, err := GetFileVersion("C:\\Windows\\System32\\drivers\\netkvm.sys")
-	if err != nil {
-		log.GetLogger().Infoln("get netkvm.sys version failed,err=", err.Error())
+	driversDir := path.Join(system32, "drivers")
+	driversVersionMap := map[string]WinVersion{
+		"viostor.sys": WinVersion{},
+		"netkvm.sys":  WinVersion{},
+		"vioser.sys":  WinVersion{},
+		"AliNVMe.sys": WinVersion{},
 	}
-	vioser, err := GetFileVersion("C:\\Windows\\System32\\drivers\\vioser.sys")
-	if err != nil {
-		log.GetLogger().Infoln("get vioser.sys version failed,err=", err.Error())
+	for key, _ := range driversVersionMap {
+		ver, err := GetFileVersion(path.Join(driversDir, key))
+		if err != nil {
+			log.GetLogger().Infof("get %s version failed,err=%s", key, err.Error())
+		} else {
+			driversVersionMap[key] = ver
+		}
 	}
+	viostor := driversVersionMap["viostor.sys"]
+	netkvm := driversVersionMap["netkvm.sys"]
+	vioser := driversVersionMap["vioser.sys"]
+	AliNVMe := driversVersionMap["AliNVMe.sys"]
 	metrics.GetVirtioVersionEvent(
 		"viostor", fmt.Sprintf("%d.%d.%d.%d", viostor.Major, viostor.Minor, viostor.Patch, viostor.Build),
 		"netkvm", fmt.Sprintf("%d.%d.%d.%d", netkvm.Major, netkvm.Minor, netkvm.Patch, netkvm.Build),
 		"vioser", fmt.Sprintf("%d.%d.%d.%d", vioser.Major, vioser.Minor, vioser.Patch, vioser.Build),
+		"AliNVMe", fmt.Sprintf("%d.%d.%d.%d", AliNVMe.Major, AliNVMe.Minor, AliNVMe.Patch, AliNVMe.Build),
 	).ReportEvent()
 }
 

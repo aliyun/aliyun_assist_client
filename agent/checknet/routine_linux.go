@@ -87,7 +87,7 @@ func _doNetcheck(requestType NetcheckRequestType) {
 
 	logger.WithFields(logrus.Fields{
 		"requestType": requestType,
-	}).Infoln("Invoke netcheck program in reponse to checknet request")
+	}).Infoln("Invoke netcheck program in response to checknet request")
 	resultCode, err := invokeNetcheck()
 	if err != nil {
 		logger.WithError(err).Errorln("Failed to invoke netcheck program")

@@ -1,6 +1,6 @@
 package util
 
-// Copyright (c) 2017-2018 Alibaba Group Holding Limited.
+// Copyright (c) 2017-2022 Alibaba Group Holding Limited.
 
 func GetUpdateService() string {
 	url := "https://" + GetServerHost()

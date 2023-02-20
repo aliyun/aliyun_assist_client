@@ -56,7 +56,7 @@ func parseOptions() Options {
 	pflag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [options]\n", os.Args[0])
 		fmt.Fprintln(os.Stderr)
-		fmt.Fprintln(os.Stderr, "Aliyun Assist Copyright (c) 2017-2020 Alibaba Group Holding Limited")
+		fmt.Fprintln(os.Stderr, "Aliyun Assist Copyright (c) 2017-2022 Alibaba Group Holding Limited")
 		fmt.Fprintln(os.Stderr)
 		fmt.Fprintln(os.Stderr, "Options:")
 		pflag.PrintDefaults()
