@@ -1,6 +1,7 @@
 package channel
 
 import (
+	"math/rand"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,6 +11,8 @@ import (
 
 	"bou.ke/monkey"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/google/uuid"
+
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
 )
@@ -83,6 +86,8 @@ func TestGshellChannel(t *testing.T) {
 	_gshellChannel.StopChannel()
 }
 
+var defaultLetters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
 func TestWSChannel(t *testing.T) {
 	channel := NewWebsocketChannel(OnRecvMsg)
 	channel.IsSupported()
@@ -100,7 +105,13 @@ func TestWSChannel(t *testing.T) {
 			os.Remove(instance_path)
 		}
 	}()
-
+	guard := monkey.Patch(uuid.New, func() uuid.UUID {
+		uuid := [16]byte{}
+		for i := range uuid {
+			uuid[i] = defaultLetters[rand.Intn(len(defaultLetters))]
+		}
+		return uuid
+	})
 	channel.StartChannel()
 	if wschannel, ok := channel.(*WebSocketChannel); ok {
 		wschannel.SwitchChannel()
@@ -108,4 +119,5 @@ func TestWSChannel(t *testing.T) {
 	}
 	time.Sleep(time.Duration(500) * time.Microsecond)
 	channel.StopChannel()
+	guard.Unpatch()
 }

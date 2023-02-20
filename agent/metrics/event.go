@@ -28,6 +28,7 @@ const (
 	EVENT_BASE_STARTUP      MetricsEventID = "agent.startup"
 	EVENT_BASE_VIRTIO       MetricsEventID = "agent.virtio"
 	EVENT_KDUMP             MetricsEventID = "agent.kdump"
+	EVENT_PLUGIN_EXECUTE    MetricsEventID = "agent.plugin.execute"
 
 	// event category
 	EVENT_CATEGORY_CHANNEL EventCategory = "CHANNEL"
@@ -39,6 +40,7 @@ const (
 	EVENT_CATEGORY_STARTUP EventCategory = "STARTUP"
 	EVENT_CATEGORY_VIRTIO  EventCategory = "VIRTIO"
 	EVENT_CATEGORY_KDUMP   EventCategory = "KDUMP"
+	EVENT_CATEGORY_PLUGIN  EventCategory = "PLUGIN"
 
 	// event subcategory
 	EVENT_SUBCATEGORY_CHANNEL_GSHELL    EventSubCategory = "gshell"
@@ -89,6 +91,17 @@ func (m *MetricsEvent) ReportEvent() {
 	go func() {
 		doReport(url, string(payload))
 	}()
+}
+
+// 同步上报事件，acs-plugin-manager上报时使用该方法
+func (m *MetricsEvent) ReportEventSync() {
+	payload, err := json.Marshal(m)
+	if err != nil {
+		log.GetLogger().Errorf("metrics json.Marshal err: %s", err.Error())
+		return
+	}
+	url := util.GetMetricsService()
+	util.HttpPost(url, string(payload), "")
 }
 
 func doReport(url, payload string) {
@@ -296,6 +309,18 @@ func GetKdumpServiceStatusEvent(keywords ...string) *MetricsEvent {
 	event := &MetricsEvent{
 		EventId:    EVENT_KDUMP,
 		Category:   EVENT_CATEGORY_KDUMP,
+		EventLevel: EVENT_LEVEL_INFO,
+		EventTime:  time.Now().UnixNano() / 1e6,
+		Common:     getCommonInfoStr(),
+		KeyWords:   genKeyWordsStr(keywords...),
+	}
+	return event
+}
+
+func GetPluginExecuteEvent(keywords ...string) *MetricsEvent {
+	event := &MetricsEvent{
+		EventId:    EVENT_PLUGIN_EXECUTE,
+		Category:   EVENT_CATEGORY_PLUGIN,
 		EventLevel: EVENT_LEVEL_INFO,
 		EventTime:  time.Now().UnixNano() / 1e6,
 		Common:     getCommonInfoStr(),

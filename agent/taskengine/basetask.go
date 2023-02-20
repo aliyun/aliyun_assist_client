@@ -17,7 +17,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
-	"github.com/aliyun/aliyun_assist_client/agent/taskengine/cri"
+	"github.com/aliyun/aliyun_assist_client/agent/taskengine/container"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/host"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/models"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/parameters"
@@ -40,7 +40,7 @@ type Task struct {
 	scheduleLocation     *time.Location
 	onFinish             FinishCallback
 
-	processer               TaskProcessor
+	processer               models.TaskProcessor
 	startTime               time.Time
 	endTime                 time.Time
 	monotonicStartTimestamp int64
@@ -59,15 +59,18 @@ func NewTask(taskInfo models.RunTaskInfo, scheduleLocation *time.Location, onFin
 		timeout = 3600
 	}
 
-	var processor TaskProcessor
+	var processor models.TaskProcessor
 	if taskInfo.ContainerId != "" || taskInfo.ContainerName != "" {
-		processor = &cri.CRIProcessor{
+		processor = container.DetectContainerProcessor(&container.ContainerCommandOptions{
 			TaskId: taskInfo.TaskId,
-			ContainerIdentifier: taskInfo.ContainerId,
+			ContainerId: taskInfo.ContainerId,
 			ContainerName: taskInfo.ContainerName,
 			CommandType: taskInfo.CommandType,
 			Timeout: timeout,
-		}
+
+			WorkingDirectory: taskInfo.WorkingDir,
+			Username: taskInfo.Username,
+		})
 	} else {
 		processor = &host.HostProcessor{
 			TaskId: taskInfo.TaskId,

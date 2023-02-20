@@ -21,7 +21,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/cli"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -118,13 +118,13 @@ func TestLoadProfile(t *testing.T) {
 		}
 	}
 	//testcase 1
-	p, err := LoadProfile(GetConfigPath()+"/"+configFile, "")
+	p, err := LoadProfile(GetConfigPath2(), "")
 	assert.Nil(t, err)
 	p.parent = nil
 	assert.Equal(t, Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, p)
 
 	//testcase 2
-	_, err = LoadProfile(GetConfigPath()+"/"+configFile, "hello")
+	_, err = LoadProfile(GetConfigPath2(), "hello")
 	assert.EqualError(t, err, "unknown profile hello, run configure to check")
 
 	//LoadCurrentProfile testcase
@@ -141,7 +141,7 @@ func TestLoadProfile(t *testing.T) {
 		}
 	}
 	w.Reset()
-	p, err = LoadProfile(GetConfigPath()+"/"+configFile, "")
+	p, err = LoadProfile(GetConfigPath2(), "")
 	assert.Empty(t, p)
 	assert.EqualError(t, err, "init config failed error")
 }
@@ -217,7 +217,8 @@ func TestSaveConfiguration(t *testing.T) {
 	assert.Nil(t, err)
 	err = SaveConfiguration(conf)
 	assert.Nil(t, err)
-	file, err := os.Open(GetConfigPath() + "/" + configFile)
+	filePath := GetConfigPath2()
+	file, err := os.Open(filePath)
 	assert.Nil(t, err)
 	buf := make([]byte, 1024)
 	n, _ := file.Read(buf)
@@ -240,7 +241,7 @@ func TestLoadConfiguration(t *testing.T) {
 	w := new(bytes.Buffer)
 
 	//testcase 1
-	cf, err := LoadConfiguration(GetConfigPath() + "/" + configFile)
+	cf, err := LoadConfiguration(GetConfigPath2())
 	assert.Nil(t, err)
 	assert.Equal(t, &Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: "AK", OutputFormat: "json", Language: "en"}}}, cf)
 	conf := &Configuration{Profiles: []Profile{Profile{Language: "en", Name: "default", Mode: "AK", AccessKeyId: "access_key_id", AccessKeySecret: "access_key_secret", RegionId: "cn-hangzhou", OutputFormat: "json"}}}
@@ -249,7 +250,7 @@ func TestLoadConfiguration(t *testing.T) {
 
 	//testcase 2
 	w.Reset()
-	cf, err = LoadConfiguration(GetConfigPath() + "/" + configFile)
+	cf, err = LoadConfiguration(GetConfigPath2())
 	assert.Equal(t, &Configuration{CurrentProfile: "", Profiles: []Profile{Profile{Name: "default", Mode: "AK", AccessKeyId: "access_key_id", AccessKeySecret: "access_key_secret", RegionId: "cn-hangzhou", OutputFormat: "json", Language: "en"}}}, cf)
 	assert.Nil(t, err)
 

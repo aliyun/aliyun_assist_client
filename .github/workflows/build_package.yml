@@ -1,0 +1,117 @@
+on:
+  push:
+    branches: ["release"]
+  pull_request:
+    branches: ["release"]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Prepare golang env
+        uses: actions/setup-go@v3
+        with:
+          go-version: "1.17.x"
+          cache: true
+
+      - name: Vendor
+        run: go mod vendor
+
+      - name: Build binary
+        run: |
+          set -x
+          root_dir=$(pwd)
+          res_dir=$root_dir/build_result_${GITHUB_SHA}
+          mkdir $res_dir
+          win_version=$(cat version | grep 'windows ' | awk '{print$2}')
+          linux_version=$(cat version | grep 'linux ' | awk '{print$2}')
+          linux_arm_version=$(cat version | grep 'linux_arm ' | awk '{print$2}')
+          cp version $res_dir/
+          GOOS=windows GOARCH=amd64 go build -v -o $res_dir/aliyun_assist_service.exe -ldflags "-X main.assistVer=$win_version -X main.gitHash=${GITHUB_SHA}"
+          GOOS=linux GOARCH=386 go build -v -o $res_dir/aliyun-service -ldflags "-X main.assistVer=$linux_version -X main.gitHash=${GITHUB_SHA}"
+          GOOS=linux GOARCH=arm64 go build -v -o $res_dir/aliyun-service-arm -ldflags "-X main.assistVer=$linux_arm_version -X main.gitHash=${GITHUB_SHA}"
+
+          cd update
+          GOOS=windows GOARCH=amd64 go build -v -o $res_dir/aliyun_assist_update.exe -ldflags "-X main.assistVer=$win_version -X main.gitHash=${GITHUB_SHA}"
+          GOOS=linux GOARCH=386 go build -v -o $res_dir/aliyun_assist_update -ldflags "-X main.assistVer=$linux_version -X main.gitHash=${GITHUB_SHA}"
+          GOOS=linux GOARCH=arm64 go build -v -o $res_dir/aliyun_assist_update-arm -ldflags "-X main.assistVer=$linux_arm_version -X main.gitHash=${GITHUB_SHA}"
+
+          cd $root_dir
+          cd agent/pluginmanager/acspluginmanager/main
+          GOOS=windows GOARCH=amd64 go build -v -o $res_dir/acs-plugin-manager.exe  -ldflags "-X main.assistVer=$win_version -X main.gitHash=${GITHUB_SHA}"
+          GOOS=linux GOARCH=386 go build -v -o $res_dir/acs-plugin-manager -ldflags "-X main.assistVer=$linux_version -X main.gitHash=${GITHUB_SHA}"
+          GOOS=linux GOARCH=arm64 go build -v -o $res_dir/acs-plugin-manager-arm -ldflags "-X main.assistVer=$linux_arm_version -X main.gitHash=${GITHUB_SHA}"
+
+      - name: Upload file
+        uses: actions/upload-artifact@v3
+        with:
+          name: binary-files_${{ github.sha }}
+          path: build_result_${{ github.sha }}
+          retention-days: 3
+
+  package:
+    name: package
+    needs: build
+    runs-on: [self-hosted, Linux]
+    steps:
+      - name: Download file
+        uses: actions/download-artifact@v3
+        with:
+          name: binary-files_${{ github.sha }}
+
+      - name: package
+        run: |
+          set -x
+          root_dir=$(pwd)
+          win_version=$(cat version | grep 'windows ' | awk '{print$2}')
+          linux_version=$(cat version | grep 'linux ' | awk '{print$2}')
+          linux_arm_version=$(cat version | grep 'linux_arm ' | awk '{print$2}')
+          echo "win_version=$win_version" >> $GITHUB_ENV
+          echo "linux_version=$linux_version" >> $GITHUB_ENV
+          echo "linux_arm_version=$linux_arm_version" >> $GITHUB_ENV
+
+          version=$linux_version
+          rm -rf output
+          mkdir -p output/init
+          cp ~/packfile/update_install output/init/install
+          cp ~/packfile/uninstall output/init/uninstall
+          cp ~/packfile/clean output/init/clean
+          cp ~/packfile/aliyun_installer output/aliyun_installer
+          cp aliyun-service output/aliyun-service
+          cp acs-plugin-manager output/acs-plugin-manager
+          cp aliyun_assist_update output/aliyun_assist_update
+
+          rm -rf deb
+          mkdir -p deb/usr/local/share/aliyun-assist/$version
+          cp -r output/* deb/usr/local/share/aliyun-assist/$version
+          echo "$version" > deb/usr/local/share/aliyun-assist/version
+          cd deb
+          fpm -s dir -t deb -n aliyun_assist -v $version -a all --vendor 'Aliyun Software Foundation' --description 'aliyun assist client' -p aliyun-assist_$version.deb --license 'GPL' -C ./ --after-install usr/local/share/aliyun-assist/$version/init/install --before-remove usr/local/share/aliyun-assist/$version/init/uninstall --after-remove usr/local/share/aliyun-assist/$version/init/clean
+          cd ..
+
+          rm -rf rpm
+          mkdir -p rpm/usr/local/share/aliyun-assist/$version
+          cp -r output/* rpm/usr/local/share/aliyun-assist/$version
+          echo "$version" > rpm/usr/local/share/aliyun-assist/version
+          cd rpm
+          fpm -s dir -t rpm -n aliyun_assist -v $version -a i686 --vendor 'Aliyun Software Foundation' --description 'aliyun assist client' -p aliyun-assist_$version.rpm --license 'GPL' -C ./ --after-install usr/local/share/aliyun-assist/$version/init/install --before-remove usr/local/share/aliyun-assist/$version/init/uninstall --after-remove usr/local/share/aliyun-assist/$version/init/clean
+
+      - name: Upload package
+        uses: actions/upload-artifact@v3
+        with:
+          name: aliyun-assist_${{ env.linux_version }}.deb
+          path: deb/aliyun-assist_${{ env.linux_version }}.deb
+          retention-days: 3
+      - name: Upload package
+        uses: actions/upload-artifact@v3
+        with:
+          name: aliyun-assist_${{ env.linux_version }}.rpm
+          path: rpm/aliyun-assist_${{ env.linux_version }}.rpm
+          retention-days: 3

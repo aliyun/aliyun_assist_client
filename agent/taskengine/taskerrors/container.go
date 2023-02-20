@@ -49,7 +49,7 @@ func NewContainerNotFoundError() NormalizedValidationError {
 func NewContainerStateAbnormalError(currentState string) NormalizedValidationError {
 	return &normalizedValidationErrorImpl{
 		category: "ContainerStateAbnormal",
-		cause: fmt.Errorf("The state of the specified container is abnormal. Current state is %s"),
+		cause: fmt.Errorf("The state of the specified container is abnormal. Current state is %s", currentState),
 	}
 }
 
@@ -63,6 +63,13 @@ func NewContainerConnectError(cause error) NormalizedValidationError {
 func NewContainerRuntimeInternalError(cause error) NormalizedExecutionError {
 	return &normalizedExecutionErrorImpl{
 		code: "ContainerRuntimeInternalError",
+		cause: cause,
+	}
+}
+
+func NewContainerRuntimeTimeoutError(cause error) NormalizedExecutionError {
+	return &normalizedExecutionErrorImpl{
+		code: "ContainerRuntimeTimeout",
 		cause: cause,
 	}
 }
