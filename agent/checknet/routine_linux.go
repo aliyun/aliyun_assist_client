@@ -37,7 +37,7 @@ func init() {
 	_refreshingReportLock = heavylock.NewCASMutex()
 }
 
-// RequestNetcheck would asynchronusly invoke netcheck program for network
+// RequestNetcheck would asynchronously invoke netcheck program for network
 // diagnostic, when no other network diagnostic is running or the last
 // diagnostic report has outdated.
 func RequestNetcheck(requestType NetcheckRequestType) {
@@ -87,7 +87,7 @@ func _doNetcheck(requestType NetcheckRequestType) {
 
 	logger.WithFields(logrus.Fields{
 		"requestType": requestType,
-	}).Infoln("Invoke netcheck program in response to checknet request")
+	}).Infoln("Invoke netcheck program in response to netcheck request")
 	resultCode, err := invokeNetcheck()
 	if err != nil {
 		logger.WithError(err).Errorln("Failed to invoke netcheck program")
@@ -129,7 +129,7 @@ func RecentReport() *CheckReport {
 		return nil
 	}
 
-	// NOTE: Thanks to to serial feature of gshell channel, RecentReport() would
+	// NOTE: Thanks to serial feature of gshell channel, RecentReport() would
 	// never be called concurrently and _forceToReportResponses counter should
 	// never become less than zero due to parallel decreasing actions more than
 	// available response count.
