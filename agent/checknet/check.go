@@ -25,7 +25,7 @@ func invokeNetcheck() (int, error) {
 
 	netcheckPath := getNetcheckPath()
 	if netcheckPath == "" {
-		return 0, errors.New("Failed to find netcheck exectuable")
+		return 0, errors.New("Failed to find netcheck executable")
 	}
 
 	args := []string{"--vpc", "--fast-fail"}
