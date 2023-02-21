@@ -149,7 +149,6 @@ func (p *ShellPlugin) SetSize(ws_col, ws_row uint32) (err error) {
 }
 
 func (p *ShellPlugin) InputStreamMessageHandler(streamDataMessage message.Message) error {
-	log.GetLogger().Println("InputStreamMessageHandler")
 	if p.stdin == nil || p.stdout == nil {
 		// This is to handle scenario when cli/console starts sending size data but pty has not been started yet
 		// Since packets are rejected, cli/console will resend these packets until pty starts successfully in separate thread

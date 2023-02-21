@@ -19,6 +19,7 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/hybrid"
 	"github.com/aliyun/aliyun_assist_client/agent/install"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/agent/ipc/server"
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	"github.com/aliyun/aliyun_assist_client/agent/perfmon"
 	"github.com/aliyun/aliyun_assist_client/agent/pluginmanager"
@@ -336,6 +337,7 @@ func (p *program) run() {
 	} else {
 		log.GetLogger().Infoln("Start StartKdumpCheckTimer")
 	}
+	server.StartService()
 
 	// Finally, fetching tasks could be allowed and agent starts to run normally.
 	taskengine.EnableFetchingTask()

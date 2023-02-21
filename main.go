@@ -24,6 +24,7 @@ func main() {
 	ctx.SetCompletion(cli.ParseCompletionForShell())
 
 	rootCmd.AddSubCommand(&listContainersCmd)
+	rootCmd.AddSubCommand(&dataEncryptionCmd)
 
 	rootCmd.Execute(ctx, os.Args[1:])
 }

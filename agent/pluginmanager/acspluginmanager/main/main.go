@@ -91,6 +91,7 @@ func execute(ctx *cli.Context, args []string) error {
 	}
 
 	if plugin != "" {
+		single.SetPidFile("/var/tmp/acs-plugin-manager.pid")
 		SingleAppLock = single.New(plugin)
 		if err := SingleAppLock.CheckLock(); err != nil && err == single.ErrAlreadyRunning {
 			fmt.Println("exit by another plugin process is running")

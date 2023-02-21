@@ -7,6 +7,11 @@ import (
 )
 
 func (f *CustomLogrusTextFormatter) Format(entry *logrus.Entry) ([]byte, error) {
+	if f.Fileds != nil {
+		for k, v := range f.Fileds {
+			entry.Data[k] = v
+		}
+	}
 	logrusTextFormatted, err := f.LogrusTextFormatter.Format(entry)
 	if logrusTextFormatted != nil && len(logrusTextFormatted) > 0 {
 		logrusTextFormatted[len(logrusTextFormatted) - 1] = '\r'

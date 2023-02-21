@@ -3,10 +3,10 @@ package pluginmanager
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io/ioutil"
 	"math/rand"
 	"os"
-	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -14,8 +14,11 @@ import (
 	"time"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/agent/metrics"
+	"github.com/aliyun/aliyun_assist_client/agent/taskengine/timermanager"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/util/jsonutil"
+	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
 )
 
 /*
@@ -37,94 +40,66 @@ import (
 var (
 	pluginHealthScanInterval  = 15 * 60 // 通过常驻插件的 --status 接口获取插件状态的时间间隔
 	pluginHealthPullInterval  = 5 * 60  // 通过读取常驻插件心跳时间戳判断插件状态的时间间隔
-	avoidTime = 60 // 单位秒， pluginHealthPull 与 pluginHealthScan 的相距时间需要大于avoidTime，避免短时间内重复上报
+	avoidTime                 = 60      // 单位秒， pluginHealthPull 与 pluginHealthScan 的相距时间需要大于avoidTime，避免短时间内重复上报
 	lastPluginHealthCheckTime int64     // 记录上一次插件状态检查的时间，避免两种插件状态上报方式同时上报
 	pluginHealthCheckTimeMut  sync.Mutex
-	lazyReport bool
-	lastPluginStatusRecord = map[string]string{}
+	lazyReport                bool
+	lastPluginStatusRecord    = map[string]string{}
 
 	// pluginUpdateCheckIntervalSeconds 插件检查升级的间隔时间
 	pluginUpdateCheckIntervalSeconds = 15 * 60
+
+	pluginListReportInterval = 3600 * 24
 )
 
 var (
-	pluginHealthScanTimer *time.Timer
-	pluginHealthPullTimer *time.Timer
-
+	pluginHealthScanTimer *timermanager.Timer
+	pluginHealthPullTimer *timermanager.Timer
+	pluginListReportTimer *timermanager.Timer
 	pluginUpdateTimer *time.Timer
 )
 
-func loadIntervalConf() {
-	// 读取配置文件，如果有就读取并设置相关变量。用来测试的
-	cpath, _ := os.Executable()
-	dir, _ := filepath.Abs(filepath.Dir(cpath))
-	intervalPath := path.Join(dir, "config", "PluginCheckInterval")
-	content, err := ioutil.ReadFile(intervalPath)
-	if err != nil {
-		return
-	}
-	contentStr := string(content)
-	/*
-		pluginHealthScanInterval=60,
-		pluginHealthPullInterval=60,
-		pluginUpdateCheckIntervalSeconds=60
-	*/
-	pvsList := strings.Split(contentStr, ",")
-	for _, pvs := range pvsList {
-		pvs = strings.TrimSpace(pvs)
-		if len(pvs) == 0 {
-			continue
-		}
-		pv := strings.Split(pvs, "=")
-		if len(pv) != 2 {
-			continue
-		}
-		interval, err := strconv.Atoi(pv[1])
-		if err != nil {
-			continue
-		}
-		setInterval(pv[0], interval)
-	}
-}
-
-func setInterval(params string, interval int) {
-	// if interval < 60 {
-	// 	interval = 60
-	// }
-	// if interval > 2*60*60 {
-	// 	interval = 2 * 60 * 60
-	// }
-	if params == "pluginHealthScanInterval" {
-		pluginHealthScanInterval = interval
-		log.GetLogger().Infof("pluginHealthScanInterval is init as %d seconds", interval)
-	} else if params == "pluginHealthPullInterval" {
-		pluginHealthPullInterval = interval
-		log.GetLogger().Infof("pluginHealthPullInterval is init as %d seconds", interval)
-	} else if params == "pluginUpdateCheckIntervalSeconds" {
-		pluginUpdateCheckIntervalSeconds = interval
-		log.GetLogger().Infof("pluginUpdateCheckIntervalSeconds is init as %d seconds", interval)
-	}
-}
-
 func InitPluginCheckTimer() {
-	// health check
-	go func() {
-		randSleep := rand.Intn(60 * 1000)
-		pluginHealthScanTimer = time.NewTimer(time.Duration(randSleep) * time.Millisecond)
-		for {
-			_ = <-pluginHealthScanTimer.C
-			pluginHealthCheckScan()
-		}
-	}()
-	go func() {
-		randSleep := rand.Intn(60 * 1000)
-		// 确保pluginHealthCheckScan先上报
-		pluginHealthPullTimer = time.NewTimer(time.Duration(60000 + randSleep) * time.Millisecond)
-		for {
-			_ = <-pluginHealthPullTimer.C
-			pluginHealthCheckPull()
-		}
-	}()
+	var err error
+	loadIntervalConf()
+	timerManager := timermanager.GetTimerManager()
+	if pluginHealthScanTimer, err = timerManager.CreateTimerInSeconds(pluginHealthCheckScan, pluginHealthScanInterval); err != nil {
+		log.GetLogger().Error("InitPluginCheckTimer: pluginHealthScanTimer err: ", err.Error())
+	} else {
+		go func() {
+			// shuffle timer in 1 minutes
+			mills := rand.Intn(60 * 1000)
+			time.Sleep(time.Duration(mills) * time.Millisecond)
+			if _, err = pluginHealthScanTimer.Run(); err != nil {
+				log.GetLogger().Error("InitPluginCheckTimer: pluginHealthScanTimer run err: ", err.Error())
+			}
+		}()
+	}
+	if pluginHealthPullTimer, err = timerManager.CreateTimerInSeconds(pluginHealthCheckPull, pluginHealthPullInterval); err != nil {
+		log.GetLogger().Error("InitPluginCheckTimer: pluginHealthPullTimer err: ", err.Error())
+	} else {
+		go func() {
+			mills := rand.Intn(60 * 1000)
+			// make sure that pluginHealthCheckScan is earlier than pluginHealthPullTimer
+			time.Sleep(time.Duration(60000 + mills) * time.Millisecond)
+			if _, err = pluginHealthPullTimer.Run(); err != nil {
+				log.GetLogger().Error("InitPluginCheckTimer: pluginHealthPullTimer run err: ", err.Error())
+			}
+		}()
+	}
+	if pluginListReportTimer, err = timerManager.CreateTimerInSeconds(pluginLocalListReport, pluginListReportInterval); err != nil {
+		log.GetLogger().Error("InitPluginCheckTimer: pluginListReportTimer err: ", err.Error())
+	} else {
+		go func() {
+			mills := rand.Intn(60 * 1000)
+			time.Sleep(time.Duration(180000 + mills) * time.Millisecond)
+			log.GetLogger().Info("InitPluginCheckTimer:pluginLocalListReport timer run")
+			_, err = pluginListReportTimer.Run()
+			if err != nil {
+				log.GetLogger().Error("InitPluginCheckTimer:pluginLocalListReport timer run err: ", err.Error())
+			}
+		}()
+	}
 	// update check
 	// go func() {
 	// 	randSleep := rand.Intn(60 * 1000)
@@ -142,11 +117,7 @@ func pluginHealthCheckScan() {
 	pluginHealthCheckTimeMut.Lock()
 	lastPluginHealthCheckTime = time.Now().Unix()
 	pluginHealthCheckTimeMut.Unlock()
-
 	log.GetLogger().Info("pluginHealthCheckScan: start")
-	defer func() {
-		pluginHealthScanTimer.Reset(time.Duration(pluginHealthScanInterval) * time.Second)
-	}()
 	// 1.检查插件列表，如果没有插件就不需要健康检查
 	pluginInfoList, err := loadPlugins()
 	if err != nil {
@@ -168,9 +139,9 @@ func pluginHealthCheckScan() {
 		pluginInfoMap[pluginInfo.Name] = &pluginInfo
 		if pluginInfo.PluginType() == PLUGIN_ONCE {
 			pluginStatus := PluginStatus{
-				Name:     pluginInfo.Name,
-				Status:   ONCE_INSTALLED,
-				Version:  pluginInfo.Version,
+				Name:    pluginInfo.Name,
+				Status:  ONCE_INSTALLED,
+				Version: pluginInfo.Version,
 			}
 			if pluginInfo.IsRemoved {
 				pluginStatus.Status = REMOVED
@@ -208,9 +179,9 @@ func pluginHealthCheckScan() {
 
 		for _, pluginInfo := range pluginStatusList {
 			pluginStatus := PluginStatus{
-				Name:     pluginInfo.Name,
-				Version:  pluginInfo.Version,
-				Status:   pluginInfo.Status,
+				Name:    pluginInfo.Name,
+				Version: pluginInfo.Version,
+				Status:  pluginInfo.Status,
 			}
 			// 太长的名称和版本号字段进行截断
 			if len(pluginStatus.Name) > PLUGIN_NAME_MAXLEN {
@@ -222,19 +193,19 @@ func pluginHealthCheckScan() {
 			if pluginInfo.Status != PERSIST_RUNNING && pluginInfo.Status != REMOVED {
 				// // 状态异常的常驻插件本次不上报，acs-plugin-manager调用--start拉起后会单独上报该插件的状态
 				log.GetLogger().Warnf("plugin[%s] is not running, try to start it", pluginInfo.Name)
-				go func() {
+				go func(pluginName string, mp map[string]*PluginInfo) {
 					randSleep := rand.Intn(10 * 1000)
 					time.Sleep(time.Duration(randSleep) * time.Millisecond)
 					command := "acs-plugin-manager"
-					arguments := []string{"-e", "--local", "-P", pluginInfo.Name, "-p", "--start"}
+					arguments := []string{"-e", "--local", "-P", pluginName, "-p", "--start"}
 					timeout := 60
-					if pluginInfoPtr, ok := pluginInfoMap[pluginInfo.Name]; ok && pluginInfoPtr.Timeout != "" {
+					if pluginInfoPtr, ok := mp[pluginName]; ok && pluginInfoPtr.Timeout != "" {
 						if t, err := strconv.Atoi(pluginInfoPtr.Timeout); err == nil {
 							timeout = t
 						}
 					}
 					syncRunKillGroup("", command, arguments, nil, nil, timeout)
-				}()
+				}(pluginInfo.Name, pluginInfoMap)
 			} else {
 				// 状态正常的常驻插件进行上报
 				pluginStatusRequest.Plugin = append(pluginStatusRequest.Plugin, pluginStatus)
@@ -265,12 +236,18 @@ func pluginHealthCheckScan() {
 		return
 	}
 	// 设置下次状态检查周期
-	if pluginStatusResp.PullInterval > 0 {
+	if pluginStatusResp.PullInterval > 0 && pluginStatusResp.PullInterval != pluginHealthPullInterval {
 		pluginHealthPullInterval = pluginStatusResp.PullInterval
 	}
-	if pluginStatusResp.ScanInterval > 0 {
+	if pluginStatusResp.ScanInterval > 0 && pluginStatusResp.ScanInterval != pluginHealthScanInterval {
 		pluginHealthScanInterval = pluginStatusResp.ScanInterval
 	}
+	if err := refreshTimer(pluginHealthScanTimer, pluginHealthScanInterval); err != nil {
+		log.GetLogger().Errorf("pluginHealthCheckScan: refresh pluginHealthScanTimer nextInterval [%d] second failed: %s", pluginHealthScanInterval, err.Error())
+	} else {
+		log.GetLogger().Infof("pluginHealthCheckScan: refresh pluginHealthScanTimer nextInterval [%d] second", pluginHealthScanInterval)
+	}
+
 	if pluginStatusResp.ReportType == NORMAL_REPORT && lazyReport {
 		lazyReport = false
 		log.GetLogger().Info("pluginHealthCheckScan: lazyReport switch to [off]")
@@ -296,14 +273,10 @@ func pluginHealthCheckPull() {
 	pluginHealthCheckTimeMut.Lock()
 	lastTime := lastPluginHealthCheckTime
 	pluginHealthCheckTimeMut.Unlock()
-	defer func() {
-		pluginHealthPullTimer.Reset(time.Duration(pluginHealthPullInterval) * time.Second)
-	}()
-
 	now := time.Now().Unix()
 	needWait := int64(avoidTime) - (now - lastTime)
 	if needWait > 0 {
-		log.GetLogger().Infof("pluginHealthCheckPull: last pluginHealthCheckScan started [%d] seconds ago, need wait [%d] second for avoidTime[%d]", now - lastTime, needWait, avoidTime)
+		log.GetLogger().Infof("pluginHealthCheckPull: last pluginHealthCheckScan started [%d] seconds ago, need wait [%d] second for avoidTime[%d]", now-lastTime, needWait, avoidTime)
 		time.Sleep(time.Duration(needWait) * time.Second)
 		now = time.Now().Unix()
 	}
@@ -351,14 +324,14 @@ func pluginHealthCheckPull() {
 					continue
 				}
 				status := PERSIST_RUNNING
-				if now - timestamp > int64(pluginInfo.HeartbeatInterval + 5) {
+				if now-timestamp > int64(pluginInfo.HeartbeatInterval+5) {
 					status = PERSIST_FAIL
 				}
 				curPluginStatusRecord[pluginInfo.Name] = status
 				pluginStatus := PluginStatus{
-					Name:     pluginInfo.Name,
-					Status:   status,
-					Version:  pluginInfo.Version,
+					Name:    pluginInfo.Name,
+					Status:  status,
+					Version: pluginInfo.Version,
 				}
 				if len(pluginStatus.Name) > PLUGIN_NAME_MAXLEN {
 					pluginStatus.Name = pluginStatus.Name[:PLUGIN_NAME_MAXLEN]
@@ -396,7 +369,7 @@ func pluginHealthCheckPull() {
 			}
 		}
 	}
-	
+
 	if !willReport {
 		return
 	}
@@ -422,6 +395,11 @@ func pluginHealthCheckPull() {
 	// 设置下次状态检查周期
 	if pluginStatusResp.PullInterval > 0 {
 		pluginHealthPullInterval = pluginStatusResp.PullInterval
+	}
+	if err := refreshTimer(pluginHealthPullTimer, pluginHealthPullInterval); err != nil {
+		log.GetLogger().Errorf("pluginHealthCheckPull: refresh pluginHealthPullTimer nextInterval [%d] second failed: %s", pluginHealthPullInterval, err.Error())
+	}  else {
+		log.GetLogger().Infof("pluginHealthCheckPull: refresh pluginHealthPullTimer nextInterval [%d] second", pluginHealthPullInterval)
 	}
 	if pluginStatusResp.ScanInterval > 0 {
 		pluginHealthScanInterval = pluginStatusResp.ScanInterval
@@ -544,6 +522,51 @@ func pluginUpdateCheck() {
 	log.GetLogger().Infof("pluginUpdateCheck success response: %s", resp)
 }
 
+func pluginLocalListReport() {
+	log.GetLogger().Info("pluginLocalListReport: start")
+	pluginInfoList, err := loadPlugins()
+	if err != nil {
+		log.GetLogger().Error("pluginLocalListReport: loadPlugins err: ", err.Error())
+		return
+	}
+	nameList := []string{}
+	versionList := []string{}
+	osList := []string{}
+	archList := []string{}
+	for _, p := range pluginInfoList {
+		if p.IsRemoved {
+			continue
+		}
+		p.OSType = strings.ToLower(p.OSType)
+		p.Arch = strings.ToLower(p.Arch)
+		nameList = append(nameList, p.Name)
+		versionList = append(versionList, p.Version)
+		osList = append(osList, p.OSType)
+		archList = append(archList, p.Arch)
+	}
+	if len(nameList) == 0 {
+		log.GetLogger().Info("pluginLocalListReport: no plugin need to report")
+		return
+	}
+	pluginData := map[string][]string{
+		"name": nameList,
+		"version": versionList,
+		"os": osList,
+		"arch": archList,
+	}
+	pluginDataMarshal, err := json.Marshal(&pluginData)
+	if err != nil {
+		log.GetLogger().Error("pluginLocalListReport: Marshal err: ", err.Error())
+		return
+	}
+	localArch, _ := GetArch()
+	metrics.GetPluginLocalListEvent(
+		"pluginList", string(pluginDataMarshal),
+		"localArch", localArch,
+		"localOsType", osutil.GetOsType(),
+	).ReportEvent()
+}
+
 func parsePluginHealthCheck(content string) (PluginStatusResponse, error) {
 	// 从check_update接口的响应数据中解析出插件升级信息
 	pluginStatusResp := PluginStatusResponse{}
@@ -594,4 +617,14 @@ func getPluginPath() (string, error) {
 	pluginDir += ".." + string(os.PathSeparator) + "plugin"
 	util.MakeSurePath(pluginDir)
 	return pluginDir, nil
+}
+
+func refreshTimer(timer *timermanager.Timer, nextInterval int) error {
+	mutableSchedule, ok := timer.Schedule.(*timermanager.MutableScheduled)
+	if !ok {
+		return errors.New("Unexpected schedule type of heartbeat timer")
+	}
+	mutableSchedule.SetInterval(time.Duration(nextInterval) * time.Second)
+	timer.RefreshTimer()
+	return nil
 }

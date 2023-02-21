@@ -10,7 +10,7 @@ import (
 	"syscall"
 )
 
-const pidFile = "/var/tmp/aliyun-service.pid"
+var pidFile = "/var/tmp/aliyun-service.pid"
 
 // CheckLock tries to obtain an exclude lock on a lockfile and returns an error if one occurs
 func (s *Single) CheckLock() error {
@@ -53,4 +53,8 @@ func (s *Single) TryUnlock() error {
 	}
 	os.Remove(pidFile)
 	return nil
+}
+
+func SetPidFile(path string) {
+	pidFile = path
 }

@@ -157,7 +157,10 @@ func dispatchRunTask(taskInfo models.RunTaskInfo) {
 
 		scheduleLogger.Info("Schedule non-periodic task")
 		// Non-periodic tasks are managed by TaskFactory
-		taskFactory.AddTask(t)
+		if err := taskFactory.AddTask(t); err != nil {
+			scheduleLogger.Error("Add task failed: ", err.Error())
+			return
+		}
 		pool := GetPool()
 		pool.RunTask(func ()  {
 			code, err := t.Run()

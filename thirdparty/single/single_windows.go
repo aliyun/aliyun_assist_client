@@ -42,3 +42,5 @@ func (s *Single) TryUnlock() error {
 	}
 	return nil
 }
+
+func SetPidFile(path string) {}
