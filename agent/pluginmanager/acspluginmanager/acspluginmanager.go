@@ -129,7 +129,7 @@ func printPluginInfo(pluginInfoList *[]PluginInfo) {
 func getPackageInfo(pluginName, version string, withArch bool) ([]PluginInfo, error) {
 	arch := ""
 	if withArch {
-		arch, _ = getArch()
+		arch, _ = GetArch()
 	}
 	postValue := PluginListRequest{
 		OsType:     "linux",
@@ -189,7 +189,7 @@ func getOnlinePluginInfo(packageName, version string) (archMatch *PluginInfo, ar
 	if err != nil {
 		return nil, nil, err
 	}
-	localArch, _ := getArch()
+	localArch, _ := GetArch()
 	for idx, plugin := range pluginList {
 		if plugin.Name == packageName {
 			plugin.Arch = strings.ToLower(plugin.Arch)
@@ -447,7 +447,7 @@ func (pm *PluginManager) executePluginFromFile(file string, paramList []string, 
 	if pm.Verbose {
 		fmt.Println("Execute plugin from file: ", file)
 	}
-	localArch, _ = getArch()
+	localArch, _ = GetArch()
 	exitCode = SUCCESS
 	if !util.CheckFileIsExist(file) {
 		err = errors.New("File not exist: " + file)
@@ -662,7 +662,7 @@ func (pm *PluginManager) executePluginOnlineOrLocal(pluginName string, pluginId 
 			"localOsType", osutil.GetOsType(),
 		).ReportEventSync()
 	}()
-	localArch, _ = getArch()
+	localArch, _ = GetArch()
 	if !local {
 		// didn't set --local, so local & online both try
 		var localInfo *PluginInfo = nil
@@ -697,7 +697,7 @@ func (pm *PluginManager) executePluginOnlineOrLocal(pluginName string, pluginId 
 				if len(onlineOtherArch) == 0 {
 					tip = fmt.Sprintf("Could not found both local and online, package[%s] version[%s]\n", pluginName, pluginVersion)
 				} else {
-					localArch, _ = getArch()
+					localArch, _ = GetArch()
 					tip = fmt.Sprintf("Could not found local package[%s] version[%s], found online package but it`s arch[%s] not match local_arch[%s] \n", pluginName, pluginVersion, strings.Join(onlineOtherArch, ", "), localArch)
 				}
 				err = errors.New("Could not found package")
@@ -893,10 +893,15 @@ func (pm *PluginManager) executePlugin(cmdPath string, paramList []string, timeo
 		processCmd.SetEnv(env)
 	}
 	status := process.Success
+	commandName := cmdPath
+	if filepath.Ext(cmdPath) == ".ps1" {
+		commandName = "powershell"
+		paramList = append([]string{cmdPath}, paramList...)
+	}
 	if quiet {
-		exitCode, status, err = processCmd.SyncRun("", cmdPath, paramList, nil, nil, os.Stdin, nil, timeout)
+		exitCode, status, err = processCmd.SyncRun("", commandName, paramList, nil, nil, os.Stdin, nil, timeout)
 	} else {
-		exitCode, status, err = processCmd.SyncRun("", cmdPath, paramList, os.Stdout, os.Stderr, os.Stdin, nil, timeout)
+		exitCode, status, err = processCmd.SyncRun("", commandName, paramList, os.Stdout, os.Stderr, os.Stdin, nil, timeout)
 	}
 	if status == process.Fail {
 		exitCode = EXECUTE_FAILED
@@ -911,7 +916,7 @@ func (pm *PluginManager) executePlugin(cmdPath string, paramList []string, timeo
 			_, errorCode = errProcess(funcName, EXECUTE_TIMEOUT, err, fmt.Sprintf("Execute plugin timeout, timeout[%d] err: %v", timeout, err))
 		}
 	}
-	log.GetLogger().Info(fmt.Sprintf("executePlugin: cmdPath: %s, params: %+q, exitCode: %d, timeout: %d, env: %v, err: %v\n", cmdPath, paramList, exitCode, timeout, env, err))
+	log.GetLogger().Info(fmt.Sprintf("executePlugin: commandName: %s, params: %+q, exitCode: %d, timeout: %d, env: %v, err: %v\n", commandName, paramList, exitCode, timeout, env, err))
 	return
 }
 
@@ -926,7 +931,7 @@ func (pm *PluginManager) VerifyPlugin(url, params, separator, paramsV2 string) (
 		envPluginDir    string // 当前执行的插件的执行目录
 		envPrePluginDir string // 如果已有同名插件，表示已有同名插件的执行目录；否则为空
 	)
-	localArch, _ := getArch()
+	localArch, _ := GetArch()
 	if paramsV2 != "" {
 		paramList, _ = shlex.Split(paramsV2)
 	} else {

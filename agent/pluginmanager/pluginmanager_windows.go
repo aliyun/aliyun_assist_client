@@ -121,3 +121,11 @@ func syncRunKillGroup(workingDir string, commandName string, commandArguments []
 	}
 	return exitCode, status, err
 }
+
+func GetArch() (formatArch string, rawArch string) {
+	// 云助手的windows版架构只有amd64的
+	formatArch = ARCH_64
+	rawArch = "windows arch"
+	log.GetLogger().Errorf("Get Arch: formatArch[%s] rawArch[%s]: ", formatArch, rawArch)
+	return
+}

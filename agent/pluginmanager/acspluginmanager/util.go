@@ -20,13 +20,6 @@ import (
 
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
-const (
-	ARCH_64 = "x64"
-	ARCH_32 = "x86"
-	ARCH_ARM = "arm"
-	ARCH_UNKNOWN = "unknown"
-)
-
 func init() {
 	// 插件版本号字段定义为string，但是一些插件该字段是int。这个开关打开后能够把json中的int float类型转换成string
 	extra.RegisterFuzzyDecoders()

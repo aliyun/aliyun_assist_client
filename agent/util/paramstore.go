@@ -1,8 +1,10 @@
 package util
 
 import (
+	"fmt"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/oos"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/agent/util/networkcategory"
 )
 
 func GetRoleName() (string, error) {
@@ -19,13 +21,18 @@ func GetSecretParam(name string) (string, error) {
 	roleName, err := GetRoleName()
 	if err != nil {
 		log.GetLogger().Errorln("GetRoleName failed ", "error:", err.Error())
-		return "", ErrRoleNameFailed
+		errMsg := fmt.Sprintf("Get role name failed: %s.", err.Error())
+		return errMsg, ErrRoleNameFailed
 	}
 
 	ecs_client, err := oos.NewClientWithEcsRamRole(region, roleName)
 	if err != nil {
 		log.GetLogger().Errorln("NewClientWithEcsRamRole failed:", roleName, " error:", err.Error())
-		return "", ErrParameterStoreNotAccessible
+		errMsg := fmt.Sprintf("Create new client with ecs ram role %s failed: %s.", roleName, err.Error())
+		return errMsg, ErrParameterStoreNotAccessible
+	}
+	if networkcategory.Get() == networkcategory.NetworkVPC {
+		ecs_client.Network = "vpc"
 	}
 
 	// GetSecretParameter
@@ -36,7 +43,8 @@ func GetSecretParam(name string) (string, error) {
 	response, err := ecs_client.GetSecretParameter(request)
 	if err != nil {
 		log.GetLogger().Errorln("GetSecretParameter failed:", roleName, " error:", err.Error())
-		return "", ErrParameterFailed
+		errMsg := fmt.Sprintf("Get secret parameter '%s' with ecs ram role %s failed: %s.", name, roleName, err.Error())
+		return errMsg, ErrParameterFailed
 	}
 
 	value := response.Parameter.Value
@@ -49,13 +57,18 @@ func GetParam(name string) (string, error) {
 	roleName, err := GetRoleName()
 	if err != nil {
 		log.GetLogger().Errorln("GetRoleName failed ", "error:", err.Error())
-		return "", ErrRoleNameFailed
+		errMsg := fmt.Sprintf("Get role name failed: %s.", err.Error())
+		return errMsg, ErrRoleNameFailed
 	}
 
 	ecs_client, err := oos.NewClientWithEcsRamRole(region, roleName)
 	if err != nil {
 		log.GetLogger().Errorln("NewClientWithEcsRamRole failed:", roleName, " error:", err.Error())
-		return "", ErrParameterStoreNotAccessible
+		errMsg := fmt.Sprintf("Create new client with ecs ram role %s failed: %s.", roleName, err.Error())
+		return errMsg, ErrParameterStoreNotAccessible
+	}
+	if networkcategory.Get() == networkcategory.NetworkVPC {
+		ecs_client.Network = "vpc"
 	}
 
 	request := oos.CreateGetParameterRequest()
@@ -65,7 +78,8 @@ func GetParam(name string) (string, error) {
 	response, err := ecs_client.GetParameter(request)
 	if err != nil {
 		log.GetLogger().Errorln("GetParameter failed:", roleName, " error:", err.Error())
-		return "", ErrParameterFailed
+		errMsg := fmt.Sprintf("Get parameter '%s' with ecs ram role %s failed: %s.", name, roleName, err.Error())
+		return errMsg, ErrParameterFailed
 	}
 
 	value := response.Parameter.Value

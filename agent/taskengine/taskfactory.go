@@ -1,7 +1,10 @@
 package taskengine
 
 import (
+	"errors"
 	"sync"
+
+	"github.com/aliyun/aliyun_assist_client/agent/log"
 )
 
 var taskFactory *TaskFactory
@@ -25,14 +28,19 @@ func GetTaskFactory() *TaskFactory {
 	return taskFactory
 }
 
-func (t *TaskFactory) AddTask(task *Task) {
-	t.AddNamedTask(task.taskInfo.TaskId, task)
+func (t *TaskFactory) AddTask(task *Task) error {
+	return t.AddNamedTask(task.taskInfo.TaskId, task)
 }
 
-func (t *TaskFactory) AddNamedTask(name string, task *Task) {
+func (t *TaskFactory) AddNamedTask(name string, task *Task) error {
 	t.m.Lock()
 	defer t.m.Unlock()
+	if _, ok := t.tasks[name]; ok {
+		log.GetLogger().Error("Add named task failed: duplicated taskId ", name)
+		return errors.New("Task name duplicated")
+	}
 	t.tasks[name] = task
+	return nil
 }
 
 func (t *TaskFactory) GetTask(name string) (*Task, bool) {

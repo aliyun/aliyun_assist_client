@@ -201,7 +201,7 @@ func (task *Task) Run() (taskerrors.ErrorCode, error) {
 		}
 		content, err = util.ReplaceAllParameterStore(content)
 		if err != nil {
-			task.SendInvalidTask(err.Error(), "")
+			task.SendInvalidTask(err.Error(), content)
 			return 0, errors.New("ReplaceAllParameterStore error")
 		}
 	}

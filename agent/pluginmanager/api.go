@@ -1,5 +1,12 @@
 package pluginmanager
 
+const (
+	ARCH_64      = "x64"
+	ARCH_32      = "x86"
+	ARCH_ARM     = "arm"
+	ARCH_UNKNOWN = "unknown"
+)
+
 // 插件状态
 const (
 	// PluginTypeHealth 健康 0

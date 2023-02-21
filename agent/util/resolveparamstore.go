@@ -22,7 +22,7 @@ func ReplaceAllParameterStore(param string) (string, error) {
 		}
 		value, err := replaceParameterStoreValue(result, matchGroups)
 		if err != nil {
-			return "", err
+			return value, err
 		}
 		result = value
 	}
@@ -53,7 +53,7 @@ func getParameterStoreValue(matchGroups []string) (string, error) {
 func replaceParameterStoreValue(param string, matchGroups []string) (string, error) {
 	value, err := getParameterStoreValue(matchGroups)
 	if err != nil {
-		return "", err
+		return value, err
 	}
 	result := strings.Replace(param, matchGroups[0], value, 1)
 	return result, nil

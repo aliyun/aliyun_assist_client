@@ -29,6 +29,7 @@ const (
 	EVENT_BASE_VIRTIO       MetricsEventID = "agent.virtio"
 	EVENT_KDUMP             MetricsEventID = "agent.kdump"
 	EVENT_PLUGIN_EXECUTE    MetricsEventID = "agent.plugin.execute"
+	EVENT_PLUGIN_LOCALLIST     MetricsEventID = "agent.plugin.locallist"
 
 	// event category
 	EVENT_CATEGORY_CHANNEL EventCategory = "CHANNEL"
@@ -320,6 +321,18 @@ func GetKdumpServiceStatusEvent(keywords ...string) *MetricsEvent {
 func GetPluginExecuteEvent(keywords ...string) *MetricsEvent {
 	event := &MetricsEvent{
 		EventId:    EVENT_PLUGIN_EXECUTE,
+		Category:   EVENT_CATEGORY_PLUGIN,
+		EventLevel: EVENT_LEVEL_INFO,
+		EventTime:  time.Now().UnixNano() / 1e6,
+		Common:     getCommonInfoStr(),
+		KeyWords:   genKeyWordsStr(keywords...),
+	}
+	return event
+}
+
+func GetPluginLocalListEvent(keywords ...string) *MetricsEvent {
+	event := &MetricsEvent{
+		EventId:    EVENT_PLUGIN_LOCALLIST,
 		Category:   EVENT_CATEGORY_PLUGIN,
 		EventLevel: EVENT_LEVEL_INFO,
 		EventTime:  time.Now().UnixNano() / 1e6,
