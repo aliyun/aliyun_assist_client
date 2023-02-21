@@ -221,7 +221,7 @@ var (
 
 	rootCmd = cli.Command{
 		Name: "aliyun-service",
-		Short:             i18n.T(`Aliyun Assist Copyright (c) 2017-2022 Alibaba Group Holding Limited`, `Aliyun Assist Copyright (c) 2017-2022 Alibaba Group Holding Limited`),
+		Short:             i18n.T(`Aliyun Assist Copyright (c) 2017-2023 Alibaba Group Holding Limited`, `Aliyun Assist Copyright (c) 2017-2023 Alibaba Group Holding Limited`),
 		Usage:             "aliyun-service [subcommand] [flags]",
 		Sample:            "",
 		EnableUnknownFlag: false,
