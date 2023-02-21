@@ -101,7 +101,7 @@ func main() {
 	if options.CheckUpdate {
 		// Exclusive options check
 		if options.ForceUpdate || options.LocalInstall != "" {
-			fmt.Fprintln(os.Stderr, "Invalid options: speficified options in conflict")
+			fmt.Fprintln(os.Stderr, "Invalid options: specified options in conflict")
 			pflag.Usage()
 			os.Exit(1)
 			return
@@ -116,7 +116,7 @@ func main() {
 	} else if options.ForceUpdate {
 		// Exclusive options check
 		if options.CheckUpdate || options.LocalInstall != "" {
-			fmt.Fprintln(os.Stderr, "Invalid options: speficified options in conflict")
+			fmt.Fprintln(os.Stderr, "Invalid options: specified options in conflict")
 			pflag.Usage()
 			os.Exit(1)
 			return
@@ -145,7 +145,7 @@ func main() {
 	} else if options.LocalInstall != "" {
 		// Exclusive options check
 		if options.CheckUpdate || options.ForceUpdate {
-			fmt.Fprintln(os.Stderr, "Invalid options: speficified options in conflict")
+			fmt.Fprintln(os.Stderr, "Invalid options: specified options in conflict")
 			pflag.Usage()
 			os.Exit(1)
 			return
