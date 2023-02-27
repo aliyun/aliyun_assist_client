@@ -34,10 +34,10 @@ require (
 	github.com/tidwall/gjson v1.9.3
 	github.com/viney-shih/go-lock v1.0.1
 	github.com/yookoala/realpath v1.0.0
-	golang.org/x/crypto v0.0.0-20220214200702-86341886e292
-	golang.org/x/net v0.0.0-20220225172249-27dd8689420f
-	golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f
-	golang.org/x/text v0.3.8
+	golang.org/x/crypto v0.1.0
+	golang.org/x/net v0.1.0
+	golang.org/x/sys v0.1.0
+	golang.org/x/text v0.4.0
 	google.golang.org/grpc v1.40.0
 	google.golang.org/protobuf v1.27.1
 	gopkg.in/ini.v1 v1.66.2
@@ -71,7 +71,7 @@ require (
 	github.com/tklauser/go-sysconf v0.3.10 // indirect
 	github.com/tklauser/numcpus v0.4.0 // indirect
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
-	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211 // indirect
+	golang.org/x/term v0.1.0 // indirect
 	google.golang.org/genproto v0.0.0-20220107163113-42d7afdf6368 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
