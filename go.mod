@@ -10,7 +10,7 @@ require (
 	github.com/containerd/console v1.0.3
 	github.com/creack/goselect v0.1.2
 	github.com/creack/pty v1.1.11
-	github.com/docker/docker v20.10.18+incompatible
+	github.com/docker/docker v20.10.24+incompatible
 	github.com/fabiokung/shm v0.0.0-20150728212823-2852b0d79bae
 	github.com/google/uuid v1.2.0
 	github.com/gorhill/cronexpr v0.0.0-20180427100037-88b0669f7d75
