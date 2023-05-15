@@ -87,6 +87,37 @@ func GenRsaKeyPair(keyId string, keyTimeout int) (keyInfo *cryptdata.KeyInfo, er
 	return
 }
 
+func RmRsaKeyPair(keyId string) (errCode int32, err error) {
+	var client *agentClient
+	errCode = 1
+	client, err = newClient()
+	if err != nil {
+		log.GetLogger().Error("Create client failed: ", err)
+		return
+	}
+	defer func() {
+		client.Conn.Close()
+		client.Cancel()
+	}()
+	req := &pb.RemoveRsaKeyPairReq {
+		KeyPairId: keyId,
+	}
+	var resp *pb.RemoveRsaKeyPairResp
+	resp, err = client.Client.RmRsaKeyPair(client.Ctx, req)
+	if err != nil {
+		log.GetLogger().Errorf("RmRsaKeyPair failed, keyPairId[%s], StatusCode[%d], errMsg[%s]: ", keyId, resp.Status.StatusCode, resp.Status.ErrMessage)
+		return
+	}
+	errCode = resp.Status.StatusCode
+	if resp.Status.StatusCode != 0 {
+		err = errors.New(resp.Status.ErrMessage)
+		log.GetLogger().Errorf("RmRsaKeyPair failed, keyPairId[%s], StatusCode[%d], errMsg[%s]: ", keyId, resp.Status.StatusCode, resp.Status.ErrMessage)
+		return
+	}
+	log.GetLogger().Info("RmRsaKeyPair success, keyPairId[%s]: ", keyId)
+	return
+}
+
 func EncryptText(keyId, plainText string) (cipherText string, errCode int32, err error) {
 	var client *agentClient
 	errCode = 1
@@ -236,5 +267,44 @@ func CheckKey(keyId string, jsonFlag bool) (output string, errCode int32, err er
 		}
 	}
 	log.GetLogger().Infof("CheckKey success, keyPairId[%s]: ", keyId)
+	return
+}
+
+func CreateSecretParam(keyId, secretName, cipherText string, timeout int64) (paramInfo *cryptdata.ParamInfo, errCode int32, err error) {
+	var client *agentClient
+	errCode = 1
+	client, err = newClient()
+	if err != nil {
+		log.GetLogger().Error("Create client failed: ", err)
+		return
+	}
+	defer func() {
+		client.Conn.Close()
+		client.Cancel()
+	}()
+	req := &pb.CreateSecretParamReq{
+		KeyPairId: keyId,
+		CipherText: cipherText,
+		SecretName: secretName,
+		Timeout: int32(timeout),
+	}
+	var resp *pb.CreateSecretParamResp
+	resp, err = client.Client.CreateSecretParam(client.Ctx, req)
+	if err != nil {
+		log.GetLogger().Error("Client request CreateSecretParam failed: ", err)
+		return
+	}
+	errCode = resp.Status.StatusCode
+	if resp.Status.StatusCode != 0 {
+		err = errors.New(resp.Status.ErrMessage)
+		log.GetLogger().Errorf("CreateSecretParam failed, keyPairId[%s], StatusCode[%d], errMsg[%s]: ", keyId, resp.Status.StatusCode, resp.Status.ErrMessage)
+		return
+	}
+	paramInfo = &cryptdata.ParamInfo{
+		SecretName: resp.SecretParam.SecretName,
+		CreatedTimestamp: resp.SecretParam.CreatedTimestamp,
+		ExpiredTimestamp: resp.SecretParam.ExpiredTimestamp,
+	}
+	log.GetLogger().Infof("CreateSecretParam success, keyPairId[%s], secretName[%s]", keyId, secretName)
 	return
 }

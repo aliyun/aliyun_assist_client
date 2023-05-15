@@ -169,11 +169,7 @@ func addHttpHeads(req *HttpRequest.Request) {
 
 	var instance_id string
 	var path string
-	if IsSelfHosted() {
-		path, _ = GetSelfhostedPath()
-	} else {
-		path, _ = GetHybridPath()
-	}
+	path, _ = GetHybridPath()
 
 	content, _ := ioutil.ReadFile(path + "/instance-id")
 	instance_id = string(content)

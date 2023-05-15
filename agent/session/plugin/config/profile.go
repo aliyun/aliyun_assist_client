@@ -232,7 +232,7 @@ func (cp *Profile) ValidateAK() error {
 		return fmt.Errorf("invalid access_key_id: %s", cp.AccessKeyId)
 	}
 	if len(cp.AccessKeySecret) == 0 {
-		return fmt.Errorf("invaild access_key_secret: %s", cp.AccessKeySecret)
+		return fmt.Errorf("invalid access_key_secret: %s", cp.AccessKeySecret)
 	}
 	return nil
 }

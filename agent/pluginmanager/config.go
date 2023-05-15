@@ -24,7 +24,7 @@ func loadIntervalConf() {
 	/*
 		pluginHealthScanInterval=60,
 		pluginHealthPullInterval=60,
-		pluginUpdateCheckIntervalSeconds=60
+		pluginUpdateCheckInterval=60
 		pluginListReportInterval=60
 	*/
 	pvsList := strings.Split(contentStr, ",")
@@ -58,8 +58,8 @@ func setInterval(params string, interval int) {
 	} else if params == "pluginHealthPullInterval" {
 		pluginHealthPullInterval = interval
 		log.GetLogger().Infof("pluginHealthPullInterval is init as %d seconds", interval)
-	} else if params == "pluginUpdateCheckIntervalSeconds" {
-		pluginUpdateCheckIntervalSeconds = interval
+	} else if params == "pluginUpdateCheckInterval" {
+		pluginUpdateCheckInterval = interval
 		log.GetLogger().Infof("pluginUpdateCheckIntervalSeconds is init as %d seconds", interval)
 	} else if params == "pluginListReportInterval" {
 		pluginListReportInterval = interval

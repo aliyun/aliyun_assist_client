@@ -150,7 +150,6 @@ type PluginStatusResponse struct {
 
 // PluginUpdateCheck 检查升级请求数据
 type PluginUpdateCheck struct {
-	PluginID string `json:"pluginId"`
 	Name     string `json:"name"`
 	Version  string `json:"version"`
 }
@@ -169,14 +168,7 @@ type PluginUpdateCheckResponse struct {
 
 // PluginUpdateInfo 升级插件的信息
 type PluginUpdateInfo struct {
-	NeedUpdate int `json:"needUpdate"`
-	Info       struct {
-		PluginID string `json:"pluginId"`
-		Name     string `json:"name"`
-		Url      string `json:"url"`
-		Md5      string `json:"md5"`
-		RunPath  string `json:"runPath"`
-		TimeOut  string `json:"timeout"`
-		Version  string `json:"version"`
-	} `json:"info"`
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	Timeout int `json:"timeout"`
 }

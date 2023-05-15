@@ -66,6 +66,21 @@ func (s *agentServer) GenRsaKeyPair(ctx context.Context, req *pb.GenRsaKeyPairRe
 	return resp, nil
 }
 
+func (s *agentServer) RmRsaKeyPair(ctx context.Context, req *pb.RemoveRsaKeyPairReq) (*pb.RemoveRsaKeyPairResp, error) {
+	resp := &pb.RemoveRsaKeyPairResp{
+		Status: newRespStatus(),
+	}
+	defer func() {
+		log.GetLogger().Infof("RmRsaKeyPair keyId[%s] statusCode[%d] errMsg[%s]", req.KeyPairId, resp.Status.StatusCode, resp.Status.ErrMessage)
+	}()
+	err := cryptdata.RemoveRsaKey(req.KeyPairId)
+	if err != nil {
+		resp.Status.StatusCode = int32(cryptdata.ErrToCode(err))
+		resp.Status.ErrMessage = err.Error()
+	}
+	return resp, nil
+}
+
 func (s *agentServer) EncryptText(ctx context.Context, req *pb.EncryptReq) (*pb.EncryptResp, error) {
 	resp := &pb.EncryptResp{
 		Status: newRespStatus(),
@@ -137,5 +152,31 @@ func (s *agentServer) CheckKey(ctx context.Context, req *pb.CheckKeyReq) (*pb.Ch
 			})
 		}
 	}
+	return resp, nil
+}
+
+func (s *agentServer) CreateSecretParam(ctx context.Context, req *pb.CreateSecretParamReq) (*pb.CreateSecretParamResp, error) {
+	resp := &pb.CreateSecretParamResp{
+		Status: newRespStatus(),
+		SecretParam: &pb.SecretParamInfo{},
+	}
+	defer func() {
+		log.GetLogger().Infof("CreateSecretParam keyId[%s] secretName[%s] timeout[%d] statusCode[%d] errMsg[%s]", req.KeyPairId, req.SecretName, req.Timeout, resp.Status.StatusCode, resp.Status.ErrMessage)
+	}()
+	cipherText, err := base64.StdEncoding.DecodeString(req.CipherText)
+	if err != nil {
+		resp.Status.StatusCode = int32(cryptdata.ErrToCode(err))
+		resp.Status.ErrMessage = err.Error()
+		return resp, nil
+	}
+	paramInfo, err := cryptdata.CreateSecretParam(req.KeyPairId, req.SecretName, int64(req.Timeout), cipherText)
+	if err != nil {
+		resp.Status.StatusCode = int32(cryptdata.ErrToCode(err))
+		resp.Status.ErrMessage = err.Error()
+		return resp, nil
+	}
+	resp.SecretParam.SecretName = paramInfo.SecretName
+	resp.SecretParam.CreatedTimestamp = paramInfo.CreatedTimestamp
+	resp.SecretParam.ExpiredTimestamp = paramInfo.ExpiredTimestamp
 	return resp, nil
 }

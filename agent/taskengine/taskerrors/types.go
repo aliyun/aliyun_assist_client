@@ -5,6 +5,7 @@ type InvalidSettingError interface {
 
 	Name() string
 	ShortMessage() string
+	Unwrap() error
 }
 
 type ExecutionError interface {

@@ -1,5 +1,9 @@
 package channel
 
+import (
+	"github.com/aliyun/aliyun_assist_client/agent/util/atomicutil"
+)
+
 const (
 	ChannelNone          = 0
 	ChannelGshellType    = 1
@@ -25,11 +29,11 @@ type IChannel interface {
 type Channel struct {
 	CallBack    OnReceiveMsg
 	ChannelType int
-	Working     bool
+	Working     atomicutil.AtomicBoolean
 }
 
 func (c *Channel) IsWorking() bool {
-	return c.Working
+	return c.Working.IsSet()
 }
 
 func (c *Channel) GetChannelType() int {

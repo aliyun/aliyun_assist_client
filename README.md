@@ -19,7 +19,7 @@ For example, you can create a command using aliyun openapi, then select some vir
 -   RedHat
 -   SUSE Linux Enterprise Server
 -   OpenSUSE
--   Alibaba Cloud Linux
+-   Aliyun Linux
 -   FreeBSD
 -   CoreOS
 
@@ -29,8 +29,8 @@ For example, you can create a command using aliyun openapi, then select some vir
 
 
 ### How to use
-- [English Version](https://help.aliyun.com/document_detail/64741.html)
-- [Chinese Version](https://www.alibabacloud.com/help/doc-detail/64741.html)
+- [English Version](https://www.alibabacloud.com/help/doc-detail/64741.html)
+- [Chinese Version](https://help.aliyun.com/document_detail/64741.html)
 
 ### Contributing
 

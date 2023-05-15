@@ -13,44 +13,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 )
-
-type rsaKeyPair struct {
-	Id               string
-	CreatedTimestamp int64
-	ExpiredTimestamp int64
-	PrivateKey       *rsa.PrivateKey
-	PublicKey        string
-}
-
-type KeyInfo struct {
-	Id               string `json:"id"`
-	CreatedTimestamp int64  `json:"createdTimestamp"`
-	ExpiredTimestamp int64  `json:"expiredTimestamp"`
-	PublicKey        string `json:"publicKey"`
-}
-
-type KeyInfos []KeyInfo
-
-func (k KeyInfos) Len() int {
-	return len(k)
-}
-func (k KeyInfos) Less(i, j int) bool {
-	return k[i].ExpiredTimestamp < k[j].ExpiredTimestamp
-}
-func (k KeyInfos) Swap(i, j int) {
-	k[i], k[j] = k[j], k[i]
-}
 
 var (
 	keyPairs_ sync.Map
 
 	ErrKeyIdNotExist   = errors.New("Key id not exist")
 	ErrKeyIdDuplicated = errors.New("Key id is duplicated")
-
-	clearExpiredKeyTimer_    *time.Timer
-	clearExpiredKeyInterval_ = 60
+	ErrParamNotExist   = errors.New("Secret param not exist")
 )
 
 const (
@@ -58,21 +30,11 @@ const (
 	// Error for 'agent not support' is 110
 	ERR_KEYID_NOTEXIST_CODE   = 111
 	ERR_KEYID_DUPLICATED_CODE = 112
+	ERR_PARAM_NOTEXIST_CODE   = 113
 
 	// length limit of plaintext to encrypt is 190byte, see https://crypto.stackexchange.com/questions/42097/what-is-the-maximum-size-of-the-plaintext-message-for-rsa-oaep
 	LIMIT_PLAINTEXT_LEN = 190
 )
-
-func init() {
-	go func() {
-		clearExpiredKeyTimer_ = time.NewTimer(time.Duration(clearExpiredKeyInterval_) * time.Second)
-		for {
-			_ = <-clearExpiredKeyTimer_.C
-			clearExpiredKey()
-			clearExpiredKeyTimer_.Reset(time.Duration(clearExpiredKeyInterval_) * time.Second)
-		}
-	}()
-}
 
 func GenRsaKey(specifiedId string, timeout int) (*KeyInfo, error) {
 	if specifiedId != "" {
@@ -120,6 +82,14 @@ func GenRsaKey(specifiedId string, timeout int) (*KeyInfo, error) {
 		PublicKey:        publicKeyStr,
 	}
 	return keyInfo, nil
+}
+
+func RemoveRsaKey(keyId string) error {
+	if k, _ := loadKey(keyId); k == nil {
+		return ErrKeyIdNotExist
+	}
+	deleteKey(keyId)
+	return nil
 }
 
 func EncryptWithRsa(keyId, rawData string) ([]byte, error) {
@@ -183,6 +153,7 @@ func clearExpiredKey() {
 	now := time.Now().Unix()
 	for _, k := range ks {
 		if k.ExpiredTimestamp <= now {
+			log.GetLogger().Infof("KeyPair[%s] has expired for %d second, so delete it", k.Id, now-k.ExpiredTimestamp)
 			keyPairs_.Delete(k.Id)
 		}
 	}
@@ -198,6 +169,7 @@ func loadKey(keyId string) (*rsaKeyPair, error) {
 		}
 		now := time.Now().Unix()
 		if privateKey.ExpiredTimestamp < now {
+			log.GetLogger().Infof("KeyPair[%s] has expired for %d second, so delete it", privateKey.Id, now-privateKey.ExpiredTimestamp)
 			keyPairs_.Delete(keyId)
 			return nil, ErrKeyIdNotExist
 		}
@@ -223,11 +195,18 @@ func storeKey(keyId string, keyPair *rsaKeyPair) error {
 	return nil
 }
 
+func deleteKey(keyId string) {
+	keyPairs_.Delete(keyId)
+	log.GetLogger().Infof("KeyPair[%s] is actively deleted", keyId)
+}
+
 func ErrToCode(err error) int {
 	if errors.Is(err, ErrKeyIdDuplicated) {
 		return ERR_KEYID_DUPLICATED_CODE
 	} else if errors.Is(err, ErrKeyIdNotExist) {
 		return ERR_KEYID_NOTEXIST_CODE
+	} else if errors.Is(err, ErrParamNotExist) {
+		return ERR_PARAM_NOTEXIST_CODE
 	}
 	return ERR_OTHER_CODE
 }

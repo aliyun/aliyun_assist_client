@@ -40,7 +40,7 @@ func GetOsType() string {
 }
 
 func GetOsArch() string {
-	return runtime.GOARCH
+	return getArch()
 }
 
 // GetVirtualType returns kvm or xen based on underlying virtualization type,

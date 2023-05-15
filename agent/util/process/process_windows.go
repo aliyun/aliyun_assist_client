@@ -2,26 +2,28 @@ package process
 
 import (
 	"errors"
+	"os"
+	"fmt"
 	"syscall"
 	"unsafe"
-	"os"
 
+	"github.com/aliyun/aliyun_assist_client/agent/cryptdata"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"golang.org/x/sys/windows"
 )
 
 var (
-	advapi32          = syscall.NewLazyDLL("advapi32.dll")
-	logonProc         = advapi32.NewProc("LogonUserW")
-	impersonateProc   = advapi32.NewProc("ImpersonateLoggedOnUser")
-	revertSelfProc    = advapi32.NewProc("RevertToSelf")
+	advapi32        = syscall.NewLazyDLL("advapi32.dll")
+	logonProc       = advapi32.NewProc("LogonUserW")
+	impersonateProc = advapi32.NewProc("ImpersonateLoggedOnUser")
+	revertSelfProc  = advapi32.NewProc("RevertToSelf")
 )
 
 const (
 	//logon32LogonNetwork          = uintptr(3)
-	logon32LOGONINTERACTIVE    = uintptr(2)
-	logon32ProviderDefault       = uintptr(0)
+	logon32LOGONINTERACTIVE = uintptr(2)
+	logon32ProviderDefault  = uintptr(0)
 )
 
 func (p *ProcessCmd) prepareProcess() error {
@@ -35,7 +37,7 @@ func (p *ProcessCmd) prepareProcess() error {
 	} else {
 		// append specific envs to osEnv, the value of repetitive key will be covered
 		env = os.Environ()
-		for i:=0; i<len(p.command.Env); i++ {
+		for i := 0; i < len(p.command.Env); i++ {
 			env = append(env, p.command.Env[i])
 		}
 	}
@@ -43,15 +45,13 @@ func (p *ProcessCmd) prepareProcess() error {
 	return nil
 }
 
-func (p *ProcessCmd)  addCredential () error {
+func (p *ProcessCmd) addCredential() error {
 	log.GetLogger().Infoln("addCredential")
-
-	vm_password,err := util.GetSecretParam(p.password)
+	vm_password, err := getSecretParam(p.password)
 	if err != nil {
 		log.GetLogger().Errorln("get password failed", err)
 		return err
 	}
-
 	token, err := logonUser(p.user_name, vm_password)
 	if err != nil {
 		return err
@@ -64,7 +64,7 @@ func (p *ProcessCmd)  addCredential () error {
 	return nil
 }
 
-func (p *ProcessCmd)  removeCredential () error {
+func (p *ProcessCmd) removeCredential() error {
 	p.command.SysProcAttr.Token.Close()
 
 	return nil
@@ -84,7 +84,7 @@ func impersonate(user string, pass string) error {
 }
 
 func IsUserValid (userName string, password string) error {
-	vm_password,err := util.GetSecretParam(password)
+	vm_password, err := getSecretParam(password)
 	if err != nil {
 		return err
 	}
@@ -134,4 +134,17 @@ func revertToSelf() error {
 		return error(ec)
 	}
 	return nil
+}
+
+func getSecretParam(secretName string) (string, error) {
+	var value string
+	var err_1, err_2 error
+	if value, err_1 = cryptdata.GetSecretParam(secretName); err_1 != nil {
+		if value, err_2 = util.GetSecretParam(secretName); err_2 != nil {
+			log.GetLogger().Errorf("Secret param '%s' not found in agent [%v] and oos[%v]", secretName, err_1, err_2)
+			err := errors.New(fmt.Sprintf("Secret param '%s' not found in agent [%v] and oos[%v]", secretName, err_1, err_2))
+			return "", err
+		}
+	}
+	return value, nil
 }

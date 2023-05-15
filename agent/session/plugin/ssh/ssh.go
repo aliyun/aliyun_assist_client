@@ -89,7 +89,7 @@ func doSession(ctx *cli.Context, instance_id string, wss_url string) error {
 	url := websocket_url
 	url = strings.Replace(url, "sessionid", "sessionId", 1)
 	log.GetLogger().Infoln("websocket url:", url)
-	client, err := client.NewClient(url, os.Stdin, os.Stdout, true, "", true, config.VerboseFlag(ctx.Flags()).IsAssigned())
+	client, err := client.NewClient(url, os.Stdin, os.Stdout, false, "", true, config.VerboseFlag(ctx.Flags()).IsAssigned())
 	// recvive signal from ssh, avoid killing by ssh
 	done := make(chan bool, 1)
 	go waitSignals(done)

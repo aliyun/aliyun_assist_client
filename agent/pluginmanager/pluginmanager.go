@@ -29,12 +29,11 @@ import (
 		lastPluginStatusRecord 用来记录上一次各插件的状态
 
 
-插件升级：
-1. 初始化一个定时任务：
-	1. 读取installed_plugins文件获得所有插件信息，检查是否有已安装的插件
-	2. 所有插件信息上报服务端
+常驻插件升级：
+	1. 读取installed_plugins文件获得所有插件信息，检查是否有已安装的常驻插件
+	2. 常驻插件的版本信息上报服务端
 	3. 遍历服务端响应的升级列表
-		1. 执行 `acs-plugin-manager --exec -P ecs_tool ----pluginVersion 1.0`。升级插件
+		1. 执行 `acs-plugin-manager --exec --plugin <pluginName> --pluginVersion <pluginVersion> --params --upgrade`。升级插件
 */
 
 var (
@@ -46,8 +45,8 @@ var (
 	lazyReport                bool
 	lastPluginStatusRecord    = map[string]string{}
 
-	// pluginUpdateCheckIntervalSeconds 插件检查升级的间隔时间
-	pluginUpdateCheckIntervalSeconds = 15 * 60
+	// pluginUpdateCheckIntervalSeconds 常驻插件检查升级的间隔时间
+	pluginUpdateCheckInterval = 30 * 60
 
 	pluginListReportInterval = 3600 * 24
 )
@@ -56,7 +55,7 @@ var (
 	pluginHealthScanTimer *timermanager.Timer
 	pluginHealthPullTimer *timermanager.Timer
 	pluginListReportTimer *timermanager.Timer
-	pluginUpdateTimer *time.Timer
+	pluginUpdateTimer     *timermanager.Timer
 )
 
 func InitPluginCheckTimer() {
@@ -81,9 +80,20 @@ func InitPluginCheckTimer() {
 		go func() {
 			mills := rand.Intn(60 * 1000)
 			// make sure that pluginHealthCheckScan is earlier than pluginHealthPullTimer
-			time.Sleep(time.Duration(60000 + mills) * time.Millisecond)
+			time.Sleep(time.Duration(60000+mills) * time.Millisecond)
 			if _, err = pluginHealthPullTimer.Run(); err != nil {
 				log.GetLogger().Error("InitPluginCheckTimer: pluginHealthPullTimer run err: ", err.Error())
+			}
+		}()
+	}
+	if pluginUpdateTimer, err = timerManager.CreateTimerInSeconds(pluginUpdateCheck, pluginUpdateCheckInterval); err != nil {
+		log.GetLogger().Error("InitPluginCheckTimer: pluginUpdateTimer err: ", err.Error())
+	} else {
+		go func() {
+			mills := rand.Intn(60 * 1000)
+			time.Sleep(time.Duration(120000 + mills) * time.Millisecond)
+			if _, err = pluginUpdateTimer.Run(); err != nil {
+				log.GetLogger().Error("InitPluginCheckTimer: pluginUpdateTimer run err: ", err.Error())
 			}
 		}()
 	}
@@ -92,7 +102,7 @@ func InitPluginCheckTimer() {
 	} else {
 		go func() {
 			mills := rand.Intn(60 * 1000)
-			time.Sleep(time.Duration(180000 + mills) * time.Millisecond)
+			time.Sleep(time.Duration(180000+mills) * time.Millisecond)
 			log.GetLogger().Info("InitPluginCheckTimer:pluginLocalListReport timer run")
 			_, err = pluginListReportTimer.Run()
 			if err != nil {
@@ -100,17 +110,6 @@ func InitPluginCheckTimer() {
 			}
 		}()
 	}
-	// update check
-	// go func() {
-	// 	randSleep := rand.Intn(60 * 1000)
-	// 	time.Sleep(time.Duration(randSleep) * time.Millisecond)
-	// 	pluginUpdateTimer = time.NewTimer(time.Duration(pluginUpdateCheckIntervalSeconds) * time.Second)
-	// 	pluginUpdateCheck()
-	// 	for {
-	// 		_ = <-pluginUpdateTimer.C
-	// 		pluginUpdateCheck()
-	// 	}
-	// }()
 }
 
 func pluginHealthCheckScan() {
@@ -261,7 +260,7 @@ func pluginHealthCheckScan() {
 	// 	interval := 60
 	// 	if pluginStatusResp.RefreshInterval > 0 {
 	// 		interval = pluginStatusResp.RefreshInterval
-	// 	} 
+	// 	}
 	// 	if interval < pluginHealthPullInterval && interval < pluginHealthScanInterval {
 	// 		pluginHealthPullTimer.Reset(time.Duration(interval) * time.Second)
 	// 	}
@@ -398,7 +397,7 @@ func pluginHealthCheckPull() {
 	}
 	if err := refreshTimer(pluginHealthPullTimer, pluginHealthPullInterval); err != nil {
 		log.GetLogger().Errorf("pluginHealthCheckPull: refresh pluginHealthPullTimer nextInterval [%d] second failed: %s", pluginHealthPullInterval, err.Error())
-	}  else {
+	} else {
 		log.GetLogger().Infof("pluginHealthCheckPull: refresh pluginHealthPullTimer nextInterval [%d] second", pluginHealthPullInterval)
 	}
 	if pluginStatusResp.ScanInterval > 0 {
@@ -417,109 +416,94 @@ func pluginHealthCheckPull() {
 
 func pluginUpdateCheck() {
 	log.GetLogger().Info("pluginUpdateCheck start")
-	nextInterval := pluginUpdateCheckIntervalSeconds
-	defer func() {
-		pluginUpdateTimer.Reset(time.Duration(nextInterval) * time.Second)
-	}()
-	// 1.检查插件列表，如果没有插件就不需要升级检查
+	// get installed plugin list
 	pluginInfoList, err := loadPlugins()
 	if err != nil {
 		log.GetLogger().WithError(err).Error("pluginUpdateCheck fail: loadPlugins fail")
 		return
 	}
 	if pluginInfoList == nil {
-		log.GetLogger().Info("pluginUpdateCheck cancle: there is no plugins")
+		log.GetLogger().Info("pluginUpdateCheck cancel: there is no plugins")
 		return
 	}
-	persistPluginCount := 0
+	pluginList := []PluginUpdateCheck{}
 	for _, pluginInfo := range pluginInfoList {
-		if pluginInfo.PluginType() == PLUGIN_PERSIST {
-			persistPluginCount += 1
-		}
-	}
-	if persistPluginCount == 0 {
-		log.GetLogger().Info("pluginUpdateCheck cancle: there is no persist plugin to check update")
-		return
-	}
-
-	// 2.生成插件升级检查的请求数据 (只关注常驻插件）
-	pluginUpdateCheckRequest := PluginUpdateCheckRequest{
-		Os:   pluginInfoList[0].OSType,
-		Arch: pluginInfoList[0].Arch,
-	}
-	for _, pluginInfo := range pluginInfoList {
-		if pluginInfo.PluginType() == PLUGIN_PERSIST {
-			pluginUpdateCheckRequest.Plugin = append(pluginUpdateCheckRequest.Plugin, PluginUpdateCheck{
-				PluginID: pluginInfo.PluginID,
+		if pluginInfo.PluginType() == PLUGIN_PERSIST && !pluginInfo.IsRemoved{
+			pluginList = append(pluginList, PluginUpdateCheck{
 				Name:     pluginInfo.Name,
 				Version:  pluginInfo.Version,
 			})
-		} else {
-			log.GetLogger().Infof("pluginUpdateCheck: pluginName[%s] pluginType[%s]not persist plugin", pluginInfo.Name, pluginInfo.PluginType())
 		}
+	}
+	if len(pluginList) == 0 {
+		log.GetLogger().Info("pluginUpdateCheck cancel: there is no persist plugin")
+		return
+	}
+	// request for update check
+	osType := osutil.GetOsType()
+	arch, _ := GetArch()
+	pluginUpdateCheckRequest := PluginUpdateCheckRequest{
+		Os:   osType,
+		Arch: arch,
+		Plugin: pluginList,
 	}
 
 	requestPayloadBytes, err := json.Marshal(pluginUpdateCheckRequest)
 	if err != nil {
-		log.GetLogger().WithError(err).Error("pluginUpdateCheck fail: pluginStatusList marshal fail")
+		log.GetLogger().WithError(err).Error("pluginUpdateCheck fail: pluginUpdateCheckRequest marshal fail")
 		return
 	}
 	requestPayload := string(requestPayloadBytes)
-	log.GetLogger().Infof("pluginUpdateCheck requestPayload: %s", requestPayload)
 	url := util.GetPluginUpdateCheckService()
 	resp, err := util.HttpPost(url, requestPayload, "")
-
-	for i := 0; i < 3 && err != nil; i++ {
+	for i := 0; i < 2 && err != nil; i++ {
 		log.GetLogger().Infof("request updateCheck fail, need retry: %s", requestPayload)
-		time.Sleep(time.Duration(2) * time.Second)
+		time.Sleep(time.Duration(3) * time.Second)
 		resp, err = util.HttpPost(url, requestPayload, "")
 	}
 	if err != nil {
 		log.GetLogger().WithError(err).Error("pluginUpdateCheck fail: post pluginStatusList fail")
 		return
 	}
-
-	// 3. 从check_update接口的响应数据中解析出要升级插件的信息
+	// update plugins
 	var pluginUpdateCheckResp PluginUpdateCheckResponse
 	pluginUpdateCheckResp, err = parsePluginUpdateCheck(resp)
 	if err != nil {
 		log.GetLogger().WithError(err).Errorf("pluginUpdateCheck fail: parse pluginUpdateInfo from resp fail: %s", resp)
 		return
 	}
-	if pluginUpdateCheckResp.NextInterval > 0 {
-		nextInterval = pluginUpdateCheckResp.NextInterval
+	for _, plugin := range pluginUpdateCheckResp.Plugin {
+			command := "acs-plugin-manager"
+			arguments := []string{"--exec", "-P", plugin.Name, "-n", plugin.Version, "-p", "--upgrade"}
+			mixedOutput := bytes.Buffer{}
+			exitCode, status, err := syncRunKillGroup("", command, arguments, &mixedOutput, &mixedOutput, plugin.Timeout + 5)
+			output := mixedOutput.String()
+			if len(output) > 1024 {
+				output = output[:1024]
+			}
+			errMsg := ""
+			if err != nil {
+				errMsg = err.Error()
+			}
+			metrics.GetPluginUpdateEvent(
+				"name", plugin.Name,
+				"version", plugin.Version,
+				"exitCode", strconv.Itoa(exitCode),
+				"status", strconv.Itoa(status),
+				"errMsg", errMsg,
+				"output", output,
+			).ReportEvent()
+			log.GetLogger().Errorf("pluginUpdateCheck: update plugin[%s] version[%s], exitCode[%d] status[%d] err[%v], output is: %s", plugin.Name, plugin.Version, exitCode, status, err, output)
 	}
-
-	// 4.遍历pluginUpdateInfoList，对需要升级的插件执行升级操作
-	// fileDir, err := getPluginPath()
-	// if err != nil {
-	// 	log.GetLogger().WithError(err).Error("pluginUpdateCheck fail: get pluginPath fail")
-	// 	return
-	// }
-	// fileDir += string(os.PathSeparator)
-	// pluginVersion := make(map[string]string)
-	// for _, pluginInfo := range pluginInfoList {
-	// 	pluginVersion[pluginInfo.Name] = pluginInfo.Version
-	// }
-	// log.GetLogger().Infof("the pluginUpdateCheckResponse.Plugin len is %d", len(pluginUpdateCheckResponse.Plugin))
-	// for _, pluginUpdateInfo := range pluginUpdateCheckResponse.Plugin {
-	// 	if pluginUpdateInfo.NeedUpdate != 1 {
-	// 		continue
-	// 	}
-	// 	info := pluginUpdateInfo.Info
-	// 	// 检查版本号 新的版本号<=原有的版本号 就跳过不安装
-	// 	if version, ok := pluginVersion[info.Name]; ok && versionutil.CompareVersion(info.Version, version) <= 0 {
-	// 		log.GetLogger().Infof("pluginName[%s] currentVersion[%s] updateVersion[%s] will not update", info.Name, pluginVersion[info.Name], info.Version)
-	// 		continue
-	// 	}
-	// 	// 只打印要升级插件的日志，暂时不执行升级操作
-	// 	if version, ok := pluginVersion[info.Name]; ok {
-	// 		log.GetLogger().Infof("will upgrade plugin[%s] from version[%s] to versiont[%s]", pluginUpdateInfo.Info.Name, version, pluginUpdateInfo.Info.Version)
-	// 	} else {
-	// 		log.GetLogger().Infof("will upgrade plugin[%s] to versiont[%s]", pluginUpdateInfo.Info.Name, pluginUpdateInfo.Info.Version)
-	// 	}
-	// }
-	log.GetLogger().Infof("pluginUpdateCheck success response: %s", resp)
+	log.GetLogger().Infof("pluginUpdateCheck done, updated [%d] plugins", len(pluginUpdateCheckResp.Plugin))
+	if pluginUpdateCheckResp.NextInterval > 0 {
+		pluginUpdateCheckInterval = pluginUpdateCheckResp.NextInterval
+	}
+	if err := refreshTimer(pluginUpdateTimer, pluginUpdateCheckInterval); err != nil {
+		log.GetLogger().Errorf("pluginUpdateCheck: refresh pluginUpdateTimer nextInterval [%d] second failed: %s", pluginUpdateCheckInterval, err.Error())
+	} else {
+		log.GetLogger().Errorf("pluginUpdateCheck: refresh pluginUpdateTimer nextInterval [%d] second", pluginUpdateCheckInterval)
+	}
 }
 
 func pluginLocalListReport() {
@@ -549,10 +533,10 @@ func pluginLocalListReport() {
 		return
 	}
 	pluginData := map[string][]string{
-		"name": nameList,
+		"name":    nameList,
 		"version": versionList,
-		"os": osList,
-		"arch": archList,
+		"os":      osList,
+		"arch":    archList,
 	}
 	pluginDataMarshal, err := json.Marshal(&pluginData)
 	if err != nil {

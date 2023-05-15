@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"runtime"
@@ -19,6 +20,7 @@ import (
 	"github.com/containerd/console"
 	"github.com/creack/goselect"
 	"github.com/gorilla/websocket"
+	tsize "github.com/kopoli/go-terminal-size"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh/terminal"
 )
@@ -28,6 +30,24 @@ const (
 	killed
 )
 
+const (
+	sendPackageSize     = 2048                                                   // 发送的数据包大小上限，单位 B
+	defaultSendSpeed    = 200                                                    // 默认的最大数据发送速率，单位 kbps
+	defaultSendInterval = 1000 / (defaultSendSpeed * 1024 / 8 / sendPackageSize) // writeloop的循环间隔时间 单位ms
+)
+
+// 状态码为5时可能的错误码
+const (
+	EXIT                 = "Exit"
+	AGENT_TIMEOUT        = "AgentTimeout"
+	INIT_CHANNEL_FAILED  = "InitChannelFailed"
+	OPEN_CHANNEL_FAILED  = "OpenChannelFailed"
+	SESSIONID_DUPLICATED = "SessionIdDuplicated"
+	PROCESS_DATA_ERROR   = "ProcessDataError"
+	OPEN_PTY_FAILED      = "OpenPtyFailed"
+	FLOW_EXCEED_LIMIT    = "FlowExceedLimit"
+)
+
 type Client struct {
 	Dialer                   *websocket.Dialer
 	Conn                     *websocket.Conn
@@ -35,31 +55,33 @@ type Client struct {
 	token                    string
 	Connected                bool
 	Output                   io.Writer
-	Input 					 io.ReadCloser
+	Input                    io.ReadCloser
 	WriteMutex               *sync.Mutex
 	EscapeKeys               []byte
-	PortForward				 bool // true means the client is for portforward
+	PortForward              bool // true means the client is for portforward
 	poison                   chan bool
 	StreamDataSequenceNumber int64
 	rawmode                  bool //true means not use console mode
 	verbosemode              bool
 	real_connected           bool
+	sendInterval             int // ms, interval between writeLoop, for limit send speed
 }
 
-func NewClient(inputURL string, input io.ReadCloser, output io.Writer, portForward bool, token string,  rawmode bool, verbosemode bool) (*Client, error) {
+func NewClient(inputURL string, input io.ReadCloser, output io.Writer, portForward bool, token string, rawmode bool, verbosemode bool) (*Client, error) {
 	return &Client{
 		Dialer:                   &websocket.Dialer{},
 		URL:                      inputURL,
 		token:                    token,
 		WriteMutex:               &sync.Mutex{},
 		Output:                   output, // os.Stdout
-		Input: 					  input,  // os.Stdin
-		PortForward: 			  portForward,		
+		Input:                    input,  // os.Stdin
+		PortForward:              portForward,
 		StreamDataSequenceNumber: 0,
 		rawmode:                  rawmode,
 		real_connected:           false,
 		verbosemode:              verbosemode,
-		poison:					  make(chan bool),
+		poison:                   make(chan bool),
+		sendInterval:             defaultSendInterval,
 	}, nil
 }
 
@@ -103,7 +125,6 @@ func (c *Client) pingLoop() {
 		time.Sleep(30 * time.Second)
 	}
 }
-
 
 func (c *Client) Loop() error {
 
@@ -182,23 +203,28 @@ func (c *Client) Loop() error {
 	return nil
 }
 
-type winsize struct {
-	Rows    uint16 `json:"rows"`
-	Columns uint16 `json:"cols"`
-}
-
 func (c *Client) termsizeLoop(wg *sync.WaitGroup) int {
 	defer wg.Done()
 	fname := "termsizeLoop"
-
-	ch := make(chan os.Signal, 1)
-	notifySignalSIGWINCH(ch)
-	defer resetSignalSIGWINCH()
-
+	for !c.real_connected {
+		time.Sleep(time.Millisecond * 500)
+	}
+	width, height := -1, -1
+	// repeating this loop for every 500ms
+	resizeTimer := time.NewTimer(time.Millisecond * 500)
 	for {
-		if b, err := syscallTIOCGWINSZ(); err != nil {
-			//	logrus.Warn(err)
-		} else {
+		s, err := tsize.GetSize()
+		if err != nil {
+			log.GetLogger().Warning("get terminal size fail: ", err)
+			return 0
+		}
+		if s.Width != width || s.Height != height {
+			width = s.Width
+			height = s.Height
+			buf := new(bytes.Buffer)
+			binary.Write(buf, binary.LittleEndian, int16(height))
+			binary.Write(buf, binary.LittleEndian, int16(width))
+			b := buf.Bytes()
 			if err = c.SendResizeDataMessage(b); err != nil {
 				log.GetLogger().Warnf("ws.WriteMessage failed: %v", err)
 			}
@@ -207,7 +233,8 @@ func (c *Client) termsizeLoop(wg *sync.WaitGroup) int {
 		case <-c.poison:
 			/* Somebody poisoned the well; die */
 			return die(fname, c.poison)
-		case <-ch:
+		case <-resizeTimer.C:
+			resizeTimer.Reset(time.Millisecond * 500)
 		}
 	}
 }
@@ -231,7 +258,7 @@ func bytesToIntU(b []byte) (int, error) {
 		err := binary.Read(bytesBuffer, binary.BigEndian, &tmp)
 		return int(tmp), err
 	default:
-		return 0, fmt.Errorf("%s", "BytesToInt bytes lenth is invaild!")
+		return 0, fmt.Errorf("%s", "BytesToInt bytes lenth is invalid!")
 	}
 }
 
@@ -246,11 +273,49 @@ func (c *Client) ProcessStatusDataChannel(payload []byte) error {
 			c.Output.Write(payload)
 			return errors.New("Failed to connect. code 2")
 		} else if code == 5 { //关闭连接
+			errorCode := string(payload[1:])
+			tipStr := errorCode
 			log.GetLogger().Errorln("connect failed code 5")
-			c.Output.Write([]byte("session closed"))
+			switch errorCode {
+			case EXIT:
+				tipStr = fmt.Sprint(EXIT, ": session closed.")
+				break
+			case AGENT_TIMEOUT:
+				tipStr = fmt.Sprint(AGENT_TIMEOUT, ": session closed for agent timeout.")
+				break
+			case INIT_CHANNEL_FAILED:
+				tipStr = fmt.Sprint(INIT_CHANNEL_FAILED, ": session closed for init channel failed")
+				break
+			case OPEN_CHANNEL_FAILED:
+				tipStr = fmt.Sprint(OPEN_CHANNEL_FAILED, ": session closed for open channel failed.")
+				break
+			case SESSIONID_DUPLICATED:
+				tipStr = fmt.Sprint(SESSIONID_DUPLICATED, ": session closed for sessionId is duplicated.")
+				break
+			case PROCESS_DATA_ERROR:
+				tipStr = fmt.Sprint(PROCESS_DATA_ERROR, ": session closed for error while process data.")
+				break
+			case OPEN_PTY_FAILED:
+				tipStr = fmt.Sprint(OPEN_PTY_FAILED, ": session closed for open pty failed.")
+				break
+			case FLOW_EXCEED_LIMIT:
+				tipStr = fmt.Sprint(FLOW_EXCEED_LIMIT, ": session closed for the flow exceeds limit.")
+				break
+			}
+			log.GetLogger().Errorln("connect failed code 5:", tipStr)
+			fmt.Println(tipStr)
 			return errors.New("Connection closed. code 5")
 		} else if code == 3 {
 
+		} else if code == 7 { // 设置client的发送速率
+			speed, err := bytesToIntU(payload[1:]) // speed 单位是 bps
+			if speed != 0 {
+				if err != nil {
+					return err
+				}
+				c.sendInterval = 1000 / (speed / 8 / sendPackageSize)
+				log.GetLogger().Infof("Set send speed, speed[%d]bps sendInterval[%d]ms\n", speed, c.sendInterval)
+			}
 		}
 	}
 	return nil
@@ -330,6 +395,7 @@ func (c *Client) readLoop(wg *sync.WaitGroup) int {
 			}
 		}
 	}
+	return 0
 }
 
 type exposeFd interface {
@@ -340,28 +406,45 @@ func (c *Client) writeLoopRawMode(wg *sync.WaitGroup) int {
 	defer wg.Done()
 	fname := "writeLoop"
 
-	buff := make([]byte, 2048)
+	buff := make([]byte, sendPackageSize)
 	br := bufio.NewReader(c.Input)
 	if c.PortForward {
 		// wait agent build local connect
-		time.Sleep(time.Duration(2) * time.Second)
+		time.Sleep(time.Duration(3) * time.Second)
 		c.real_connected = true
+		if c.verbosemode {
+			log.GetLogger().Info("set real_connected true")
+		}
 	}
 
 	var resend_buff []byte
 	for {
-		time.Sleep(time.Duration(100) * time.Millisecond)
-		size, err := br.Read(buff)
-		if err != nil {
-			log.GetLogger().Errorf("get raw input failed: %v", err)
-			// tell agent to close session
-			log.GetLogger().Infoln("local conn closed, send CloseMessage")
-			if err = c.SendCloseMessage(); err != nil {
-				log.GetLogger().Errorf("SendCloseMessage err: %v", err)
-			}
-			return openPoison(fname, c.poison)
+		time.Sleep(time.Duration(c.sendInterval) * time.Millisecond)
+		// if resend_buff not empty, set read timeout avoid blocking forever
+		if c.PortForward && len(resend_buff) > 0 {
+			c.Input.(net.Conn).SetReadDeadline(time.Now().Add(1 * time.Second))
 		}
-		if size == 0 {
+		size, err := br.Read(buff)
+		if c.PortForward {
+			// cancel the read timeout
+			c.Input.(net.Conn).SetReadDeadline(time.Time{})
+		}
+		if err != nil {
+			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+				if c.verbosemode {
+					log.GetLogger().Warnln("read from local conn timeout:", err)
+				}
+			} else {
+				log.GetLogger().Errorf("get raw input failed: %v", err)
+				// tell agent to close session
+				log.GetLogger().Infoln("local conn closed, send CloseMessage")
+				if err = c.SendCloseMessage(); err != nil {
+					log.GetLogger().Errorf("SendCloseMessage err: %v", err)
+				}
+				return openPoison(fname, c.poison)
+			}
+		}
+		if size == 0 && len(resend_buff) == 0 {
 			continue
 		}
 
@@ -393,6 +476,7 @@ func (c *Client) writeLoopRawMode(wg *sync.WaitGroup) int {
 
 	}
 
+	return 0
 }
 
 func (c *Client) writeLoop(wg *sync.WaitGroup) int {
@@ -437,6 +521,7 @@ func (c *Client) writeLoop(wg *sync.WaitGroup) int {
 
 					return openPoison(fname, c.poison)
 
+					continue
 				} else {
 					log.GetLogger().Errorln("err in input empty", err)
 					return openPoison(fname, c.poison)
@@ -459,6 +544,7 @@ func (c *Client) writeLoop(wg *sync.WaitGroup) int {
 
 		}
 	}
+	return 0
 }
 
 func (c *Client) SendStreamDataMessage(inputData []byte) (err error) {

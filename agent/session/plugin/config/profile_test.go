@@ -446,7 +446,7 @@ func TestValidateAk(t *testing.T) {
 	assert.EqualError(t, err, "invalid access_key_id: ")
 	actual.AccessKeyId = "accessKeyId"
 	err = actual.ValidateAK()
-	assert.EqualError(t, err, "invaild access_key_secret: ")
+	assert.EqualError(t, err, "invalid access_key_secret: ")
 	actual.AccessKeySecret = "accessKeySecret"
 	err = actual.ValidateAK()
 	assert.Nil(t, err)

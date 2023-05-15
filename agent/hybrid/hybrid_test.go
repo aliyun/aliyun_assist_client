@@ -34,7 +34,7 @@ func TestRegister(t *testing.T) {
 	httpmock.RegisterResponder("POST", url,
 		httpmock.NewStringResponder(200, `{"code":200,"instanceId":"xx-123"}`))
 	UnRegister(false)
-	ret := Register(region, "test_code", "test_id", "test_machine", "vpc", false)
+	ret := Register(region, "test_code", "test_id", "test_machine", "vpc", false, nil)
 
 	assert.True(t, ret)
 	path,_ := util.GetHybridPath()

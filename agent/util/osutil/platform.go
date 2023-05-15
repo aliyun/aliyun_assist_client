@@ -14,6 +14,13 @@ const (
 	commandOutputMessage          = "Command output %v"
 )
 
+const (
+	ARCH_64      = "amd64"
+	ARCH_32      = "386"
+	ARCH_ARM     = "arm64"
+	ARCH_UNKNOWN = "unknown"
+)
+
 // PlatformFamily marks a family of similar operating systems
 
 // PlatformFamilyWindows uses Ohai identifier for windows platform family

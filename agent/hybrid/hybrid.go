@@ -35,6 +35,12 @@ type RegisterInfo struct {
 	ClientVersion   string `json:"agentVersion"`
 	PublicKeyBase64 string `json:"publicKey"`
 	Id              string `json:"activationId"`
+	Tag             []Tag  `json:"tag"`
+}
+
+type Tag struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
 }
 
 type registerResponse struct {
@@ -46,7 +52,7 @@ type unregisterResponse struct {
 	Code int `json:"code"`
 }
 
-func Register(region string, code string, id string, name string, networkmode string, need_restart bool) (ret bool) {
+func Register(region string, code string, id string, name string, networkmode string, need_restart bool, tags []Tag) (ret bool) {
 	log.GetLogger().Infoln(region, code, id, name)
 	errmsg := ""
 	defer func() {
@@ -100,14 +106,12 @@ func Register(region string, code string, id string, name string, networkmode st
 		ClientVersion:   version.AssistVersion,
 		PublicKeyBase64: encodeString,
 		Id:              id,
+		Tag:             tags,
 	}
 	jsonBytes, _ := json.Marshal(*info)
- 	var response string
-	domain := util.HYBRID_DOMAIN
-	if networkmode == "vpc" {
-		domain = util.HYBRID_DOMAIN_VPC
-	}
-	url := "https://" + region + domain + "/luban/api/instance/register"	
+	var response string
+	url := util.GetRegisterService(region, networkmode)
+	log.GetLogger().Info("register service url: ", url)
 	response, err = util.HttpPost(url, string(jsonBytes), "")
 	if err != nil {
 		ret = false
@@ -126,12 +130,7 @@ func Register(region string, code string, id string, name string, networkmode st
 	var register_response registerResponse
 	if err := json.Unmarshal([]byte(response), &register_response); err == nil {
 		if register_response.Code == 200 {
-			var path string
-			if util.IsSelfHosted() {
-				path, _ = util.GetSelfhostedPath()
-			} else {
-				path, _ = util.GetHybridPath()
-			}
+			path, _ := util.GetHybridPath()
 			util.WriteStringToFile(path+"/network-mode", networkmode)
 			util.WriteStringToFile(path+"/pub-key", pub.String())
 			util.WriteStringToFile(path+"/pri-key", pri.String())
@@ -177,9 +176,8 @@ func UnRegister(need_restart bool) bool {
 		}
 	}()
 
-	url := "https://" + util.GetServerHost()
-	url += "/luban/api/instance/deregister"
-
+	url := util.GetDeRegisterService()
+	log.GetLogger().Info("deregister service url: ", url)
 	response, err := util.HttpPost(url, "", "")
 	if err != nil {
 		errmsg = fmt.Sprintf("deregister request err: %s", err.Error())

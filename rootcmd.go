@@ -5,6 +5,7 @@ import (
 	"os"
 	"runtime"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	logrusr "github.com/bombsimon/logrusr/v3"
@@ -14,12 +15,13 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/checkkdump"
 	"github.com/aliyun/aliyun_assist_client/agent/checkvirt"
 	"github.com/aliyun/aliyun_assist_client/agent/clientreport"
+	"github.com/aliyun/aliyun_assist_client/agent/cryptdata"
 	"github.com/aliyun/aliyun_assist_client/agent/flagging"
 	"github.com/aliyun/aliyun_assist_client/agent/heartbeat"
 	"github.com/aliyun/aliyun_assist_client/agent/hybrid"
 	"github.com/aliyun/aliyun_assist_client/agent/install"
-	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/ipc/server"
+	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	"github.com/aliyun/aliyun_assist_client/agent/perfmon"
 	"github.com/aliyun/aliyun_assist_client/agent/pluginmanager"
@@ -49,6 +51,7 @@ type Options struct {
 	Register       bool
 	DeRegister     bool
 	Region         string
+	Tags 		   []string
 	ActivationCode string
 	ActivationId   string
 	NetWorkMode    string
@@ -62,22 +65,23 @@ type Options struct {
 type program struct{}
 
 const (
-	HelpFlagName = "help"
+	HelpFlagName    = "help"
 	VersionFlagName = "version"
 	GithashFlagName = "githash"
 	InstallFlagName = "install"
-	RemoveFlagName = "remove"
-	StartFlagName = "start"
-	StopFlagName = "stop"
+	RemoveFlagName  = "remove"
+	StartFlagName   = "start"
+	StopFlagName    = "stop"
 	VerboseFlagName = "verbose"
 
-	RegisterFlagName = "register"
-	DeRegisterFlagName = "deregister"
-	RegionFlagName = "RegionId"
+	RegisterFlagName       = "register"
+	DeRegisterFlagName     = "deregister"
+	RegionFlagName         = "RegionId"
+	TagFlagName 		   = "tag"
 	ActivationCodeFlagName = "ActivationCode"
-	ActivationIdFlagName = "ActivationId"
-	NetworkModeFlagName = "NetworkMode"
-	InstanceNameFlagName = "InstanceName"
+	ActivationIdFlagName   = "ActivationId"
+	NetworkModeFlagName    = "NetworkMode"
+	InstanceNameFlagName   = "InstanceName"
 
 	LogPathFlagName = "LogPath"
 
@@ -86,93 +90,100 @@ const (
 )
 
 var (
-	G_Running bool = true
-	G_StopEvent chan struct{} = nil
+	G_Running     bool          = true
+	G_StopEvent   chan struct{} = nil
 	SingleAppLock *single.Single
 
 	persistentFlags = []cli.Flag{
 		{
-			Name: HelpFlagName,
-			Shorthand: 'h',
-			Short: i18n.T(`print help`, `打印此帮助`),
+			Name:         HelpFlagName,
+			Shorthand:    'h',
+			Short:        i18n.T(`print help`, `打印此帮助`),
 			AssignedMode: cli.AssignedNone,
-			Persistent: true,
-			Category: "caller",
+			Persistent:   true,
+			Category:     "caller",
 		},
 		{
-			Name: LogPathFlagName,
-			Shorthand: 'L',
-			Short: i18n.T(`log path`, `指定日志保存目录`),
+			Name:         LogPathFlagName,
+			Shorthand:    'L',
+			Short:        i18n.T(`log path`, `指定日志保存目录`),
 			AssignedMode: cli.AssignedOnce,
-			Persistent: true,
-			Category: "caller",
+			Persistent:   true,
+			Category:     "caller",
 		},
 	}
 	rootFlags = []cli.Flag{
 		{
-			Name: VersionFlagName,
-			Shorthand: 'v',
-			Short: i18n.T(`print version`, `打印版本号`),
+			Name:         VersionFlagName,
+			Shorthand:    'v',
+			Short:        i18n.T(`print version`, `打印版本号`),
 			AssignedMode: cli.AssignedNone,
-			Category: "caller",
+			Category:     "caller",
 		},
 		{
-			Name: GithashFlagName,
-			Short: i18n.T(`print git hash`, `打印Git commit哈希值`),
+			Name:         GithashFlagName,
+			Short:        i18n.T(`print git hash`, `打印Git commit哈希值`),
 			AssignedMode: cli.AssignedNone,
-			Category: "caller",
+			Category:     "caller",
 		},
 		{
-			Name: InstallFlagName,
-			Short: i18n.T(`install assist`, `安装云助手agent为系统服务`),
+			Name:         InstallFlagName,
+			Short:        i18n.T(`install assist`, `安装云助手agent为系统服务`),
 			AssignedMode: cli.AssignedNone,
-			Category: "caller",
+			Category:     "caller",
 		},
 		{
-			Name: RemoveFlagName,
-			Short: i18n.T(`remove assist`, `删除已安装的云助手agent系统服务`),
+			Name:         RemoveFlagName,
+			Short:        i18n.T(`remove assist`, `删除已安装的云助手agent系统服务`),
 			AssignedMode: cli.AssignedNone,
-			Category: "caller",
+			Category:     "caller",
 		},
 		{
-			Name: StartFlagName,
-			Short: i18n.T(`start assist`, `启动云助手agent系统服务`),
+			Name:         StartFlagName,
+			Short:        i18n.T(`start assist`, `启动云助手agent系统服务`),
 			AssignedMode: cli.AssignedNone,
-			Category: "caller",
+			Category:     "caller",
 		},
 		{
-			Name: StopFlagName,
-			Short: i18n.T(`stop assist`, `停止云助手agent系统服务`),
+			Name:         StopFlagName,
+			Short:        i18n.T(`stop assist`, `停止云助手agent系统服务`),
 			AssignedMode: cli.AssignedNone,
-			Category: "caller",
+			Category:     "caller",
 		},
 		{
-			Name: VerboseFlagName,
-			Shorthand: 'V',
-			Short: i18n.T(`enable verbose`, `启用云助手agent的详细运行过程输出`),
+			Name:         VerboseFlagName,
+			Shorthand:    'V',
+			Short:        i18n.T(`enable verbose`, `启用云助手agent的详细运行过程输出`),
 			AssignedMode: cli.AssignedNone,
-			Category: "caller",
+			Category:     "caller",
 		},
 
 		{
-			Name: RegisterFlagName,
-			Shorthand: 'r',
-			Short: i18n.T(`register as aliyun managed instance`, `注册为云助手托管实例`),
+			Name:         RegisterFlagName,
+			Shorthand:    'r',
+			Short:        i18n.T(`register as aliyun managed instance`, `注册为云助手托管实例`),
 			AssignedMode: cli.AssignedNone,
-			Category: "caller",
+			Category:     "caller",
 		},
 		{
-			Name: DeRegisterFlagName,
-			Shorthand: 'u',
-			Short: i18n.T(`unregister as aliyun managed instance`, `取消注册为云助手托管实例`),
+			Name:         DeRegisterFlagName,
+			Shorthand:    'u',
+			Short:        i18n.T(`unregister as aliyun managed instance`, `取消注册为云助手托管实例`),
 			AssignedMode: cli.AssignedNone,
-			Category: "caller",
+			Category:     "caller",
 		},
 		{
-			Name: RegionFlagName,
-			Shorthand: 'R',
-			Short: i18n.T(`used in register mode`, `（该参数仅限在注册为云助手托管实例时使用）`),
+			Name:         RegionFlagName,
+			Shorthand:    'R',
+			Short:        i18n.T(`used in register mode`, `（该参数仅限在注册为云助手托管实例时使用）`),
 			AssignedMode: cli.AssignedOnce,
+			Category:     "caller",
+		},
+		{
+			Name: TagFlagName,
+			Shorthand: 'T',
+			Short: i18n.T(`used in register mode`, `（该参数仅限在注册为云助手托管实例时使用）`),
+			AssignedMode: cli.AssignedRepeatable,
 			Category: "caller",
 		},
 		{
@@ -180,49 +191,49 @@ var (
 			Shorthand: 'C',
 			Short: i18n.T(`used in register mode`, `（该参数仅限在注册为云助手托管实例时使用）`),
 			AssignedMode: cli.AssignedOnce,
-			Category: "caller",
+			Category:     "caller",
 		},
 		{
-			Name: ActivationIdFlagName,
-			Shorthand: 'I',
-			Short: i18n.T(`used in register mode`, `（该参数仅限在注册为云助手托管实例时使用）`),
+			Name:         ActivationIdFlagName,
+			Shorthand:    'I',
+			Short:        i18n.T(`used in register mode`, `（该参数仅限在注册为云助手托管实例时使用）`),
 			AssignedMode: cli.AssignedOnce,
-			Category: "caller",
+			Category:     "caller",
 		},
 		{
-			Name: NetworkModeFlagName,
-			Shorthand: 'm',
-			Short: i18n.T(`used in register mode`, `（该参数仅限在注册为云助手托管实例时使用）`),
+			Name:         NetworkModeFlagName,
+			Shorthand:    'm',
+			Short:        i18n.T(`used in register mode`, `（该参数仅限在注册为云助手托管实例时使用）`),
 			AssignedMode: cli.AssignedOnce,
-			Category: "caller",
+			Category:     "caller",
 		},
 		{
-			Name: InstanceNameFlagName,
-			Shorthand: 'N',
-			Short: i18n.T(`used in register mode`, `（该参数仅限在注册为云助手托管实例时使用）`),
+			Name:         InstanceNameFlagName,
+			Shorthand:    'N',
+			Short:        i18n.T(`used in register mode`, `（该参数仅限在注册为云助手托管实例时使用）`),
 			AssignedMode: cli.AssignedOnce,
-			Category: "caller",
+			Category:     "caller",
 		},
 
 		{
-			Name: RunAsCommonFlagName,
-			Shorthand: 'c',
-			Short: i18n.T(`run as common`, `以 common 模式运行`),
+			Name:         RunAsCommonFlagName,
+			Shorthand:    'c',
+			Short:        i18n.T(`run as common`, `以 common 模式运行`),
 			AssignedMode: cli.AssignedNone,
-			Category: "caller",
+			Category:     "caller",
 		},
 		{
-			Name: RunAsDaemonFlagName,
-			Shorthand: 'd',
-			Short: i18n.T(`start as daemon`, `切换到后台运行`),
+			Name:         RunAsDaemonFlagName,
+			Shorthand:    'd',
+			Short:        i18n.T(`start as daemon`, `切换到后台运行`),
 			AssignedMode: cli.AssignedNone,
-			Category: "caller",
+			Category:     "caller",
 		},
 	}
 
 	rootCmd = cli.Command{
-		Name: "aliyun-service",
-		Short:             i18n.T(`Aliyun Assist Copyright (c) 2017-2022 Alibaba Group Holding Limited`, `Aliyun Assist Copyright (c) 2017-2022 Alibaba Group Holding Limited`),
+		Name:              "aliyun-service",
+		Short:             i18n.T(`Aliyun Assist Copyright (c) 2017-2023 Alibaba Group Holding Limited`, `Aliyun Assist Copyright (c) 2017-2023 Alibaba Group Holding Limited`),
 		Usage:             "aliyun-service [subcommand] [flags]",
 		Sample:            "",
 		EnableUnknownFlag: false,
@@ -331,6 +342,7 @@ func (p *program) run() {
 	}
 
 	pluginmanager.InitPluginCheckTimer()
+	cryptdata.Init()
 
 	if err := checkkdump.CheckKdumpTimer(); err != nil {
 		log.GetLogger().Errorln("Failed to StartKdumpCheckTimer: ", err)
@@ -402,6 +414,7 @@ func parseOptions(ctx *cli.Context) Options {
 	options.Register = ctx.Flags().Get(RegisterFlagName).IsAssigned()
 	options.DeRegister = ctx.Flags().Get(DeRegisterFlagName).IsAssigned()
 	options.Region, _ = ctx.Flags().Get(RegionFlagName).GetValue()
+	options.Tags = ctx.Flags().Get(TagFlagName).GetValues()
 	options.ActivationCode, _ = ctx.Flags().Get(ActivationCodeFlagName).GetValue()
 	options.ActivationId, _ = ctx.Flags().Get(ActivationIdFlagName).GetValue()
 	options.NetWorkMode, _ = ctx.Flags().Get(NetworkModeFlagName).GetValue()
@@ -453,7 +466,19 @@ func runRootCommand(ctx *cli.Context, args []string) error {
 		return nil
 	}
 	if options.Register {
-		hybrid.Register(options.Region, options.ActivationCode, options.ActivationId, options.InstanceName, options.NetWorkMode, true)
+		tags := []hybrid.Tag{}
+		for _, tag := range options.Tags {
+			words := strings.Split(tag, "=")
+			if len(words) != 2 {
+				fmt.Println("Invalid tag: ", tag)
+				cli.Exit(1)
+			}
+			tags = append(tags, hybrid.Tag{
+				Key: words[0],
+				Value: words[1],
+			})
+		}
+		hybrid.Register(options.Region, options.ActivationCode, options.ActivationId, options.InstanceName, options.NetWorkMode, true, tags)
 		return nil
 	}
 	if options.DeRegister {

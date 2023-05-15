@@ -92,16 +92,6 @@ func GetCrossVersionConfigPath() (string, error) {
 	return crossVersionConfigDir, nil
 }
 
-func GetSelfhostedPath() (string, error) {
-	var cur string
-	var err error
-	cur, err = GetCurrentPath()
-
-	path := cur + "../selfhosted"
-	MakeSurePath(path)
-	return path, err
-}
-
 func GetTempPath() (string, error) {
 	goTempDir := os.TempDir()
 
