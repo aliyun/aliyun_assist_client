@@ -1,0 +1,12 @@
+language: go
+
+go:
+  - 1.7.x
+  - tip
+
+install:
+  - go get
+
+script:
+  - go build
+  - go test -v
