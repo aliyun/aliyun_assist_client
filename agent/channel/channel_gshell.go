@@ -18,9 +18,7 @@ import (
 type GshellChannel struct {
 	*Channel
 	hGshell         *os.File
-	StopChanelEvent chan struct{}
 	WaitCheckDone   sync.WaitGroup
-	lock            sync.Mutex
 }
 
 type gshellStatus struct {
@@ -35,14 +33,11 @@ func (c *GshellChannel) IsSupported() bool {
 	if util.IsHybrid() {
 		return false
 	}
-	c.lock.Lock()
-	if !c.Working {
+	if !c.Working.IsSet() {
 		if c.startChannelUnsafe() != nil {
-			c.lock.Unlock()
 			return false
 		}
 	}
-	c.lock.Unlock()
 	url := util.GetGshellCheckService()
 	resp, err := util.HttpPost(url, "", "text")
 	if err != nil {
@@ -78,15 +73,17 @@ func (c *GshellChannel) IsSupported() bool {
 // }
 
 func (c *GshellChannel) StartChannel() error {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	if c.Working {
+	if c.Working.IsSet() {
 		return nil
 	}
 	return c.startChannelUnsafe()
 }
 
 func (c *GshellChannel) startChannelUnsafe() error {
+	if !c.Working.CompareAndSwap(false, true) {
+		log.GetLogger().Warning("startChannelUnsafe run duplicated, return it")
+		return nil // startChannelUnsage 同一时间只能有一个执行
+	}
 	gshellPath := "/dev/virtio-ports/org.qemu.guest_agent.0"
 	if runtime.GOOS == "windows" {
 		gshellPath = "\\\\.\\Global\\org.qemu.guest_agent.0"
@@ -100,20 +97,21 @@ func (c *GshellChannel) startChannelUnsafe() error {
 			"type", ChannelTypeStr(c.ChannelType),
 		).ReportEvent()
 		log.GetLogger().Errorln("open gshell failed:", gshellPath, "error:", e)
+		c.Working.Clear()
 		return e
 	}
 	log.GetLogger().Infoln("open gshell ok:", gshellPath)
 	c.hGshell = h
 	c.WaitCheckDone.Add(1)
 	go func() {
+		defer c.Working.Clear()
+		defer c.hGshell.Close()
 		defer c.WaitCheckDone.Done()
 		tick := time.NewTicker(time.Duration(200) * time.Millisecond)
 		defer tick.Stop()
 		buf := make([]byte, 2048)
 		for {
 			select {
-			case <-c.StopChanelEvent:
-				return
 			case <-tick.C:
 				n, err := c.hGshell.Read(buf)
 				if err == nil && n > 0 {
@@ -129,23 +127,18 @@ func (c *GshellChannel) startChannelUnsafe() error {
 							}
 							clientreport.SendReport(report)
 							go c.SwitchChannel()
+							return
 						}
 					}
 				}
 			}
 		}
 	}()
-	c.Working = true
 	return nil
 }
 
 func (c *GshellChannel) StopChannel() error {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	c.StopChanelEvent <- struct{}{}
 	c.WaitCheckDone.Wait()
-	c.hGshell.Close()
-	c.Working = false
 	return nil
 }
 
@@ -200,12 +193,12 @@ func (c *GshellChannel) SwitchChannel() error {
 }
 
 func NewGshellChannel(CallBack OnReceiveMsg) IChannel {
-	return &GshellChannel{
+	g := &GshellChannel{
 		Channel: &Channel{
 			CallBack:    CallBack,
 			ChannelType: ChannelGshellType,
-			Working:     false,
 		},
-		StopChanelEvent: make(chan struct{}),
 	}
+	g.Working.Clear()
+	return g
 }

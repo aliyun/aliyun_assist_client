@@ -17,7 +17,7 @@
 -   RedHat
 -   SUSE Linux Enterprise Server
 -   OpenSUSE
--   Alibaba Cloud Linux
+-   Aliyun Linux
 -   FreeBSD
 -   CoreOS
 

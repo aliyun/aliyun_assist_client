@@ -79,12 +79,7 @@ func (c *WebSocketChannel) StartChannel() error {
 		str_timestamp := strconv.FormatInt(timestamp, 10)
 
 		var instance_id string
-		path := ""
-		if util.IsSelfHosted() {
-			path, _ = util.GetSelfhostedPath()
-		} else {
-			path, _ = util.GetHybridPath()
-		}
+		path, _ := util.GetHybridPath()
 
 		content, _ := ioutil.ReadFile(path + "/instance-id")
 		instance_id = string(content)
@@ -118,7 +113,7 @@ func (c *WebSocketChannel) StartChannel() error {
 	}
 	c.wskConn = conn
 	log.GetLogger().Infoln("Start websocket channel ok! url:", url)
-	c.Working = true
+	c.Working.Set()
 	c.StartPings(time.Second * 60)
 	go func() {
 		defer func() {
@@ -129,7 +124,7 @@ func (c *WebSocketChannel) StartChannel() error {
 		}()
 		retryCount := 0
 		for {
-			if c.Working == false {
+			if !c.Working.IsSet() {
 				log.GetLogger().Infoln("websocket channel is closed")
 				break
 			}
@@ -141,7 +136,7 @@ func (c *WebSocketChannel) StartChannel() error {
 					c.lock.Lock()
 					defer c.lock.Unlock()
 					c.wskConn.Close()
-					c.Working = false
+					c.Working.Clear()
 					log.GetLogger().Errorf("Reach the retry limit for receive messages. Error: %v", err.Error())
 					report := clientreport.ClientReport{
 						ReportType: "switch_channel_in_wsk",
@@ -219,8 +214,8 @@ func (c *WebSocketChannel) SwitchChannel() error {
 func (c *WebSocketChannel) StopChannel() error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	if c.Working == true {
-		c.Working = false
+	if c.Working.IsSet() {
+		c.Working.Clear()
 		log.GetLogger().Println("close websocket channel")
 		err := c.wskConn.Close()
 		if err != nil {
@@ -239,7 +234,7 @@ func (c *WebSocketChannel) StartPings(pingInterval time.Duration) {
 
 	go func() {
 		for {
-			if c.Working == false {
+			if !c.Working.IsSet() {
 				return
 			}
 			log.GetLogger().Infoln("WebsocketChannel: ping...")
@@ -261,11 +256,12 @@ func (c *WebSocketChannel) StartPings(pingInterval time.Duration) {
 }
 
 func NewWebsocketChannel(CallBack OnReceiveMsg) IChannel {
-	return &WebSocketChannel{
+	w := &WebSocketChannel{
 		Channel: &Channel{
 			CallBack:    CallBack,
 			ChannelType: ChannelWebsocketType,
-			Working:     false,
 		},
 	}
+	w.Working.Clear()
+	return w
 }

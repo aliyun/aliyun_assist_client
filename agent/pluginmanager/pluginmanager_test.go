@@ -73,14 +73,8 @@ func TestPluginManager(t *testing.T) {
 			pluginUpdateCheckResq := PluginUpdateCheckRequest{}
 			json.Unmarshal(content, &pluginUpdateCheckResq)
 			pluginUpdateInfo := PluginUpdateInfo{}
-			pluginUpdateInfo.NeedUpdate = 1
-			pluginUpdateInfo.Info.PluginID = "plugin-id"
-			pluginUpdateInfo.Info.Name = "name"
-			pluginUpdateInfo.Info.Url = "url"
-			pluginUpdateInfo.Info.Md5 = "md5"
-			pluginUpdateInfo.Info.RunPath = "runpath"
-			pluginUpdateInfo.Info.TimeOut = "10"
-			pluginUpdateInfo.Info.Version = "1.0"
+			pluginUpdateInfo.Name = "name"
+			pluginUpdateInfo.Version = "1.0"
 			pluginUpdateCheckResp := PluginUpdateCheckResponse{
 				InstanceId: "instance-id",
 				NextInterval: 3000,
@@ -98,7 +92,7 @@ func TestPluginManager(t *testing.T) {
 	setInterval("pluginUpdateCheckIntervalSeconds", 5)
 	setInterval("unknows", 30)
 	pluginHealthScanInterval = 5
-	pluginUpdateCheckIntervalSeconds = 5
+	pluginUpdateCheckInterval = 5
 	timermanager.InitTimerManager()
 	InitPluginCheckTimer()
 	time.Sleep(time.Duration(10) * time.Second)

@@ -1,3 +1,4 @@
+//go:build !linux
 // +build !linux
 
 package checknet
@@ -7,7 +8,7 @@ import (
 )
 
 // RequestNetcheck is currently not supported on this operating system, and is
-// simply an empty function. On supported OSes, it would asynchronusly invoke
+// simply an empty function. On supported OSes, it would asynchronously invoke
 // netcheck program for network diagnostic, when no other network diagnostic is
 // running or the last diagnostic report has outdated.
 func RequestNetcheck(requestType NetcheckRequestType) {

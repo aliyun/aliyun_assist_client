@@ -10,23 +10,24 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/cli"
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/config"
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/i18n"
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/portforward"
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/session"
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/ssh"
-	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/portforward"
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/sendpublickey"
 	"github.com/spf13/pflag"
 )
 
 var (
-	gitHash   string
-	cliVer string = "10.0.0.1"
+	gitHash string
+	cliVer  string = "10.0.0.1"
 )
 
 type Options struct {
-	GetHelp        bool
-	GetVersion     bool
-	WebsocketUrl            string
-	IsVerbose     bool
-	IsRawMode     bool
+	GetHelp      bool
+	GetVersion   bool
+	WebsocketUrl string
+	IsVerbose    bool
+	IsRawMode    bool
 }
 
 func parseOptions() Options {
@@ -42,7 +43,7 @@ func parseOptions() Options {
 	pflag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [options]\n", os.Args[0])
 		fmt.Fprintln(os.Stderr)
-		fmt.Fprintln(os.Stderr, "Aliyun Assist Copyright (c) 2017-2022 Alibaba Group Holding Limited")
+		fmt.Fprintln(os.Stderr, "Aliyun Assist Copyright (c) 2017-2023 Alibaba Group Holding Limited")
 		fmt.Fprintln(os.Stderr)
 		fmt.Fprintln(os.Stderr, "Options:")
 		pflag.PrintDefaults()
@@ -98,11 +99,12 @@ func main() {
 	rootCmd.AddSubCommand(session.NewSessionCommand())
 	rootCmd.AddSubCommand(ssh.NewSshCommand())
 	rootCmd.AddSubCommand(portforward.NewPortForwardCommand())
+	rootCmd.AddSubCommand(sendpublickey.NewSendPublicKeyCommand())
 	//rootCmd.AddSubCommand(cli.NewAutoCompleteCommand())
 	rootCmd.Execute(ctx, os.Args[1:])
 }
 
-func waitSignals( ) error {
+func waitSignals() error {
 	sigChan := make(chan os.Signal, 2)
 	signal.Notify(
 		sigChan,
@@ -112,9 +114,7 @@ func waitSignals( ) error {
 
 	<-sigChan
 	log.GetLogger().Infoln("session plugin stop", sigChan)
-    os.Exit(1)
-	
+	os.Exit(1)
+
 	return nil
 }
-
-

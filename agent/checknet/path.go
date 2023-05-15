@@ -16,7 +16,7 @@ const (
 )
 
 var (
-	_netcheckPath string
+	_netcheckPath     string
 	_netcheckPathLock sync.Mutex
 )
 
@@ -57,7 +57,7 @@ func getNetcheckPath() string {
 		if err := initNetcheckPath(); err != nil {
 			log.GetLogger().WithFields(logrus.Fields{
 				"module": "checknet",
-			}).WithError(err).Errorln("Failed to detect netcheck exectuable path")
+			}).WithError(err).Errorln("Failed to detect netcheck executable path")
 		}
 	}
 

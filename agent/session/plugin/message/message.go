@@ -2,56 +2,57 @@ package message
 
 import (
 	"bytes"
-	"fmt"
 	"encoding/binary"
 	"errors"
-	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"fmt"
 	"strings"
+
+	"github.com/aliyun/aliyun_assist_client/agent/log"
 )
 
 const (
-	InputStreamDataMessage = 0 // string = "input_stream_data"
+	InputStreamDataMessage  = 0 // string = "input_stream_data"
 	OutputStreamDataMessage = 1 // string = "output_stream_data"
-	SetSizeDataMessage = 2 //string = "set_size"
-	CloseDataChannel = 3
-	StatusDataChannel = 5
+	SetSizeDataMessage      = 2 //string = "set_size"
+	CloseDataChannel        = 3
+	StatusDataChannel       = 5
 )
 
 const (
 	AgentMessage_MessageTypeLength    = 4
 	AgentMessage_SchemaVersionLength  = 4
-	AgentMessage_SessionIdLength  = 1
-	AgentMessage_InstanceIdLength  = 1
+	AgentMessage_SessionIdLength      = 1
+	AgentMessage_InstanceIdLength     = 1
 	AgentMessage_CreatedDateLength    = 8
 	AgentMessage_SequenceNumberLength = 8
-	AgentMessage_PayloadLength    = 4
+	AgentMessage_PayloadLength        = 4
 )
 
 const (
 	AgentMessage_MessageTypeOffset    = 0
 	AgentMessage_SchemaVersionOffset  = AgentMessage_MessageTypeOffset + AgentMessage_MessageTypeLength
-	AgentMessage_SessionIdOffset  = AgentMessage_SchemaVersionOffset + AgentMessage_SchemaVersionLength
-	AgentMessage_InstanceIdOffset  = AgentMessage_SessionIdOffset + AgentMessage_SessionIdLength
+	AgentMessage_SessionIdOffset      = AgentMessage_SchemaVersionOffset + AgentMessage_SchemaVersionLength
+	AgentMessage_InstanceIdOffset     = AgentMessage_SessionIdOffset + AgentMessage_SessionIdLength
 	AgentMessage_CreatedDateOffset    = AgentMessage_InstanceIdOffset + AgentMessage_InstanceIdLength
 	AgentMessage_SequenceNumberOffset = AgentMessage_CreatedDateOffset + AgentMessage_CreatedDateLength
-	AgentMessage_PayloadLengthOffset        = AgentMessage_SequenceNumberOffset + AgentMessage_SequenceNumberLength
-	AgentMessage_PayloadOffset      = AgentMessage_PayloadLengthOffset + AgentMessage_PayloadLength
+	AgentMessage_PayloadLengthOffset  = AgentMessage_SequenceNumberOffset + AgentMessage_SequenceNumberLength
+	AgentMessage_PayloadOffset        = AgentMessage_PayloadLengthOffset + AgentMessage_PayloadLength
 )
 
 type Message struct {
 	MessageType    uint32
 	SchemaVersion  string
-	SessionId    string
+	SessionId      string
 	CreatedDate    uint64
 	SequenceNumber int64
 	// MessageId      string
-	PayloadLength  uint32
-	Payload        []byte
+	PayloadLength uint32
+	Payload       []byte
 }
 
 func bytesToIntU(b []byte) (int, error) {
 	if len(b) == 3 {
-		b = append([]byte{0},b...)
+		b = append([]byte{0}, b...)
 	}
 	bytesBuffer := bytes.NewBuffer(b)
 	switch len(b) {
@@ -68,13 +69,12 @@ func bytesToIntU(b []byte) (int, error) {
 		err := binary.Read(bytesBuffer, binary.BigEndian, &tmp)
 		return int(tmp), err
 	default:
-		return 0,fmt.Errorf("%s", "BytesToInt bytes lenth is invaild!")
+		return 0, fmt.Errorf("%s", "BytesToInt bytes lenth is invalid!")
 	}
 }
 
-
 func (message *Message) Deserialize(input []byte) (err error) {
-   
+
 	message.MessageType, err = getUInteger(input, AgentMessage_MessageTypeOffset)
 	if err != nil {
 		log.GetLogger().Errorf("Could not deserialize field MessageType with error: %v", err)
@@ -85,45 +85,39 @@ func (message *Message) Deserialize(input []byte) (err error) {
 		log.GetLogger().Errorf("Could not deserialize field SchemaVersion with error: %v", err)
 		return err
 	}
-	
- 
-    session_id_len, err := bytesToIntU(input[AgentMessage_SessionIdOffset:AgentMessage_SessionIdOffset+1])
+
+	session_id_len, err := bytesToIntU(input[AgentMessage_SessionIdOffset : AgentMessage_SessionIdOffset+1])
 	if err != nil {
 		log.GetLogger().Errorf("Could not deserialize field session id with error: %v", err)
 		return err
 	}
- 
-	
+
 	offset_data := session_id_len
-	
- 
-    instance_id_len, err := bytesToIntU(input[AgentMessage_InstanceIdOffset + int(offset_data):AgentMessage_InstanceIdOffset + int(offset_data)+1])
+
+	instance_id_len, err := bytesToIntU(input[AgentMessage_InstanceIdOffset+int(offset_data) : AgentMessage_InstanceIdOffset+int(offset_data)+1])
 	if err != nil {
 		log.GetLogger().Errorf("Could not deserialize field instances id with error: %v", err)
 		return err
 	}
- 
-	
-   offset_data += instance_id_len
 
- 
-	message.CreatedDate, err = getULong(input, AgentMessage_CreatedDateOffset + int(offset_data))
- 
+	offset_data += instance_id_len
+
+	message.CreatedDate, err = getULong(input, AgentMessage_CreatedDateOffset+int(offset_data))
+
 	if err != nil {
 		log.GetLogger().Errorf("Could not deserialize field CreatedDate with error: %v", err)
 		return err
 	}
 
+	message.SequenceNumber, err = getLong(input, AgentMessage_SequenceNumberOffset+int(offset_data))
 
-	message.SequenceNumber, err = getLong(input, AgentMessage_SequenceNumberOffset + int(offset_data))
- 
 	if err != nil {
 		log.GetLogger().Errorf("Could not deserialize field SequenceNumber with error: %v", err)
 		return err
 	}
 
 	message.PayloadLength, err = getUInteger(input, AgentMessage_PayloadLengthOffset)
-	message.Payload = input[AgentMessage_PayloadOffset+ int(offset_data):]
+	message.Payload = input[AgentMessage_PayloadOffset+int(offset_data):]
 
 	return nil
 }
@@ -147,7 +141,7 @@ func getLong(byteArray []byte, offset int) (result int64, err error) {
 		log.GetLogger().Error("getLong failed: Offset is invalid.")
 		return 0, errors.New("Offset is outside the byte array.")
 	}
-	return bytesToLong(byteArray[offset:offset+8])
+	return bytesToLong(byteArray[offset : offset+8])
 }
 
 func getInteger(byteArray []byte, offset int) (result int32, err error) {
@@ -156,13 +150,13 @@ func getInteger(byteArray []byte, offset int) (result int32, err error) {
 		log.GetLogger().Error("getInteger failed: Offset is invalid.")
 		return 0, errors.New("Offset is bigger than the byte array.")
 	}
-	return bytesToInteger(byteArray[offset:offset+4])
+	return bytesToInteger(byteArray[offset : offset+4])
 }
 
 func getXxx(byteArray []byte, offset int) (result int32, err error) {
 	//byteArrayLength := len(byteArray)
 
-	return bytesToInteger(byteArray[offset:offset+1])
+	return bytesToInteger(byteArray[offset : offset+1])
 }
 
 func getString(byteArray []byte, offset int, stringLength int) (result string, err error) {
@@ -209,13 +203,13 @@ func (message *Message) Serialize() (result []byte, err error) {
 		log.GetLogger().Errorf("Could not serialize version with error: %v", err)
 		return make([]byte, 1), err
 	}
-	
+
 	if err = putXxx(result, AgentMessage_SessionIdOffset, 0); err != nil {
 		log.GetLogger().Errorf("Could not serialize session id len with error: %v", err)
 		return make([]byte, 1), err
 	}
 
- 	if err = putXxx(result, AgentMessage_InstanceIdOffset, 0); err != nil {
+	if err = putXxx(result, AgentMessage_InstanceIdOffset, 0); err != nil {
 		log.GetLogger().Errorf("Could not serialize instance id len with error: %v", err)
 		return make([]byte, 1), err
 	}
@@ -225,12 +219,10 @@ func (message *Message) Serialize() (result []byte, err error) {
 		return make([]byte, 1), err
 	}
 
-
 	if err = putLong(result, AgentMessage_SequenceNumberOffset, message.SequenceNumber); err != nil {
 		log.GetLogger().Errorf("Could not serialize SequenceNumber with error: %v", err)
 		return make([]byte, 1), err
 	}
-
 
 	if err = putUInteger(result, AgentMessage_PayloadLengthOffset, message.PayloadLength); err != nil {
 		log.GetLogger().Errorf("Could not serialize PayloadLength with error: %v", err)
@@ -315,7 +307,6 @@ func putInteger(byteArray []byte, offset int, value int32) (err error) {
 func putXxx(byteArray []byte, offset int, value int32) (err error) {
 	//byteArrayLength := len(byteArray)
 
-
 	bytes, err := integerToBytes(value)
 	if err != nil {
 		log.GetLogger().Error("putInteger failed: getBytesFromInteger Failed.")
@@ -370,7 +361,7 @@ func longToBytes(input int64) (result []byte, err error) {
 }
 
 // integerToBytes gets bytes array from an integer.
-func integerToBytes( input int32) (result []byte, err error) {
+func integerToBytes(input int32) (result []byte, err error) {
 	buf := new(bytes.Buffer)
 	binary.Write(buf, binary.LittleEndian, input)
 	if buf.Len() != 4 {

@@ -25,12 +25,12 @@ func invokeNetcheck() (int, error) {
 
 	netcheckPath := getNetcheckPath()
 	if netcheckPath == "" {
-		return 0, errors.New("Failed to find netcheck exectuable")
+		return 0, errors.New("Failed to find netcheck executable")
 	}
 
 	args := []string{"--vpc", "--fast-fail"}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(180) * time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(180)*time.Second)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, netcheckPath, args...)
@@ -47,4 +47,3 @@ func invokeNetcheck() (int, error) {
 	}
 	return 0, nil
 }
-

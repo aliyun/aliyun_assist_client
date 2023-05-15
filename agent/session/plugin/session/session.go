@@ -16,6 +16,7 @@ package session
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 	"io"
 	"net/http"
 	"os"
@@ -93,7 +94,7 @@ func getClientByCredentialsURI(credentialsURI string) (Response, error) {
 func GetEcsClient(ctx *cli.Context) (*ecs.Client, error) {
 	profile, err := config.LoadProfileWithContext(ctx)
 	if err != nil {
-		fmt.Printf("load configuration failed %s", err)
+		fmt.Errorf("load configuration failed %s", err)
 		return nil, fmt.Errorf("load configuration failed %s", err)
 	}
 	if profile.Mode == "AK" {
@@ -114,6 +115,18 @@ func GetEcsClient(ctx *cli.Context) (*ecs.Client, error) {
 		fmt.Printf("load configuration failed")
 		return nil, fmt.Errorf("cound not support current auth mode")
 	}
+
+}
+
+func GetComputeNestSupplierClient(ctx *cli.Context) (*sdk.Client, string, error) {
+	profile, err := config.LoadProfileWithContext(ctx)
+	if err != nil {
+		fmt.Errorf("load configuration failed %s", err)
+		return nil, "", fmt.Errorf("load configuration failed %s", err)
+	}
+
+	client, err := profile.GetClient(ctx)
+	return client, profile.RegionId, err
 
 }
 

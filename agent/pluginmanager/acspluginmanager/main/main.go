@@ -21,6 +21,7 @@ import (
 	pm "github.com/aliyun/aliyun_assist_client/agent/pluginmanager/acspluginmanager"
 	"github.com/aliyun/aliyun_assist_client/agent/pluginmanager/acspluginmanager/flag"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/agent/version"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/aliyun-cli/cli"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/aliyun-cli/i18n"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/single"
@@ -35,6 +36,11 @@ var (
 
 func main() {
 
+	version.AssistVersion = assistVer
+	version.GitCommitHash = gitHash
+	// User-Agent header value MUST be manually initialized since version
+	// information in version package is manually passed in as above
+	util.InitUserAgentValue()
 	cli.Version = assistVer
 	log.InitLog("acs_plugin_manager.log", "")
 	cli.PlatformCompatible()

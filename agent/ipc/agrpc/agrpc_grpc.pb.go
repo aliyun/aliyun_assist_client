@@ -23,9 +23,11 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type AssistAgentClient interface {
 	GenRsaKeyPair(ctx context.Context, in *GenRsaKeyPairReq, opts ...grpc.CallOption) (*GenRsaKeyPairResp, error)
+	RmRsaKeyPair(ctx context.Context, in *RemoveRsaKeyPairReq, opts ...grpc.CallOption) (*RemoveRsaKeyPairResp, error)
 	EncryptText(ctx context.Context, in *EncryptReq, opts ...grpc.CallOption) (*EncryptResp, error)
 	DecryptText(ctx context.Context, in *DecryptReq, opts ...grpc.CallOption) (*DecryptResp, error)
 	CheckKey(ctx context.Context, in *CheckKeyReq, opts ...grpc.CallOption) (*CheckKeyResp, error)
+	CreateSecretParam(ctx context.Context, in *CreateSecretParamReq, opts ...grpc.CallOption) (*CreateSecretParamResp, error)
 }
 
 type assistAgentClient struct {
@@ -39,6 +41,15 @@ func NewAssistAgentClient(cc grpc.ClientConnInterface) AssistAgentClient {
 func (c *assistAgentClient) GenRsaKeyPair(ctx context.Context, in *GenRsaKeyPairReq, opts ...grpc.CallOption) (*GenRsaKeyPairResp, error) {
 	out := new(GenRsaKeyPairResp)
 	err := c.cc.Invoke(ctx, "/protos.AssistAgent/GenRsaKeyPair", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *assistAgentClient) RmRsaKeyPair(ctx context.Context, in *RemoveRsaKeyPairReq, opts ...grpc.CallOption) (*RemoveRsaKeyPairResp, error) {
+	out := new(RemoveRsaKeyPairResp)
+	err := c.cc.Invoke(ctx, "/protos.AssistAgent/RmRsaKeyPair", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -72,14 +83,25 @@ func (c *assistAgentClient) CheckKey(ctx context.Context, in *CheckKeyReq, opts 
 	return out, nil
 }
 
+func (c *assistAgentClient) CreateSecretParam(ctx context.Context, in *CreateSecretParamReq, opts ...grpc.CallOption) (*CreateSecretParamResp, error) {
+	out := new(CreateSecretParamResp)
+	err := c.cc.Invoke(ctx, "/protos.AssistAgent/CreateSecretParam", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AssistAgentServer is the server API for AssistAgent service.
 // All implementations must embed UnimplementedAssistAgentServer
 // for forward compatibility
 type AssistAgentServer interface {
 	GenRsaKeyPair(context.Context, *GenRsaKeyPairReq) (*GenRsaKeyPairResp, error)
+	RmRsaKeyPair(context.Context, *RemoveRsaKeyPairReq) (*RemoveRsaKeyPairResp, error)
 	EncryptText(context.Context, *EncryptReq) (*EncryptResp, error)
 	DecryptText(context.Context, *DecryptReq) (*DecryptResp, error)
 	CheckKey(context.Context, *CheckKeyReq) (*CheckKeyResp, error)
+	CreateSecretParam(context.Context, *CreateSecretParamReq) (*CreateSecretParamResp, error)
 	mustEmbedUnimplementedAssistAgentServer()
 }
 
@@ -90,6 +112,9 @@ type UnimplementedAssistAgentServer struct {
 func (UnimplementedAssistAgentServer) GenRsaKeyPair(context.Context, *GenRsaKeyPairReq) (*GenRsaKeyPairResp, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GenRsaKeyPair not implemented")
 }
+func (UnimplementedAssistAgentServer) RmRsaKeyPair(context.Context, *RemoveRsaKeyPairReq) (*RemoveRsaKeyPairResp, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RmRsaKeyPair not implemented")
+}
 func (UnimplementedAssistAgentServer) EncryptText(context.Context, *EncryptReq) (*EncryptResp, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method EncryptText not implemented")
 }
@@ -98,6 +123,9 @@ func (UnimplementedAssistAgentServer) DecryptText(context.Context, *DecryptReq) 
 }
 func (UnimplementedAssistAgentServer) CheckKey(context.Context, *CheckKeyReq) (*CheckKeyResp, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CheckKey not implemented")
+}
+func (UnimplementedAssistAgentServer) CreateSecretParam(context.Context, *CreateSecretParamReq) (*CreateSecretParamResp, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateSecretParam not implemented")
 }
 func (UnimplementedAssistAgentServer) mustEmbedUnimplementedAssistAgentServer() {}
 
@@ -126,6 +154,24 @@ func _AssistAgent_GenRsaKeyPair_Handler(srv interface{}, ctx context.Context, de
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AssistAgentServer).GenRsaKeyPair(ctx, req.(*GenRsaKeyPairReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AssistAgent_RmRsaKeyPair_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveRsaKeyPairReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AssistAgentServer).RmRsaKeyPair(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/protos.AssistAgent/RmRsaKeyPair",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AssistAgentServer).RmRsaKeyPair(ctx, req.(*RemoveRsaKeyPairReq))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -184,6 +230,24 @@ func _AssistAgent_CheckKey_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AssistAgent_CreateSecretParam_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateSecretParamReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AssistAgentServer).CreateSecretParam(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/protos.AssistAgent/CreateSecretParam",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AssistAgentServer).CreateSecretParam(ctx, req.(*CreateSecretParamReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AssistAgent_ServiceDesc is the grpc.ServiceDesc for AssistAgent service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -196,6 +260,10 @@ var AssistAgent_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _AssistAgent_GenRsaKeyPair_Handler,
 		},
 		{
+			MethodName: "RmRsaKeyPair",
+			Handler:    _AssistAgent_RmRsaKeyPair_Handler,
+		},
+		{
 			MethodName: "EncryptText",
 			Handler:    _AssistAgent_EncryptText_Handler,
 		},
@@ -206,6 +274,10 @@ var AssistAgent_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CheckKey",
 			Handler:    _AssistAgent_CheckKey_Handler,
+		},
+		{
+			MethodName: "CreateSecretParam",
+			Handler:    _AssistAgent_CreateSecretParam_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -60,7 +60,7 @@ const (
 	OnCyan   = "\033[46m" // Cyan
 	OnWhite  = "\033[47m" // White
 
-	// High Intensty
+	// High Intensity
 	IBlack  = "\033[0;90m" // Black
 	IRed    = "\033[0;91m" // Red
 	IGreen  = "\033[0;92m" // Green
@@ -70,7 +70,7 @@ const (
 	ICyan   = "\033[0;96m" // Cyan
 	IWhite  = "\033[0;97m" // White
 
-	// Bold High Intensty
+	// Bold High Intensity
 	BIBlack  = "\033[1;90m" // Black
 	BIRed    = "\033[1;91m" // Red
 	BIGreen  = "\033[1;92m" // Green
@@ -80,7 +80,7 @@ const (
 	BICyan   = "\033[1;96m" // Cyan
 	BIWhite  = "\033[1;97m" // White
 
-	// High Intensty backgrounds
+	// High Intensity backgrounds
 	OnIBlack  = "\033[0;100m" // Black
 	OnIRed    = "\033[0;101m" // Red
 	OnIGreen  = "\033[0;102m" // Green

@@ -24,6 +24,7 @@ const (
 	errorOccurredMessage   = "There was an error running %v, err: %v"
 )
 
+var osArch string
 
 type osRelease struct {
 	NAME       string
@@ -199,6 +200,35 @@ func getPlatformDetails() (name string, version string, err error) {
 		version = strings.TrimLeft(version, "Release:")
 		version = strings.TrimSpace(version)
 		log.GetLogger().Debugf("platform version %v", version)
+	}
+	return
+}
+
+func getArch() (formatArch string) {
+	if osArch != "" {
+		return osArch
+	}
+	defer func() {
+		osArch = formatArch
+	}()
+	formatArch = ARCH_UNKNOWN
+	arch, err := GetUnameMachine()
+	if err != nil {
+		log.GetLogger().Errorln("Get Arch: GetUnameMachine err: ", err.Error())
+		return ARCH_UNKNOWN
+	}
+	arch = strings.TrimSpace(arch)
+	arch = strings.ToLower(arch)
+
+	if strings.Contains(arch, "aarch") || strings.Contains(arch, "arm") { // arm: aarch arm
+		formatArch = ARCH_ARM
+	} else if strings.Contains(arch, "386") || strings.Contains(arch, "686") { // x86: i386 i686
+		formatArch = ARCH_32
+	} else if arch == "x86_64" { // x64: x86_64
+		formatArch = ARCH_64
+	} else {
+		log.GetLogger().Errorln("Get Arch: unknown arch: ", arch)
+		formatArch = ARCH_UNKNOWN
 	}
 	return
 }

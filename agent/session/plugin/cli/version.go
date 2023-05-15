@@ -21,7 +21,7 @@ import (
 
 //
 // This variable is replaced in compile time
-// `-ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${VERSION}'"`
+// `-ldflags "-X '"github.com/aliyun/aliyun_assist_client/thirdparty/aliyun-cli/cli".Version=${VERSION}'"`
 var (
 	Version = "0.0.5"
 )

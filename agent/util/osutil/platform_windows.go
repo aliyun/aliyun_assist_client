@@ -51,3 +51,9 @@ func getPlatformDetails(property string, ) (value string, err error) {
 	log.GetLogger().Debugf(commandOutputMessage, value)
 	return
 }
+
+
+func getArch() (formatArch string) {
+	// 云助手的windows版架构只有amd64的
+	return ARCH_64
+}

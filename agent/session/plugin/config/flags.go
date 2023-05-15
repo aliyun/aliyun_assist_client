@@ -20,13 +20,13 @@ import (
 
 const (
 	ProfileFlagName         = "profile"
-	InstanceFlagName         = "instance"
+	InstanceFlagName        = "instance"
 	VerboseFlagName         = "verbose"
-	PortNumberFlagName         = "port"
-	WssUrlFlagName         = "wss-url"
+	PortNumberFlagName      = "port"
+	WssUrlFlagName          = "wss-url"
 	ModeFlagName            = "mode"
-	LocalPortFlagName		= "local-port"
-	RemotePortFlagName		= "remote-port"
+	LocalPortFlagName       = "local-port"
+	RemotePortFlagName      = "remote-port"
 	AccessKeyIdFlagName     = "access-key-id"
 	AccessKeySecretFlagName = "access-key-secret"
 	StsTokenFlagName        = "sts-token"
@@ -45,6 +45,9 @@ const (
 	ConfigurePathFlagName   = "config-path"
 	ExpiredSecondsFlagName  = "expired-seconds"
 	ProcessCommandFlagName  = "process-command"
+	ServiceInstanceFlagName = "service-instance"
+	PublicKeyFlagName 		= "public-key"
+	UserNameFlagName		= "user-name"
 )
 
 func AddFlags(fs *cli.FlagSet) {
@@ -58,8 +61,9 @@ func AddFlags(fs *cli.FlagSet) {
 	/////////////////////////////////////////////////
 	fs.Add(NewLocalPortFlag())
 	fs.Add(NewRemotePortFlag())
+	fs.Add(NewServiceInstanceFlag())
 	/////////////////////////////////////////////////
-    fs.Add(NewLanguageFlag())
+	fs.Add(NewLanguageFlag())
 	fs.Add(NewRegionFlag())
 	fs.Add(NewConfigurePathFlag())
 	fs.Add(NewAccessKeyIdFlag())
@@ -77,6 +81,9 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewSkipSecureVerify())
 	fs.Add(NewExpiredSecondsFlag())
 	fs.Add(NewProcessCommandFlag())
+	/////////////////////////////////////////////////
+	fs.Add(NewPublicKeyFlag())
+	fs.Add(NewUserNameFlag())
 }
 
 func ConnectTimeoutFlag(fs *cli.FlagSet) *cli.Flag {
@@ -179,6 +186,15 @@ func ExpiredSecondsFlag(fs *cli.FlagSet) *cli.Flag {
 func ProcessCommandFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(ProcessCommandFlagName)
 }
+func ServiceInstanceFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(ServiceInstanceFlagName)
+}
+func PublicKeyFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(PublicKeyFlagName)
+}
+func UserNameFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(UserNameFlagName)
+}
 
 //var OutputFlag = &cli.Flag{Category: "config",
 //	Name: "output", AssignedMode: cli.AssignedOnce, Hidden: true,
@@ -208,12 +224,11 @@ func NewInstanceFlag() *cli.Flag {
 		Shorthand:    'i',
 		AssignedMode: cli.AssignedOnce,
 		DefaultValue: "",
-		Persistent: true,
+		Persistent:   true,
 		Short: i18n.T(
 			"use `--instance <instance id>` to select instance",
 			"使用 `--instance <instance id>` 指定操作的实例")}
 }
-
 
 func NewVerboseFlag() *cli.Flag {
 	return &cli.Flag{
@@ -221,7 +236,7 @@ func NewVerboseFlag() *cli.Flag {
 		Name:         VerboseFlagName,
 		AssignedMode: cli.AssignedNone,
 		DefaultValue: "",
-		Persistent: true,
+		Persistent:   true,
 		Short: i18n.T(
 			"use `--verbose` to log detail info",
 			"使用 `--verbose` 显示更详细日志")}
@@ -234,7 +249,7 @@ func NewWebsocketUrlFlag() *cli.Flag {
 		Shorthand:    'u',
 		AssignedMode: cli.AssignedOnce,
 		DefaultValue: "",
-		Persistent: true,
+		Persistent:   true,
 		Short: i18n.T(
 			"use `--url <wss url>` to select instance",
 			"使用 `--url <wss url>` 指定操作的实例")}
@@ -246,7 +261,7 @@ func NewPortNumberUrlFlag() *cli.Flag {
 		Name:         PortNumberFlagName,
 		AssignedMode: cli.AssignedOnce,
 		DefaultValue: "",
-		Persistent: true,
+		Persistent:   true,
 		Short: i18n.T(
 			"use `--port <port>` to select port",
 			"使用 `--port <port>` 指定操作的实例端口")}
@@ -255,12 +270,12 @@ func NewPortNumberUrlFlag() *cli.Flag {
 ///////////////////////////////////////////////////////////////////////////////////////////
 func NewLocalPortFlag() *cli.Flag {
 	return &cli.Flag{
-		Category: "caller",
-		Name: LocalPortFlagName,
+		Category:     "caller",
+		Name:         LocalPortFlagName,
 		AssignedMode: cli.AssignedOnce,
-		Shorthand: 'l',
+		Shorthand:    'l',
 		DefaultValue: "",
-		Persistent: true,
+		Persistent:   true,
 		Short: i18n.T(
 			"use `--local-port <port>` to select local port",
 			"使用 `--local-port <port>` 指定本地端口")}
@@ -268,16 +283,17 @@ func NewLocalPortFlag() *cli.Flag {
 
 func NewRemotePortFlag() *cli.Flag {
 	return &cli.Flag{
-		Category: "caller",
-		Name: RemotePortFlagName,
+		Category:     "caller",
+		Name:         RemotePortFlagName,
 		AssignedMode: cli.AssignedOnce,
-		Shorthand: 'r',
+		Shorthand:    'r',
 		DefaultValue: "",
-		Persistent: true,
+		Persistent:   true,
 		Short: i18n.T(
 			"use `--remote-port <port>` to select remote port",
 			"使用 `--remote-port <port>` 指定实例的端口")}
 }
+
 ///////////////////////////////////////////////////////////////////////////////////////////
 //--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair|RamRoleArnWithRoleName}
 func NewModeFlag() *cli.Flag {
@@ -294,7 +310,7 @@ func NewAccessKeyIdFlag() *cli.Flag {
 		Category:     "config",
 		Name:         AccessKeyIdFlagName,
 		AssignedMode: cli.AssignedOnce,
-		Persistent: true,
+		Persistent:   true,
 		Short: i18n.T(
 			"use `--access-key-id <AccessKeyId>` to assign AccessKeyId, required in AK/StsToken/RamRoleArn mode",
 			"使用 `--access-key-id <AccessKeyId>` 指定AccessKeyId")}
@@ -305,7 +321,7 @@ func NewAccessKeySecretFlag() *cli.Flag {
 		Category:     "config",
 		Name:         AccessKeySecretFlagName,
 		AssignedMode: cli.AssignedOnce,
-		Persistent: true,
+		Persistent:   true,
 		Short: i18n.T(
 			"use `--access-key-secret <AccessKeySecret>` to assign AccessKeySecret",
 			"使用 `--access-key-secret <AccessKeySecret>` 指定AccessKeySecret")}
@@ -316,7 +332,7 @@ func NewStsTokenFlag() *cli.Flag {
 		Category:     "config",
 		Name:         StsTokenFlagName,
 		AssignedMode: cli.AssignedOnce,
-		Persistent: true,
+		Persistent:   true,
 		Short: i18n.T(
 			"use `--sts-token <StsToken>` to assign StsToken",
 			"使用 `--sts-token <StsToken>` 指定StsToken")}
@@ -327,7 +343,7 @@ func NewStsRegionFlag() *cli.Flag {
 		Category:     "config",
 		Name:         StsRegionFlagName,
 		AssignedMode: cli.AssignedOnce,
-		Persistent: true,
+		Persistent:   true,
 		Short: i18n.T(
 			"use `--sts-region <StsRegion>` to assign StsRegion",
 			"使用 `--sts-region <StsRegion>` 指定StsRegion")}
@@ -405,7 +421,7 @@ func NewRegionFlag() *cli.Flag {
 	return &cli.Flag{Category: "config",
 		Name:         RegionFlagName,
 		AssignedMode: cli.AssignedOnce,
-		Persistent: true,
+		Persistent:   true,
 		Short: i18n.T(
 			"use `--region <regionId>` to assign region",
 			"使用 `--region <regionId>` 来指定访问大区")}
@@ -475,6 +491,47 @@ func NewSkipSecureVerify() *cli.Flag {
 		Short: i18n.T(
 			"use `--skip-secure-verify` to skip https certification validate [Not recommended]",
 			"使用 `--skip-secure-verify` 跳过https的证书校验 [不推荐使用]",
+		),
+	}
+}
+
+func NewServiceInstanceFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         ServiceInstanceFlagName,
+		Shorthand:    's',
+		AssignedMode: cli.AssignedOnce,
+		DefaultValue: "",
+		Persistent:   true,
+		Short: i18n.T(
+			"use `--service-instance` to specify service instance",
+			"使用 `--service-instance` 指定代运维的服务实例",
+		),
+	}
+}
+
+func NewPublicKeyFlag() *cli.Flag {
+	return &cli.Flag {
+		Category: "caller",
+		Name: PublicKeyFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Persistent: true,
+		Short: i18n.T(
+			"use `--public-key <public-key>` to set the content of temporary ssh_public_key or the path of ssh_public_key file",
+			"使用 `--public-key <public-key>` 指定临时ssh公钥的内容或者公钥文件的路径",
+		),
+	}
+}
+
+func NewUserNameFlag() *cli.Flag {
+	return &cli.Flag{
+		Category: "caller",
+		Name: UserNameFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Persistent: true,
+		Short: i18n.T(
+			"use `--user-name <user-name>` to set the user name of temporary ssh_public_key, default root",
+			"使用 `--user-name <user-name>` 指定临时公钥的用户名, 默认是root",
 		),
 	}
 }

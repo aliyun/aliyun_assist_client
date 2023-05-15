@@ -1,6 +1,7 @@
 package util
+import "os"
 
-// Copyright (c) 2017-2022 Alibaba Group Holding Limited.
+// Copyright (c) 2017-2023 Alibaba Group Holding Limited.
 
 func GetUpdateService() string {
 	url := "https://" + GetServerHost()
@@ -107,7 +108,7 @@ func GetPluginHealthService() string {
 
 func GetPluginUpdateCheckService() string {
 	url := "https://" + GetServerHost()
-	url += "/luban/api/v1/plugin/update_check"
+	url += "/luban/api/v2/plugin/update_check"
 	return url
 }
 
@@ -143,6 +144,18 @@ func GetPutInstanceStateReportService() string {
 
 func GetDeRegisterService() string {
 	url := "https://" + GetServerHost()
-	url += "/luban/api/instance/register"
+	url += "/luban/api/instance/deregister"
+	return url
+}
+
+func GetRegisterService(region, networkmode string) string {
+	if IsSelfHosted() {
+		return os.Getenv("ALIYUN_ASSIST_SERVER_HOST")
+	}
+	domain := HYBRID_DOMAIN
+	if networkmode == "vpc" {
+		domain = HYBRID_DOMAIN_VPC
+	}
+	url := "https://" + region + domain + "/luban/api/instance/register"	
 	return url
 }

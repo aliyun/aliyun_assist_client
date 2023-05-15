@@ -147,7 +147,7 @@ func (task *Task) PreCheck(reportVerified bool) error {
 		if validationErr, ok := err.(taskerrors.NormalizedValidationError); ok {
 			task.SendInvalidTask(validationErr.Param(), validationErr.Value())
 		} else if settingErr, ok := err.(taskerrors.InvalidSettingError); ok {
-			task.SendInvalidTask(invalidParameter, settingErr.ShortMessage())
+			task.SendInvalidTask(invalidParameter, fmt.Sprintf("%s: %v", settingErr.ShortMessage(), settingErr.Unwrap()))
 		} else {
 			task.SendInvalidTask(invalidParameter, err.Error())
 		}

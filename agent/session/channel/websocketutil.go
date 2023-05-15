@@ -53,12 +53,7 @@ func (u *WebsocketUtil) OpenConnection(url string, requestHeader http.Header) (*
 		str_timestamp := strconv.FormatInt(timestamp, 10)
 
 		var instance_id string
-		path := ""
-		if util.IsSelfHosted() {
-			path, _ = util.GetSelfhostedPath()
-		} else {
-			path, _ = util.GetHybridPath()
-		}
+		path, _ := util.GetHybridPath()
 
 		content, _ := ioutil.ReadFile(path + "/instance-id")
 		instance_id = string(content)

@@ -26,3 +26,14 @@ func (v *AtomicBoolean) Set() {
 func (v *AtomicBoolean) Clear() {
 	atomic.StoreUint32(&v.neverDirectRW_atomic_boolean, 0)
 }
+
+func (v *AtomicBoolean) CompareAndSwap(old, new bool) (bool) {
+	var oldI, newI uint32
+	if old {
+		oldI = 1
+	}
+	if new {
+		newI = 1
+	}
+	return atomic.CompareAndSwapUint32(&v.neverDirectRW_atomic_boolean, oldI, newI)
+}

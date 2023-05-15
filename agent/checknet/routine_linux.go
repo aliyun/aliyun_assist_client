@@ -37,7 +37,7 @@ func init() {
 	_refreshingReportLock = heavylock.NewCASMutex()
 }
 
-// RequestNetcheck would asynchronusly invoke netcheck program for network
+// RequestNetcheck would asynchronously invoke netcheck program for network
 // diagnostic, when no other network diagnostic is running or the last
 // diagnostic report has outdated.
 func RequestNetcheck(requestType NetcheckRequestType) {
@@ -96,7 +96,7 @@ func _doNetcheck(requestType NetcheckRequestType) {
 
 	finishedTime := time.Now()
 	newReportPtr := &CheckReport{
-		Result: resultCode,
+		Result:       resultCode,
 		FinishedTime: finishedTime,
 	}
 	_neverDirectRW_atomic_lastReportPtr.Store(newReportPtr)
@@ -106,7 +106,7 @@ func _doNetcheck(requestType NetcheckRequestType) {
 		_forceToReportResponses.Add(1)
 	}
 	logger.WithFields(logrus.Fields{
-		"result": resultCode,
+		"result":       resultCode,
 		"finishedTime": finishedTime.Format(time.RFC3339),
 	}).Infoln("Finished network diagnostic")
 }

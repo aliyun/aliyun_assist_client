@@ -19,7 +19,7 @@ var (
 var SingleAppLock *single.Single
 
 type Options struct {
-	GetHelp bool
+	GetHelp    bool
 	GetVersion bool
 	GetGitHash bool
 
@@ -56,7 +56,7 @@ func parseOptions() Options {
 	pflag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [options]\n", os.Args[0])
 		fmt.Fprintln(os.Stderr)
-		fmt.Fprintln(os.Stderr, "Aliyun Assist Copyright (c) 2017-2022 Alibaba Group Holding Limited")
+		fmt.Fprintln(os.Stderr, "Aliyun Assist Copyright (c) 2017-2023 Alibaba Group Holding Limited")
 		fmt.Fprintln(os.Stderr)
 		fmt.Fprintln(os.Stderr, "Options:")
 		pflag.PrintDefaults()
@@ -88,7 +88,7 @@ func main() {
 		return
 	}
 
-	log.InitLog("aliyun_assist_update.log","")
+	log.InitLog("aliyun_assist_update.log", "")
 	log.GetLogger().Infof("Starting...... version: %s githash: %s", version.AssistVersion, version.GitCommitHash)
 	SingleAppLock = single.New("AliyunAssistUpdateSingleLock")
 	if err := SingleAppLock.CheckLock(); err != nil && err == single.ErrAlreadyRunning {
@@ -101,7 +101,7 @@ func main() {
 	if options.CheckUpdate {
 		// Exclusive options check
 		if options.ForceUpdate || options.LocalInstall != "" {
-			fmt.Fprintln(os.Stderr, "Invalid options: speficified options in conflict")
+			fmt.Fprintln(os.Stderr, "Invalid options: specified options in conflict")
 			pflag.Usage()
 			os.Exit(1)
 			return
@@ -116,7 +116,7 @@ func main() {
 	} else if options.ForceUpdate {
 		// Exclusive options check
 		if options.CheckUpdate || options.LocalInstall != "" {
-			fmt.Fprintln(os.Stderr, "Invalid options: speficified options in conflict")
+			fmt.Fprintln(os.Stderr, "Invalid options: specified options in conflict")
 			pflag.Usage()
 			os.Exit(1)
 			return
@@ -145,7 +145,7 @@ func main() {
 	} else if options.LocalInstall != "" {
 		// Exclusive options check
 		if options.CheckUpdate || options.ForceUpdate {
-			fmt.Fprintln(os.Stderr, "Invalid options: speficified options in conflict")
+			fmt.Fprintln(os.Stderr, "Invalid options: specified options in conflict")
 			pflag.Usage()
 			os.Exit(1)
 			return

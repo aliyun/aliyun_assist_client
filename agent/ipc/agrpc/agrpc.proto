@@ -6,9 +6,11 @@ option go_package ="github.com/aliyun/aliyun_assist_client/agent/ipc/agrpc";
 // The service definition.
 service AssistAgent {
     rpc GenRsaKeyPair (GenRsaKeyPairReq) returns (GenRsaKeyPairResp) {}
+    rpc RmRsaKeyPair (RemoveRsaKeyPairReq) returns (RemoveRsaKeyPairResp) {}
     rpc EncryptText (EncryptReq) returns (EncryptResp) {}
     rpc DecryptText (DecryptReq) returns (DecryptResp) {}
     rpc CheckKey (CheckKeyReq) returns (CheckKeyResp) {}
+    rpc CreateSecretParam (CreateSecretParamReq) returns (CreateSecretParamResp) {}
 }
 
 message RespStatus {
@@ -31,6 +33,14 @@ message GenRsaKeyPairReq {
 message GenRsaKeyPairResp {
     RespStatus status = 1;
     KeyInfo keyInfo = 2;
+}
+
+// RemoveRsaKeyPair api
+message RemoveRsaKeyPairReq {
+    string keyPairId = 1;
+}
+message RemoveRsaKeyPairResp {
+    RespStatus status = 1;
 }
 
 // Encrypt api
@@ -60,4 +70,22 @@ message CheckKeyReq {
 message CheckKeyResp {
     RespStatus status = 1;
     repeated KeyInfo keyInfos = 2;
+}
+
+message SecretParamInfo {
+    string secretName = 1;
+    int64 createdTimestamp = 2;
+    int64 expiredTimestamp = 3;
+}
+
+// CreateSecret api
+message CreateSecretParamReq {
+    string keyPairId = 1;
+    string cipherText = 2;
+    string secretName = 3;
+    int32 timeout = 4;
+}
+message CreateSecretParamResp {
+    RespStatus status = 1;
+    SecretParamInfo secretParam = 2;
 }

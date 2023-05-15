@@ -4,47 +4,48 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
-	"github.com/aliyun/aliyun_assist_client/agent/log"
-	"strings"
 	"fmt"
+	"strings"
+
+	"github.com/aliyun/aliyun_assist_client/agent/log"
 )
 
 const (
-	InputStreamDataMessage = 0 // string = "input_stream_data"
+	InputStreamDataMessage  = 0 // string = "input_stream_data"
 	OutputStreamDataMessage = 1 // string = "output_stream_data"
-	SetSizeDataMessage = 2 //string = "set_size"
-	CloseDataChannel = 3
-	StatusDataMessage = 5
+	SetSizeDataMessage      = 2 //string = "set_size"
+	CloseDataChannel        = 3
+	StatusDataMessage       = 5
 )
 
 const (
 	AgentMessage_MessageTypeLength    = 4
 	AgentMessage_SchemaVersionLength  = 4
-	AgentMessage_SessionIdLength  = 32
+	AgentMessage_SessionIdLength      = 32
 	AgentMessage_CreatedDateLength    = 8
 	AgentMessage_SequenceNumberLength = 8
-	AgentMessage_PayloadLength    = 4
+	AgentMessage_PayloadLength        = 4
 )
 
 const (
 	AgentMessage_MessageTypeOffset    = 0
 	AgentMessage_SchemaVersionOffset  = AgentMessage_MessageTypeOffset + AgentMessage_MessageTypeLength
-	AgentMessage_SessionIdOffset  = AgentMessage_SchemaVersionOffset + AgentMessage_SchemaVersionLength
+	AgentMessage_SessionIdOffset      = AgentMessage_SchemaVersionOffset + AgentMessage_SchemaVersionLength
 	AgentMessage_CreatedDateOffset    = AgentMessage_SessionIdOffset + AgentMessage_SessionIdLength
 	AgentMessage_SequenceNumberOffset = AgentMessage_CreatedDateOffset + AgentMessage_CreatedDateLength
-	AgentMessage_PayloadLengthOffset        = AgentMessage_SequenceNumberOffset + AgentMessage_SequenceNumberLength
-	AgentMessage_PayloadOffset      = AgentMessage_PayloadLengthOffset + AgentMessage_PayloadLength
+	AgentMessage_PayloadLengthOffset  = AgentMessage_SequenceNumberOffset + AgentMessage_SequenceNumberLength
+	AgentMessage_PayloadOffset        = AgentMessage_PayloadLengthOffset + AgentMessage_PayloadLength
 )
 
 type Message struct {
 	MessageType    uint32
 	SchemaVersion  string
-	SessionId    string
+	SessionId      string
 	CreatedDate    uint64
 	SequenceNumber int64
 	// MessageId      string
-	PayloadLength  uint32
-	Payload        []byte
+	PayloadLength uint32
+	Payload       []byte
 }
 
 func (message *Message) Deserialize(input []byte) (err error) {
@@ -69,7 +70,6 @@ func (message *Message) Deserialize(input []byte) (err error) {
 		log.GetLogger().Errorf("Could not deserialize field CreatedDate with error: %v", err)
 		return err
 	}
-
 
 	message.SequenceNumber, err = getLong(input, AgentMessage_SequenceNumberOffset)
 	if err != nil {
@@ -102,7 +102,7 @@ func getLong(byteArray []byte, offset int) (result int64, err error) {
 		log.GetLogger().Error("getLong failed: Offset is invalid.")
 		return 0, errors.New("Offset is outside the byte array.")
 	}
-	return bytesToLong(byteArray[offset:offset+8])
+	return bytesToLong(byteArray[offset : offset+8])
 }
 
 func getInteger(byteArray []byte, offset int) (result int32, err error) {
@@ -111,7 +111,7 @@ func getInteger(byteArray []byte, offset int) (result int32, err error) {
 		log.GetLogger().Error("getInteger failed: Offset is invalid.")
 		return 0, errors.New("Offset is bigger than the byte array.")
 	}
-	return bytesToInteger(byteArray[offset:offset+4])
+	return bytesToInteger(byteArray[offset : offset+4])
 }
 
 func getString(byteArray []byte, offset int, stringLength int) (result string, err error) {
@@ -171,12 +171,10 @@ func (message *Message) Serialize() (result []byte, err error) {
 		return make([]byte, 1), err
 	}
 
-
 	if err = putLong(result, AgentMessage_SequenceNumberOffset, message.SequenceNumber); err != nil {
 		log.GetLogger().Errorf("Could not serialize SequenceNumber with error: %v", err)
 		return make([]byte, 1), err
 	}
-
 
 	if err = putUInteger(result, AgentMessage_PayloadLengthOffset, message.PayloadLength); err != nil {
 		log.GetLogger().Errorf("Could not serialize PayloadLength with error: %v", err)
@@ -302,7 +300,7 @@ func longToBytes(input int64) (result []byte, err error) {
 }
 
 // integerToBytes gets bytes array from an integer.
-func integerToBytes( input int32) (result []byte, err error) {
+func integerToBytes(input int32) (result []byte, err error) {
 	buf := new(bytes.Buffer)
 	binary.Write(buf, binary.LittleEndian, input)
 	if buf.Len() != 4 {
@@ -345,6 +343,6 @@ func BytesToIntU(b []byte) (int, error) {
 		err := binary.Read(bytesBuffer, binary.BigEndian, &tmp)
 		return int(tmp), err
 	default:
-		return 0, fmt.Errorf("%s", "BytesToInt bytes lenth is invaild!")
+		return 0, fmt.Errorf("%s", "BytesToInt bytes lenth is invalid!")
 	}
 }
