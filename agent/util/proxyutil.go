@@ -6,7 +6,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/sirupsen/logrus"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 	"golang.org/x/net/http/httpproxy"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
@@ -14,7 +14,7 @@ import (
 
 var (
 	_obtainAssistProxyEnvOnce sync.Once
-	_requestAssistProxyFunc func(*http.Request) (*url.URL, error)
+	_requestAssistProxyFunc   func(*http.Request) (*url.URL, error)
 )
 
 func GetProxyFunc() func(*http.Request) (*url.URL, error) {
@@ -27,10 +27,10 @@ func GetProxyFunc() func(*http.Request) (*url.URL, error) {
 		}
 
 		proxyConfig := &httpproxy.Config{
-			HTTPProxy: assistProxyEnv,
+			HTTPProxy:  assistProxyEnv,
 			HTTPSProxy: assistProxyEnv,
-			NoProxy: "",
-			CGI: false,
+			NoProxy:    "",
+			CGI:        false,
 		}
 		urlProxyFunc := proxyConfig.ProxyFunc()
 		_requestAssistProxyFunc = func(r *http.Request) (*url.URL, error) {

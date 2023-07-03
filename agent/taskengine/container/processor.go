@@ -3,7 +3,7 @@ package container
 import (
 	"strings"
 
-	"github.com/sirupsen/logrus"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/cri"
@@ -14,14 +14,14 @@ import (
 type ContainerCommandOptions struct {
 	TaskId string
 	// Fundamental properties of command process
-	ContainerId string
+	ContainerId   string
 	ContainerName string // may be filled when only container id specified
-	CommandType string
+	CommandType   string
 	// CommandContent is not needed here
 	Timeout int
 	// Additional execution attributes supported by docker
 	WorkingDirectory string
-	Username string
+	Username         string
 }
 
 func DetectContainerProcessor(options *ContainerCommandOptions) models.TaskProcessor {
@@ -38,12 +38,12 @@ func DetectContainerProcessor(options *ContainerCommandOptions) models.TaskProce
 		dockerProcessor := &docker.DockerProcessor{
 			TaskId: options.TaskId,
 			// Fundamental properties of command process
-			ContainerId: dockerContainerId,
-			ContainerName: options.ContainerName,
-			CommandType: options.CommandType,
-			Timeout: options.Timeout,
+			ContainerId:      dockerContainerId,
+			ContainerName:    options.ContainerName,
+			CommandType:      options.CommandType,
+			Timeout:          options.Timeout,
 			WorkingDirectory: options.WorkingDirectory,
-			Username: options.Username,
+			Username:         options.Username,
 		}
 		if err := docker.CheckDockerProcessor(dockerProcessor); err == nil {
 			return dockerProcessor
@@ -59,8 +59,8 @@ func DetectContainerProcessor(options *ContainerCommandOptions) models.TaskProce
 		TaskId: options.TaskId,
 		// Fundamental properties of command process
 		ContainerIdentifier: options.ContainerId,
-		ContainerName: options.ContainerName,
-		CommandType: options.CommandType,
-		Timeout: options.Timeout,
+		ContainerName:       options.ContainerName,
+		CommandType:         options.CommandType,
+		Timeout:             options.Timeout,
 	}
 }

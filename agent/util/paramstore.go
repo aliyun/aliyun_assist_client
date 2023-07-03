@@ -2,18 +2,33 @@ package util
 
 import (
 	"fmt"
+	"time"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/oos"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/util/networkcategory"
 )
 
+var (
+	cacheRamRole = ""
+	cacheRamRoleErr error
+	lastUpdateTime time.Time
+)
+
 func GetRoleName() (string, error) {
 	url := "http://100.100.100.200/latest/meta-data/ram/security-credentials/"
-	err, roleName := HttpGet(url)
-	if err != nil {
-		roleName = ""
+	cacheRamRoleErr, cacheRamRole = HttpGet(url)
+	if cacheRamRoleErr != nil {
+		cacheRamRole = ""
 	}
-	return roleName, err
+	lastUpdateTime = time.Now()
+	return cacheRamRole, cacheRamRoleErr
+}
+
+func GetRoleNameTtl(ttl time.Duration) (string, error) {
+	if time.Since(lastUpdateTime) >= ttl {
+		return GetRoleName()
+	}
+	return cacheRamRole, cacheRamRoleErr
 }
 
 func GetSecretParam(name string) (string, error) {

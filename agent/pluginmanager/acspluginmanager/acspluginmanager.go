@@ -10,16 +10,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/shlex"
 	"github.com/rodaine/table"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	. "github.com/aliyun/aliyun_assist_client/agent/pluginmanager"
-	"github.com/aliyun/aliyun_assist_client/agent/pluginmanager/acspluginmanager/thirdparty/shlex"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/process"
 	"github.com/aliyun/aliyun_assist_client/agent/util/versionutil"
+	"github.com/aliyun/aliyun_assist_client/common/fuzzyjson"
 )
 
 type pluginConfig struct {
@@ -70,7 +71,6 @@ type PluginManager struct {
 	Yes     bool
 }
 
-var INSTALLEDPLUGINS string
 var PLUGINDIR string
 
 const Separator = string(filepath.Separator)
@@ -78,37 +78,14 @@ const Separator = string(filepath.Separator)
 func NewPluginManager(verbose bool) (*PluginManager, error) {
 	var err error
 	PLUGINDIR, err = util.GetPluginPath()
-	INSTALLEDPLUGINS = PLUGINDIR + Separator + "installed_plugins"
 	if err != nil {
 		return nil, err
 	}
+
 	return &PluginManager{
 		Verbose: verbose,
 		Yes:     true,
 	}, nil
-}
-
-func loadInstalledPlugins() ([]PluginInfo, error) {
-	installedPlugins := InstalledPlugins{}
-	if util.CheckFileIsExist(INSTALLEDPLUGINS) {
-		if _, err := unmarshalFile(INSTALLEDPLUGINS, &installedPlugins); err != nil {
-			return nil, err
-		}
-		return installedPlugins.PluginList, nil
-	}
-	return installedPlugins.PluginList, nil
-}
-
-func dumpInstalledPlugins(pluginInfoList []PluginInfo) error {
-	installedPlugins := InstalledPlugins{
-		PluginList: pluginInfoList,
-	}
-	pluginInfoListStr, err := marshal(&installedPlugins)
-	if err != nil {
-		return err
-	}
-	err = util.WriteStringToFile(INSTALLEDPLUGINS, pluginInfoListStr)
-	return err
 }
 
 func printPluginInfo(pluginInfoList *[]PluginInfo) {
@@ -141,7 +118,7 @@ func getPackageInfo(pluginName, version string, withArch bool) ([]PluginInfo, er
 	if osutil.GetOsType() == osutil.OSWin {
 		postValue.OsType = "windows"
 	}
-	postValueStr, err := marshal(&postValue)
+	postValueStr, err := fuzzyjson.Marshal(&postValue)
 	if err != nil {
 		return listRet.PluginList, err
 	}
@@ -160,26 +137,20 @@ func getPackageInfo(pluginName, version string, withArch bool) ([]PluginInfo, er
 	if err != nil {
 		return listRet.PluginList, err
 	}
-	if err := unmarshal(ret, &listRet); err != nil {
+	if err := fuzzyjson.Unmarshal(ret, &listRet); err != nil {
 		return nil, err
 	}
 	return listRet.PluginList, nil
 }
 
 func getLocalPluginInfo(packageName, pluginVersion string) (*PluginInfo, error) {
-	installedPlugins, err := loadInstalledPlugins()
+	installedPlugins, err := LoadInstalledPlugins()
 	if err != nil {
 		return nil, err
 	}
-	for _, plugin := range installedPlugins {
-		// 存在该插件记录且未被删除
-		if plugin.Name == packageName && !plugin.IsRemoved {
-			if pluginVersion == "" || pluginVersion == plugin.Version {
-				return &plugin, nil
-			}
-		}
-	}
-	return nil, nil
+
+	_, pluginInfo := installedPlugins.FindOneNotRemovedByNameAndOptionalVersion(packageName, pluginVersion)
+	return pluginInfo, nil
 }
 
 func getOnlinePluginInfo(packageName, version string) (archMatch *PluginInfo, archNotMatch []string, err error) {
@@ -209,23 +180,20 @@ func getOnlinePluginInfo(packageName, version string) (archMatch *PluginInfo, ar
 }
 
 func (pm *PluginManager) List(pluginName string, local bool) (exitCode int, err error) {
+	var installedPlugins *InstalledPlugins
 	var pluginInfoList []PluginInfo
 	funcName := "List"
 	exitCode = SUCCESS
 	if local {
-		pluginInfoList, err = loadInstalledPlugins()
+		installedPlugins, err = LoadInstalledPlugins()
 		if err != nil {
 			exitCode, _ = errProcess(funcName, LOAD_INSTALLEDPLUGINS_ERR, err, "Load installed_plugins err: "+err.Error())
 			return
 		}
 		if pluginName != "" {
-			pluginList := []PluginInfo{}
-			for _, pluginInfo := range pluginInfoList {
-				if pluginInfo.Name == pluginName {
-					pluginList = append(pluginList, pluginInfo)
-				}
-			}
-			pluginInfoList = pluginList
+			_, pluginInfoList = installedPlugins.FindManyByName(pluginName)
+		} else {
+			_, pluginInfoList = installedPlugins.FindAll()
 		}
 	} else {
 		// just request pluginInfos with right arch
@@ -244,16 +212,18 @@ func (pm *PluginManager) ShowPluginStatus() (exitCode int, err error) {
 	log.GetLogger().Infoln("Enter showPluginStatus")
 	funcName := "ShowPluginStatus"
 	exitCode = SUCCESS
-	installedPlugins, err := loadInstalledPlugins()
+	installedPlugins, err := LoadInstalledPlugins()
 	if err != nil {
 		exitCode, _ = errProcess(funcName, LOAD_INSTALLEDPLUGINS_ERR, err, "Load installed_plugins err: " + err.Error())
 		return
 	}
-	log.GetLogger().Infof("Count of installed plugins: %d", len(installedPlugins))
+
+	_, pluginList := installedPlugins.FindAll()
+	log.GetLogger().Infof("Count of installed plugins: %d", len(pluginList))
 	statusList := []PluginStatus{}
 	pluginPath := PLUGINDIR + Separator
 	paramList := []string{"--status"}
-	for _, plugin := range installedPlugins {
+	for _, plugin := range pluginList {
 		timeout := 60
 		code := 0
 		if t, err := strconv.ParseInt(plugin.Timeout, 10, 0); err == nil {
@@ -284,7 +254,7 @@ func (pm *PluginManager) ShowPluginStatus() (exitCode int, err error) {
 			statusList = append(statusList, status)
 		}
 	}
-	content, err := marshal(&statusList)
+	content, err := fuzzyjson.Marshal(&statusList)
 	if err != nil {
 		log.GetLogger().Error("ShowPluginStatus err when marshal statusList, err: ", err.Error())
 	}
@@ -329,29 +299,21 @@ func (pm *PluginManager) RemovePlugin(pluginName string) (exitCode int, err erro
 			fmt.Printf("RemovePlugin success, plugin[%s]\n", pluginName)
 		}
 	}()
-	funcName := "RemovePlugin"
-	var installedPlugins []PluginInfo
-	installedPlugins, err = loadInstalledPlugins()
+	const funcName = "RemovePlugin"
+
+	installedPlugins, err := LoadInstalledPlugins()
 	if err != nil {
 		exitCode, _ = errProcess(funcName, LOAD_INSTALLEDPLUGINS_ERR, err, "Load installed_plugins err: "+err.Error())
 		return
 	}
-	idx := -1
-	for i := 0; i < len(installedPlugins); i++ {
-		if installedPlugins[i].IsRemoved {
-			continue
-		}
-		if installedPlugins[i].Name == pluginName {
-			idx = i
-			break
-		}
-	}
-	if idx == -1 {
+
+	idx, pluginInfo := installedPlugins.FindOneNotRemovedByName(pluginName)
+	if pluginInfo == nil {
 		exitCode, _ = errProcess(funcName, PACKAGE_NOT_FOUND, err, "plugin not exist "+pluginName)
 		err = errors.New("Plugin " + pluginName + " not found in installed_plugins")
 		return
 	}
-	pluginInfo := installedPlugins[idx]
+
 	if pluginInfo.PluginType() == PLUGIN_PERSIST {
 		// 常驻型插件
 		var (
@@ -378,39 +340,25 @@ func (pm *PluginManager) RemovePlugin(pluginName string) (exitCode int, err erro
 		if exitCode != 0 || err != nil {
 			return
 		}
-		// 更新installed_plugins文件
-		installedPlugins[idx].IsRemoved = true // 标记为已删除
-		if err = dumpInstalledPlugins(installedPlugins); err != nil {
-			exitCode, _ = errProcess(funcName, DUMP_INSTALLEDPLUGINS_ERR, err, "Update installed_plugins file err: "+err.Error())
-			return
-		}
-		if err = pm.ReportPluginStatus(installedPlugins[idx].Name, installedPlugins[idx].Version, REMOVED); err != nil {
-			log.GetLogger().Errorf("Plugin[%s] is removed, but report the removed plugin to server error: %s", installedPlugins[idx].Name, err.Error())
-		}
-		// 删除插件目录
-		pluginDir := filepath.Join(PLUGINDIR, pluginInfo.Name)
-		if err = os.RemoveAll(pluginDir); err != nil {
-			exitCode, _ = errProcess(funcName, REMOVE_FILE_ERR, err, fmt.Sprintf("Plugin[%s] is removed, but remove plugin directory err, pluginDir[%s], err: %s", installedPlugins[idx].Name, pluginDir, err.Error()))
-			return
-		}
-	} else {
-		// 一次性插件
-		installedPlugins[idx].IsRemoved = true // 标记为已删除
-		// 更新installed_plugins文件
-		if err = dumpInstalledPlugins(installedPlugins); err != nil {
-			exitCode, _ = errProcess(funcName, DUMP_INSTALLEDPLUGINS_ERR, err, "Update installed_plugins file err: "+err.Error())
-			return
-		}
-		if err = pm.ReportPluginStatus(installedPlugins[idx].Name, installedPlugins[idx].Version, REMOVED); err != nil {
-			log.GetLogger().Errorf("Plugin[%s] is removed, but report the removed plugin to server error: %s", installedPlugins[idx].Name, err.Error())
-		}
-		// 删除插件目录
-		pluginDir := filepath.Join(PLUGINDIR, pluginInfo.Name)
-		if err = os.RemoveAll(pluginDir); err != nil {
-			exitCode, _ = errProcess(funcName, REMOVE_FILE_ERR, err, fmt.Sprintf("Remove plugin directory err, pluginDir[%s], err: %s", pluginDir, err.Error()))
-			return
-		}
 	}
+
+	pluginInfo.IsRemoved = true // 标记为已删除
+	// 更新installed_plugins文件
+	installedPlugins.Update(idx, pluginInfo)
+	if err = installedPlugins.Save(); err != nil {
+		exitCode, _ = errProcess(funcName, DUMP_INSTALLEDPLUGINS_ERR, err, "Update installed_plugins file err: "+err.Error())
+		return
+	}
+	if err = pm.ReportPluginStatus(pluginInfo.Name, pluginInfo.Version, REMOVED); err != nil {
+		log.GetLogger().Errorf("Plugin[%s] is removed, but report the removed plugin to server error: %s", pluginInfo.Name, err.Error())
+	}
+	// 删除插件目录
+	pluginDir := filepath.Join(PLUGINDIR, pluginInfo.Name)
+	if err = os.RemoveAll(pluginDir); err != nil {
+		exitCode, _ = errProcess(funcName, REMOVE_FILE_ERR, err, fmt.Sprintf("Remove plugin directory err, pluginDir[%s], err: %s", pluginDir, err.Error()))
+		return
+	}
+
 	return
 }
 
@@ -492,7 +440,7 @@ func (pm *PluginManager) executePluginFromFile(file string, paramList []string, 
 	}
 	config := pluginConfig{}
 	var content []byte
-	if content, err = unmarshalFile(config_path, &config); err != nil {
+	if content, err = fuzzyjson.UnmarshalFile(config_path, &config); err != nil {
 		exitCode, errorCode = errProcess(funcName, UNMARSHAL_ERR, err, fmt.Sprintf("Unmarshal config.json err, config.json is [%s], err is [%s]", string(content), err.Error()))
 		return
 	}
@@ -508,24 +456,17 @@ func (pm *PluginManager) executePluginFromFile(file string, paramList []string, 
 		exitCode, errorCode = errProcess(funcName, PLUGIN_FORMAT_ERR, err, fmt.Sprintf("Plugin arch[%s] not suit for this system[%s]", config.Arch, localArch))
 		return
 	}
-	var installedPlugins []PluginInfo
-	installedPlugins, err = loadInstalledPlugins()
+
+	installedPlugins, err := LoadInstalledPlugins()
 	if err != nil {
 		exitCode, errorCode = errProcess(funcName, LOAD_INSTALLEDPLUGINS_ERR, err, "Load installed_plugins err: "+err.Error())
 		return
 	}
-	var plugin *PluginInfo
-	pluginIndex := -1
-	for idx, plugininfo := range installedPlugins {
-		if plugininfo.Name == config.Name {
-			plugin = &plugininfo
-			pluginIndex = idx
-			break
-		}
-	}
+
+	pluginIndex, plugin := installedPlugins.FindOneByName(config.Name)
 	if plugin != nil && plugin.IsRemoved {
 		// 之前的同名插件已经被删除，相当于重新安装
-		installedPlugins = DeletePluginInfoByIdx(installedPlugins, pluginIndex)
+		installedPlugins.DeleteByKey(pluginIndex)
 		pluginIndex = -1
 		plugin = nil
 	}
@@ -605,11 +546,11 @@ func (pm *PluginManager) executePluginFromFile(file string, paramList []string, 
 	}
 	if pluginIndex == -1 {
 		plugin.PluginID = "local_" + plugin.Name + "_" + plugin.Version
-		installedPlugins = append(installedPlugins, *plugin)
+		installedPlugins.Insert(plugin)
 	} else {
-		installedPlugins[pluginIndex] = *plugin
+		installedPlugins.Update(pluginIndex, plugin)
 	}
-	if err = dumpInstalledPlugins(installedPlugins); err != nil {
+	if err = installedPlugins.Save(); err != nil {
 		exitCode, errorCode = errProcess(funcName, DUMP_INSTALLEDPLUGINS_ERR, err, "Update installed_plugins file err: "+err.Error())
 		return
 	}
@@ -761,7 +702,7 @@ func (pm *PluginManager) executePluginOnlineOrLocal(pluginName string, pluginId 
 			}
 			config := pluginConfig{}
 			var content []byte
-			if content, err = unmarshalFile(config_path, &config); err != nil {
+			if content, err = fuzzyjson.UnmarshalFile(config_path, &config); err != nil {
 				exitCode, errorCode = errProcess(funcName, UNMARSHAL_ERR, err, fmt.Sprintf("Unmarshal config.json err, config.json is [%s], err is [%s]", string(content), err.Error()))
 				return
 			}
@@ -803,37 +744,33 @@ func (pm *PluginManager) executePluginOnlineOrLocal(pluginName string, pluginId 
 				return
 			}
 			if osutil.GetOsType() != osutil.OSWin {
-				if err = exec.Command("chmod", "744", cmdPath).Run(); err != nil {
+				if err = os.Chmod(cmdPath, os.FileMode(0o744)); err != nil {
 					exitCode, errorCode = errProcess(funcName, EXECUTABLE_PERMISSION_ERR, err, fmt.Sprintf("Make plugin file executable err, plugin.Url is [%s], err is [%s]", onlineInfo.Url, err.Error()))
 					return
 				}
 			}
+
 			// update INSTALLEDPLUGINS file
-			var installedPlugins []PluginInfo
-			installedPlugins, err = loadInstalledPlugins()
+			var installedPlugins *InstalledPlugins
+			installedPlugins, err = LoadInstalledPlugins()
 			if err != nil {
 				exitCode, errorCode = errProcess(funcName, LOAD_INSTALLEDPLUGINS_ERR, err, "Load installed_plugins err: "+err.Error())
 				return
 			}
-			pluginIndex := -1
-			for idx, plugininfo := range installedPlugins {
-				if plugininfo.Name == onlineInfo.Name {
-					pluginIndex = idx
-					break
-				}
-			}
-			if pluginIndex != -1 && installedPlugins[pluginIndex].IsRemoved {
-				installedPlugins = DeletePluginInfoByIdx(installedPlugins, pluginIndex) // 删除掉被标记为”已删除“的插件记录
+
+			pluginIndex, pluginInfo := installedPlugins.FindOneByName(onlineInfo.Name)
+			if pluginIndex != -1 && pluginInfo.IsRemoved {
+				// Actually from the database remove the record of removed plugin
+				installedPlugins.DeleteByKey(pluginIndex)
 				pluginIndex = -1
 			}
 			if pluginIndex == -1 {
-				installedPlugins = append(installedPlugins, *onlineInfo)
+				installedPlugins.Insert(onlineInfo)
 			} else {
-				plugininfo := installedPlugins[pluginIndex]
-				envPrePluginDir = filepath.Join(PLUGINDIR, plugininfo.Name, plugininfo.Version)
-				installedPlugins[pluginIndex] = *onlineInfo
+				envPrePluginDir = filepath.Join(PLUGINDIR, pluginInfo.Name, pluginInfo.Version)
+				installedPlugins.Update(pluginIndex, onlineInfo)
 			}
-			err = dumpInstalledPlugins(installedPlugins)
+			err = installedPlugins.Save()
 			if err != nil {
 				exitCode, errorCode = errProcess(funcName, DUMP_INSTALLEDPLUGINS_ERR, err, "Update installed_plugins file err: "+err.Error())
 				return
@@ -978,7 +915,7 @@ func (pm *PluginManager) VerifyPlugin(url, params, separator, paramsV2 string) (
 	}
 	config := pluginConfig{}
 	var content []byte
-	if content, err = unmarshalFile(configPath, &config); err != nil {
+	if content, err = fuzzyjson.UnmarshalFile(configPath, &config); err != nil {
 		exitCode, _ = errProcess(funcName, UNMARSHAL_ERR, err, fmt.Sprintf("Unmarshal config.json err, config.json is [%s], err is [%s]", string(content), err.Error()))
 		return
 	}
@@ -1042,7 +979,7 @@ func (pm *PluginManager) ReportPluginStatus(pluginName, pluginVersion, status st
 			},
 		},
 	}
-	requestPayloadBytes, err := json.Marshal(pluginStatusRequest)
+	requestPayloadBytes, err := fuzzyjson.Marshal(pluginStatusRequest)
 	if err != nil {
 		log.GetLogger().WithError(err).Error("ReportPluginStatus: pluginStatusList marshal err: " + err.Error())
 		return err

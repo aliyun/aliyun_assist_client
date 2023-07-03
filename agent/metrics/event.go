@@ -20,6 +20,7 @@ const (
 	EVENT_CHANNEL_SWITCH    MetricsEventID = "agent.channel.switch"
 	EVENT_UPDATE_FAILED     MetricsEventID = "agent.update.failed"
 	EVENT_TASK_FAILED       MetricsEventID = "agent.task.failed"
+	EVENT_TASK_WARN			MetricsEventID = "agent.task.warn"
 	EVENT_HYBRID_REGISTER   MetricsEventID = "agent.hybrid.register"
 	EVENT_HYBRID_UNREGISTER MetricsEventID = "agent.hybrid.unregister"
 	EVENT_SESSION_FAILED    MetricsEventID = "agent.session.failed"
@@ -55,6 +56,7 @@ const (
 
 	// event level
 	EVENT_LEVEL_ERROR EventLevel = "ERROR"
+	EVENT_LEVEL_WARN EventLevel = "WARN"
 	EVENT_LEVEL_INFO  EventLevel = "INFO"
 )
 
@@ -199,6 +201,17 @@ func GetTaskFailedEvent(keywords ...string) *MetricsEvent {
 		EventId:    EVENT_TASK_FAILED,
 		Category:   EVENT_CATEGORY_TASK,
 		EventLevel: EVENT_LEVEL_ERROR,
+		EventTime:  time.Now().UnixNano() / 1e6,
+		Common:     getCommonInfoStr(),
+		KeyWords:   genKeyWordsStr(keywords...),
+	}
+	return event
+}
+func GetTaskWarnEvent(keywords ...string) *MetricsEvent {
+	event := &MetricsEvent{
+		EventId:    EVENT_TASK_WARN,
+		Category:   EVENT_CATEGORY_TASK,
+		EventLevel: EVENT_LEVEL_WARN,
 		EventTime:  time.Now().UnixNano() / 1e6,
 		Common:     getCommonInfoStr(),
 		KeyWords:   genKeyWordsStr(keywords...),

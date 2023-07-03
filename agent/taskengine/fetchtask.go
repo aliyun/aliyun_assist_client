@@ -6,7 +6,7 @@ import (
 	neturl "net/url"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/models"
@@ -15,14 +15,15 @@ import (
 )
 
 type FetchReason string
+
 const (
 	FetchOnKickoff FetchReason = "kickoff"
 	FetchOnStartup FetchReason = "startup"
 )
 
 type taskInfo struct {
-	TaskInfo   models.RunTaskInfo `json:"task"`
-	OutputInfo models.OutputInfo  `json:"output"`
+	TaskInfo   models.RunTaskInfo       `json:"task"`
+	OutputInfo models.OutputInfo        `json:"output"`
 	Repeat     models.RunTaskRepeatType `json:"repeat"`
 }
 
@@ -32,28 +33,28 @@ type sendFileInfo struct {
 }
 
 type tasks struct {
-	RunTasks      []taskInfo     `json:"run"`
-	StopTasks     []taskInfo     `json:"stop"`
-	TestTasks     []taskInfo     `json:"test"`
-	SendFileTasks []sendFileInfo `json:"file"`
-	SessionTasks  []models.SessionTaskInfo     `json:"session"`
-	InstanceId    string         `json:"instanceId"`
+	RunTasks      []taskInfo               `json:"run"`
+	StopTasks     []taskInfo               `json:"stop"`
+	TestTasks     []taskInfo               `json:"test"`
+	SendFileTasks []sendFileInfo           `json:"file"`
+	SessionTasks  []models.SessionTaskInfo `json:"session"`
+	InstanceId    string                   `json:"instanceId"`
 }
 
 type taskCollection struct {
-	runInfos []models.RunTaskInfo
-	stopInfos []models.RunTaskInfo
-	testInfos []models.RunTaskInfo
-	sendFiles []models.SendFileTaskInfo
+	runInfos     []models.RunTaskInfo
+	stopInfos    []models.RunTaskInfo
+	testInfos    []models.RunTaskInfo
+	sendFiles    []models.SendFileTaskInfo
 	sessionInfos []models.SessionTaskInfo
 }
 
 func newTaskCollection() *taskCollection {
 	taskInfos := taskCollection{
-		runInfos: []models.RunTaskInfo{},
-		stopInfos: []models.RunTaskInfo{},
-		testInfos: []models.RunTaskInfo{},
-		sendFiles: []models.SendFileTaskInfo{},
+		runInfos:     []models.RunTaskInfo{},
+		stopInfos:    []models.RunTaskInfo{},
+		testInfos:    []models.RunTaskInfo{},
+		sendFiles:    []models.SendFileTaskInfo{},
 		sessionInfos: []models.SessionTaskInfo{},
 	}
 	return &taskInfos

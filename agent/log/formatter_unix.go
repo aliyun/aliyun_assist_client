@@ -1,9 +1,10 @@
+//go:build aix || darwin || dragonfly || freebsd || linux || netbsd || openbsd || solaris
 // +build aix darwin dragonfly freebsd linux netbsd openbsd solaris
 
 package log
 
 import (
-	"github.com/sirupsen/logrus"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 )
 
 func (f *CustomLogrusTextFormatter) Format(entry *logrus.Entry) ([]byte, error) {

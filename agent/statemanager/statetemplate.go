@@ -8,7 +8,7 @@ import (
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/statemanager/resources"
-	"github.com/sirupsen/logrus"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 )
 
 type ParamDef struct {
@@ -119,7 +119,7 @@ func ParseResourceState(data []byte, userParameters string) (rs []resources.Reso
 			log.GetLogger().WithFields(logrus.Fields{
 				"parameters": userParameters,
 			}).WithError(err).Errorf("parameters is not a valid json")
-		return
+			return
 		}
 	}
 	paramMap := ResolveParameterValue(template.Parameters, parameterValueMap)

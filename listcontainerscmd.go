@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	logrusr "github.com/bombsimon/logrusr/v3"
+	logrusr "github.com/aliyun/aliyun_assist_client/thirdparty/bombsimon/logrusr/v3"
 	"github.com/rodaine/table"
 	"k8s.io/klog/v2"
 
@@ -22,49 +22,49 @@ type ErrorRespond struct {
 }
 
 const (
-	AllFlagName = "all"
-	JsonFlagName = "json"
-	SourceFlagName = "source"
+	AllFlagName     = "all"
+	JsonFlagName    = "json"
+	SourceFlagName  = "source"
 	TimeoutFlagName = "timeout"
 )
 
 var (
 	defaultDataSourceName = "all"
-	defaultTimeout = 2 * time.Second
+	defaultTimeout        = 2 * time.Second
 
 	listContainersFlags = []cli.Flag{
 		{
-			Name: AllFlagName,
-			Shorthand: 'a',
-			Short: i18n.T(`show all containers. Only running containers are shown by default`, `列出所有容器。默认只列出正在运行的容器`),
+			Name:         AllFlagName,
+			Shorthand:    'a',
+			Short:        i18n.T(`show all containers. Only running containers are shown by default`, `列出所有容器。默认只列出正在运行的容器`),
 			AssignedMode: cli.AssignedNone,
-			Category: "caller",
+			Category:     "caller",
 		},
 		{
-			Name: JsonFlagName,
-			Short: i18n.T(`print container list in JSON format`, `以JSON格式打印容器列表`),
+			Name:         JsonFlagName,
+			Short:        i18n.T(`print container list in JSON format`, `以JSON格式打印容器列表`),
 			AssignedMode: cli.AssignedNone,
-			Category: "caller",
+			Category:     "caller",
 		},
 		{
-			Name: SourceFlagName,
-			Shorthand: 's',
-			Short: i18n.T(`set source interface from which containers are listed. Possibles are "cri", "docker", or "all". Default: "all"`, `指定列出容器的数据来源，可选的值有 "cri"、"docker" 或者全部列出 "all"。默认为 "all"`),
+			Name:         SourceFlagName,
+			Shorthand:    's',
+			Short:        i18n.T(`set source interface from which containers are listed. Possibles are "cri", "docker", or "all". Default: "all"`, `指定列出容器的数据来源，可选的值有 "cri"、"docker" 或者全部列出 "all"。默认为 "all"`),
 			AssignedMode: cli.AssignedOnce,
-			Category: "caller",
+			Category:     "caller",
 		},
 		{
-			Name: TimeoutFlagName,
+			Name:      TimeoutFlagName,
 			Shorthand: 't',
 			Short: i18n.T(`timeout of connecting to the container runtime service in seconds, e.g., 2s or 10s. 0 or less would be set to 2s by default`,
 				`指定连接容器运行时服务时的超时时间，以秒为单位，如 2s 或者 10s。指定 0 或者负数时采用默认值 2s`),
 			AssignedMode: cli.AssignedOnce,
-			Category: "caller",
+			Category:     "caller",
 		},
 	}
 
 	listContainersCmd = cli.Command{
-		Name: "list-containers",
+		Name:              "list-containers",
 		Short:             i18n.T("List containers on the instance", "列出该实例上的容器"),
 		Usage:             "list-containers [flags]",
 		Sample:            "",
@@ -117,8 +117,8 @@ func runListContainersCmd(ctx *cli.Context, args []string) error {
 	}
 
 	containers, err := container.ListContainers(container.ListContainersOptions{
-		ConnectTimeout: connectTimeout,
-		DataSourceName: dataSourceName,
+		ConnectTimeout:    connectTimeout,
+		DataSourceName:    dataSourceName,
 		ShowAllContainers: showAllContainers,
 	})
 	if len(containers) == 0 && err != nil {

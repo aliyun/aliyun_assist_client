@@ -4,6 +4,7 @@ go 1.17
 
 require (
 	bou.ke/monkey v1.0.2
+	github.com/Microsoft/go-winio v0.4.17
 	github.com/aliyun/alibaba-cloud-sdk-go v1.61.1491
 	github.com/bombsimon/logrusr/v3 v3.0.0
 	github.com/containerd/console v1.0.3
@@ -11,6 +12,8 @@ require (
 	github.com/creack/pty v1.1.11
 	github.com/docker/docker v20.10.18+incompatible
 	github.com/fabiokung/shm v0.0.0-20150728212823-2852b0d79bae
+	github.com/golang/protobuf v1.5.2
+	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/google/uuid v1.2.0
 	github.com/gorhill/cronexpr v0.0.0-20180427100037-88b0669f7d75
 	github.com/gorilla/websocket v1.4.2
@@ -18,6 +21,7 @@ require (
 	github.com/jarcoal/httpmock v1.0.8
 	github.com/jmespath/go-jmespath v0.4.0
 	github.com/kirinlabs/HttpRequest v1.1.1
+	github.com/kopoli/go-terminal-size v0.0.0-20170219200355-5c97524c8b54
 	github.com/lestrrat-go/file-rotatelogs v2.4.0+incompatible
 	github.com/marcsauter/single v0.0.0-20201009143647-9f8d81240be2
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd
@@ -39,6 +43,7 @@ require (
 	golang.org/x/net v0.0.0-20220225172249-27dd8689420f
 	golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a
 	golang.org/x/text v0.3.7
+	google.golang.org/grpc v1.40.0
 	gopkg.in/ini.v1 v1.66.2
 	k8s.io/cri-api v0.24.3
 	k8s.io/klog/v2 v2.60.1
@@ -47,7 +52,6 @@ require (
 )
 
 require (
-	github.com/Microsoft/go-winio v0.4.17 // indirect
 	github.com/StackExchange/wmi v0.0.0-20210224194228-fe8f1750fd46 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/docker/distribution v2.8.1+incompatible // indirect
@@ -57,9 +61,7 @@ require (
 	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
-	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/kopoli/go-terminal-size v0.0.0-20170219200355-5c97524c8b54 // indirect
 	github.com/lestrrat-go/strftime v1.0.4 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
 	github.com/mattn/go-isatty v0.0.3 // indirect
@@ -77,7 +79,6 @@ require (
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211 // indirect
 	google.golang.org/genproto v0.0.0-20220107163113-42d7afdf6368 // indirect
-	google.golang.org/grpc v1.40.0 // indirect
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.2.0 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect

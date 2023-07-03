@@ -21,7 +21,7 @@ import (
 	pm "github.com/aliyun/aliyun_assist_client/agent/pluginmanager/acspluginmanager"
 	"github.com/aliyun/aliyun_assist_client/agent/pluginmanager/acspluginmanager/flag"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
-	"github.com/aliyun/aliyun_assist_client/agent/version"
+	versioning "github.com/aliyun/aliyun_assist_client/agent/version"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/aliyun-cli/cli"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/aliyun-cli/i18n"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/single"
@@ -29,20 +29,11 @@ import (
 
 var SingleAppLock *single.Single
 
-var (
-	gitHash   string
-	assistVer string = "10.10.10.10000"
-)
-
 func main() {
-
-	version.AssistVersion = assistVer
-	version.GitCommitHash = gitHash
-	// User-Agent header value MUST be manually initialized since version
-	// information in version package is manually passed in as above
-	util.InitUserAgentValue()
-	cli.Version = assistVer
+	cli.Version = versioning.AssistVersion
 	log.InitLog("acs_plugin_manager.log", "")
+	// If write log failed, do nothing
+	log.GetLogger().SetErrorCallback(func(error){})
 	cli.PlatformCompatible()
 	writer := cli.DefaultWriter()
 
@@ -108,7 +99,7 @@ func execute(ctx *cli.Context, args []string) error {
 
 	exitCode := 0
 	if version {
-		fmt.Println(assistVer)
+		fmt.Println(versioning.AssistVersion)
 	} else if list {
 		exitCode, err = pluginManager.List(plugin, local)
 	} else if verify {

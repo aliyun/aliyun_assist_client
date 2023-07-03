@@ -9,11 +9,6 @@ import (
 	"github.com/aliyun/aliyun_assist_client/thirdparty/aliyun-cli/i18n"
 )
 
-var (
-	gitHash   string
-	assistVer string = "10.10.10.10000"
-)
-
 func main() {
 	cli.PlatformCompatible()
 

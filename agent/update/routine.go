@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
@@ -24,7 +24,7 @@ const (
 
 var (
 	ErrPreparationTimeout = errors.New("Updating preparation phase timeout")
-	ErrUpdatorNotFound = errors.New("Updator is required but not found")
+	ErrUpdatorNotFound    = errors.New("Updator is required but not found")
 
 	errFailurePlaceholder = errors.New("Failed to execute update script via updator but no error returned")
 	errTimeoutPlaceholder = errors.New("Executing update script via updator timeout")
@@ -36,9 +36,9 @@ func ExecuteUpdateScriptRunner(updateScriptPath string) {
 
 	exitcode, status, err := process.SyncRunDetached(updatorPath, []string{"--local_install", updateScriptPath}, 120)
 	failureContext := map[string]interface{}{
-		"updatorPath": updatorPath,
+		"updatorPath":      updatorPath,
 		"updateScriptPath": updateScriptPath,
-		"executionStatus": process.StrStatus(status),
+		"executionStatus":  process.StrStatus(status),
 	}
 	if err != nil {
 		if exitcode != process.ExitPlaceholderFailed {
@@ -136,7 +136,7 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 	}
 
 	// 1. Check whether update package is avialable
-	updateInfo, err := func () (*libupdate.UpdateCheckResp, error) {
+	updateInfo, err := func() (*libupdate.UpdateCheckResp, error) {
 		var lastErr error = nil
 		for i := 0; i < MaximumCheckUpdateRetries; i++ {
 			updateInfo, err := libupdate.FetchUpdateInfo()
@@ -150,7 +150,7 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 					return nil, ErrPreparationTimeout
 				}
 
-				if i < MaximumCheckUpdateRetries - 1 {
+				if i < MaximumCheckUpdateRetries-1 {
 					time.Sleep(time.Duration(5) * time.Second)
 				}
 
@@ -222,7 +222,7 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 	err = libupdate.DownloadPackage(updateInfo.UpdateInfo.URL, tempSavePath, downloadTimeout)
 	if err != nil {
 		log.GetLogger().WithFields(logrus.Fields{
-			"updateInfo": updateInfo,
+			"updateInfo":     updateInfo,
 			"targetSavePath": tempSavePath,
 		}).WithError(err).Errorln("Failed to download update package")
 
@@ -254,7 +254,7 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 	// Actions contained in below function may occupy much CPU, so criticalActionRunning
 	// flag is set to indicate perfmon module and would be unset automatically
 	// when function ends.
-	updateScriptPath, err := func () (string, error) {
+	updateScriptPath, err := func() (string, error) {
 		_cpuIntensiveActionRunning.Set()
 		defer _cpuIntensiveActionRunning.Clear()
 
@@ -262,7 +262,7 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 		// * MD5 checksum does not match
 		// * MD5 checksums matches but extracting fails
 		// * MD5 checksums matches and extraction succeeds
-		defer func () {
+		defer func() {
 			// NOTE: Removing downloaded update pacakge would always be performed
 			// even when preparation times out. This would be dangerous when IO
 			// operation is slow and will block task execution. Review is needed.
@@ -270,7 +270,7 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 				errmsg = fmt.Sprintf("RemoveUpdatePackage error: %s", err.Error())
 				extrainfo = fmt.Sprintf("downloadedPackagePath=%s&packageURL=%s", tempSavePath, updateInfo.UpdateInfo.URL)
 				log.GetLogger().WithFields(logrus.Fields{
-					"updateInfo": updateInfo,
+					"updateInfo":            updateInfo,
 					"downloadedPackagePath": tempSavePath,
 				}).WithError(err).Errorln("Failed to clean downloaded update package")
 				return
@@ -281,7 +281,7 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 		// 3. Check MD5 checksum of downloaded update package
 		if err := libupdate.CompareFileMD5(tempSavePath, updateInfo.UpdateInfo.Md5); err != nil {
 			log.GetLogger().WithFields(logrus.Fields{
-				"updateInfo": updateInfo,
+				"updateInfo":            updateInfo,
 				"downloadedPackagePath": tempSavePath,
 			}).WithError(err).Errorln("Inconsistent checksum of update package")
 			errmsg = fmt.Sprintf("CompareFileMD5 error: %s", err.Error())
@@ -324,14 +324,14 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 			errmsg = fmt.Sprintf("ExtractPackage error: %s", err.Error())
 			extrainfo = fmt.Sprintf("destinationDir=%s&downloadedPackagePath=%s", destinationDir, tempSavePath)
 			log.GetLogger().WithFields(logrus.Fields{
-				"updateInfo": updateInfo,
+				"updateInfo":            updateInfo,
 				"downloadedPackagePath": tempSavePath,
-				"destinationDir": destinationDir,
+				"destinationDir":        destinationDir,
 			}).WithError(err).Errorln("Failed to extract update package")
 
 			libupdate.ReportExtractPackageFailed(err, updateInfo, map[string]interface{}{
 				"downloadedPackagePath": tempSavePath,
-				"destinationDir": destinationDir,
+				"destinationDir":        destinationDir,
 			})
 
 			return "", err
@@ -371,7 +371,7 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 			}).WithError(err).Errorln("Invalid agent executable downloaded from responded URL")
 
 			libupdate.ReportValidateExecutableFailed(err, updateInfo, map[string]interface{}{
-				"packageURL": updateInfo.UpdateInfo.URL,
+				"packageURL":     updateInfo.UpdateInfo.URL,
 				"executablePath": agentPath,
 			})
 
@@ -410,7 +410,7 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 	// NOTE: I know function below contains too much code, HOWEVER under manual
 	// test it does breaks updating procedure and crash process. Some day would
 	// be better solution for such situation.
-	return func () error {
+	return func() error {
 		_cpuIntensiveActionRunning.Set()
 		defer _cpuIntensiveActionRunning.Clear()
 

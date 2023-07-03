@@ -1,9 +1,10 @@
+//go:build windows
 // +build windows
 
 package log
 
 import (
-	"github.com/sirupsen/logrus"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 )
 
 func (f *CustomLogrusTextFormatter) Format(entry *logrus.Entry) ([]byte, error) {
@@ -14,7 +15,7 @@ func (f *CustomLogrusTextFormatter) Format(entry *logrus.Entry) ([]byte, error) 
 	}
 	logrusTextFormatted, err := f.LogrusTextFormatter.Format(entry)
 	if logrusTextFormatted != nil && len(logrusTextFormatted) > 0 {
-		logrusTextFormatted[len(logrusTextFormatted) - 1] = '\r'
+		logrusTextFormatted[len(logrusTextFormatted)-1] = '\r'
 		logrusTextFormatted = append(logrusTextFormatted, '\n')
 	}
 

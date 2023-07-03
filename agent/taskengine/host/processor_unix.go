@@ -8,7 +8,7 @@ import (
 	"os"
 	"os/user"
 
-	"github.com/sirupsen/logrus"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/taskerrors"
@@ -24,7 +24,7 @@ func (p *HostProcessor) checkHomeDirectory() (string, error) {
 	taskLogger := log.GetLogger().WithFields(logrus.Fields{
 		"TaskId": p.TaskId,
 		"Phase":  "HostProcessor-PreChecking",
-		"Step": "detectHomeDirectory",
+		"Step":   "detectHomeDirectory",
 	})
 
 	if p.Username != "" {
@@ -62,7 +62,7 @@ func (p *HostProcessor) checkWorkingDirectory() (string, error) {
 	taskLogger := log.GetLogger().WithFields(logrus.Fields{
 		"TaskId": p.TaskId,
 		"Phase":  "HostProcessor-PreChecking",
-		"Step": "detectWorkingDirectory",
+		"Step":   "detectWorkingDirectory",
 	})
 
 	// 1. When working directory for invocation has been specified, just check
