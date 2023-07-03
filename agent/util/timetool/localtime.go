@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 )
@@ -22,7 +22,7 @@ var (
 	// See below issues on GitHub for related information:
 	// * https://github.com/golang/go/issues/46417
 	// * https://github.com/golang/go/issues/28020
-	systemTimezoneName string
+	systemTimezoneName           string
 	detectSystemTimezoneNameOnce sync.Once
 
 	ErrDetectSystemTimezoneName = errors.New("failed to detect TZ name in system")
@@ -38,8 +38,8 @@ func NowWithTimezoneName() (time.Time, int, string) {
 		if err != nil {
 			timezoneAbbr, offset := now.Zone()
 			log.GetLogger().WithFields(logrus.Fields{
-				"currentTime": now.Format(time.RFC3339),
-				"currentTimezoneAbbr": timezoneAbbr,
+				"currentTime":          now.Format(time.RFC3339),
+				"currentTimezoneAbbr":  timezoneAbbr,
 				"currentOffsetFromUTC": offset,
 			}).WithError(err).Warning("Failed to detect canonical name of current system TZ setting, fallback to GMT+-offset value from golang stdlib")
 			return

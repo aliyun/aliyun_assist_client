@@ -4,15 +4,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strconv"
 	"path/filepath"
+	"strconv"
 
 	"github.com/aliyun/aliyun_assist_client/agent/cryptdata"
 	"github.com/aliyun/aliyun_assist_client/agent/ipc/client"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/aliyun-cli/cli"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/aliyun-cli/i18n"
-	"github.com/sirupsen/logrus"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 )
 
 const (
@@ -177,6 +177,8 @@ func runDataEncryptionCmd(ctx *cli.Context, args []string) error {
 
 	// Necessary initialization work
 	log.InitLog("aliyun_assist_main.log", logPath)
+	// IF write log failed, do nothing
+	log.GetLogger().SetErrorCallback(func(error){})
 	// Add field SubCmd to make log entries separated from the main process's
 	log.GetLogger().SetFormatter(&log.CustomLogrusTextFormatter{
 		Fileds: logrus.Fields{
@@ -224,7 +226,7 @@ func runDataEncryptionCmd(ctx *cli.Context, args []string) error {
 		}
 		errCode, err := client.RmRsaKeyPair(keyPairId)
 		if err != nil {
-			fmt.Fprintln(os.Stderr,"Remove key pair failed: ", err)
+			fmt.Fprintln(os.Stderr, "Remove key pair failed: ", err)
 			cli.Exit(int(errCode))
 		} else {
 			fmt.Printf("Key pair [%s] has been removed\n", keyPairId)

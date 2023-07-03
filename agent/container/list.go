@@ -3,7 +3,7 @@ package container
 import (
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 
 	libcri "github.com/aliyun/aliyun_assist_client/agent/container/cri"
 	"github.com/aliyun/aliyun_assist_client/agent/container/docker"
@@ -12,8 +12,8 @@ import (
 )
 
 type ListContainersOptions struct {
-	ConnectTimeout time.Duration
-	DataSourceName string
+	ConnectTimeout    time.Duration
+	DataSourceName    string
 	ShowAllContainers bool
 }
 

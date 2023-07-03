@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 	heavylock "github.com/viney-shih/go-lock"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
@@ -22,7 +22,7 @@ const (
 )
 
 const (
-	NormalTaskType = 0
+	NormalTaskType  = 0
 	SessionTaskType = 1
 )
 
@@ -100,7 +100,7 @@ func Fetch(from_kick bool, taskId string, taskType int, isColdstart bool) int {
 
 	var task_size int
 	if from_kick {
-		task_size = fetchTasks(FetchOnKickoff, taskId, taskType,false)
+		task_size = fetchTasks(FetchOnKickoff, taskId, taskType, false)
 	} else {
 		task_size = fetchTasks(FetchOnStartup, taskId, taskType, isColdstart)
 	}
@@ -162,7 +162,7 @@ func dispatchRunTask(taskInfo models.RunTaskInfo) {
 			return
 		}
 		pool := GetPool()
-		pool.RunTask(func ()  {
+		pool.RunTask(func() {
 			code, err := t.Run()
 			if code != 0 || err != nil {
 				metrics.GetTaskFailedEvent(
@@ -258,7 +258,7 @@ func dispatchTestTask(taskInfo models.RunTaskInfo) {
 
 		scheduleLogger.Info("Schedule testing task to be pre-checked")
 		pool := GetPrecheckPool()
-		pool.RunTask(func () {
+		pool.RunTask(func() {
 			t.PreCheck(true)
 		})
 		scheduleLogger.Info("Scheduled testing task to be pre-checked")
@@ -288,7 +288,7 @@ func (s *PeriodicTaskSchedule) startExclusiveInvocation() {
 	// (2) Every time of invocation need to add itself into TaskFactory at first.
 	taskFactory.AddTask(s.reusableInvocation)
 	pool := GetPool()
-	pool.RunTask(func ()  {
+	pool.RunTask(func() {
 		code, err := s.reusableInvocation.Run()
 		if code != 0 || err != nil {
 			metrics.GetTaskFailedEvent(
@@ -345,7 +345,7 @@ func schedulePeriodicTask(taskInfo models.RunTaskInfo) error {
 	if taskInfo.Repeat == models.RunTaskRate {
 		creationTimeSeconds := taskInfo.CreationTime / 1000
 		creationTimeMs := taskInfo.CreationTime % 1000
-		creationTime := time.Unix(creationTimeSeconds, creationTimeMs * int64(time.Millisecond))
+		creationTime := time.Unix(creationTimeSeconds, creationTimeMs*int64(time.Millisecond))
 		timer, err = timerManager.CreateRateTimer(func() {
 			periodicTaskSchedule.startExclusiveInvocation()
 		}, taskInfo.Cronat, creationTime)
@@ -370,8 +370,8 @@ func schedulePeriodicTask(taskInfo models.RunTaskInfo) error {
 		}
 		scheduleLogger.WithFields(logrus.Fields{
 			"expression": taskInfo.Cronat,
-			"reportErr": reportErr,
-			"response": response,
+			"reportErr":  reportErr,
+			"response":   response,
 		}).WithError(err).Info("Report errors for invalid cron/rate/at expression")
 		return err
 	}

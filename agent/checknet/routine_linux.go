@@ -4,7 +4,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 	heavylock "github.com/viney-shih/go-lock"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"

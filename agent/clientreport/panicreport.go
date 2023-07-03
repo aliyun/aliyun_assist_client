@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
-	"github.com/sirupsen/logrus"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 )
 
 type panicInfo struct {

@@ -13,13 +13,14 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"sync"
 	"time"
 
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 	"github.com/google/uuid"
 	"github.com/kirinlabs/HttpRequest"
-	"github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
@@ -34,7 +35,7 @@ const (
 )
 
 var (
-	UserAgentValue string
+	UserAgentValue string = fmt.Sprintf("%s_%s/%s", runtime.GOOS, runtime.GOARCH, version.AssistVersion)
 	CrtPath        string
 	NilRequest     *atomicutil.AtomicBoolean
 	CaCertPool     *x509.CertPool
@@ -81,10 +82,6 @@ func (e *HttpErrorCode) Error() string {
 }
 func (e *HttpErrorCode) GetCode() int {
 	return e.errorCode
-}
-
-func InitUserAgentValue() {
-	UserAgentValue = fmt.Sprintf("%s_%s/%s", osutil.GetOsType(), osutil.GetOsArch(), version.AssistVersion)
 }
 
 func GetHTTPTransport() *http.Transport {

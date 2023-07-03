@@ -8,14 +8,9 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
-	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/version"
 )
 
-var (
-	gitHash   string
-	assistVer string
-)
 var SingleAppLock *single.Single
 
 type Options struct {
@@ -67,12 +62,6 @@ func parseOptions() Options {
 }
 
 func main() {
-	version.AssistVersion = assistVer
-	version.GitCommitHash = gitHash
-	// User-Agent header value MUST be manually initialized since version
-	// information in version package is manually passed in as above
-	util.InitUserAgentValue()
-
 	options := parseOptions()
 
 	if options.GetHelp {

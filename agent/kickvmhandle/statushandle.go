@@ -3,7 +3,7 @@ package kickvmhandle
 import (
 	"errors"
 
-	"github.com/sirupsen/logrus"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 	"github.com/spf13/pflag"
 
 	"github.com/aliyun/aliyun_assist_client/agent/checknet"
@@ -22,14 +22,14 @@ var (
 	ErrStatusNetworkInvalidParameters = errors.New("Invalid parameters for `kick_vm status network` action")
 )
 
-func init ()  {
+func init() {
 	statusRoute = map[string]handleFunc{
 		"network": requestNetworkStatus,
 	}
 }
 
 func NewStatusHandle(action string, params []string) *StatusHandle {
-	return  &StatusHandle{
+	return &StatusHandle{
 		action: action,
 		params: params,
 	}

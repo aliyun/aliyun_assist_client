@@ -1,17 +1,17 @@
 package pluginmanager
 
 import (
+	"errors"
+	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/agent/util/process"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
+	"golang.org/x/sys/windows"
 	"io"
-	"time"
 	"os"
 	"os/exec"
-	"unsafe"
-	"errors"
 	"strings"
-	"golang.org/x/sys/windows"
-	"github.com/aliyun/aliyun_assist_client/agent/util/process"
-	"github.com/aliyun/aliyun_assist_client/agent/log"
-	"github.com/sirupsen/logrus"
+	"time"
+	"unsafe"
 )
 
 // We use this struct to retreive process handle(which is unexported)
@@ -23,7 +23,7 @@ type processHandle struct {
 
 type waitProcessResult struct {
 	processState *os.ProcessState
-	err error
+	err          error
 }
 
 type ProcessExitGroup windows.Handle
@@ -92,7 +92,7 @@ func syncRunKillGroup(workingDir string, commandName string, commandArguments []
 		processState, err := cmd.Process.Wait()
 		finished <- waitProcessResult{
 			processState: processState,
-			err: err,
+			err:          err,
 		}
 	}()
 

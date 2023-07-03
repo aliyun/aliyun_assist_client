@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 )
@@ -25,23 +25,22 @@ const (
 
 type WaitProcessResult struct {
 	processState *os.ProcessState
-	err error
+	err          error
 }
 
 type ProcessCmd struct {
-    canceledChan chan bool
-    command  *exec.Cmd
-    user_name string
-    password string
-	homeDir string
-	env []string
+	canceledChan chan bool
+	command      *exec.Cmd
+	user_name    string
+	password     string
+	homeDir      string
+	env          []string
 }
 
 func NewProcessCmd() *ProcessCmd {
 	p := &ProcessCmd{}
 	return p
 }
-
 
 type cancellableAndSafeWriter struct {
 	baseWriter    io.Writer
@@ -74,7 +73,7 @@ func (p *ProcessCmd) SetEnv(env []string) {
 	p.env = env
 }
 
-func (p *ProcessCmd)  SyncRunSimple(commandName string, commandArguments []string, timeOut int) error {
+func (p *ProcessCmd) SyncRunSimple(commandName string, commandArguments []string, timeOut int) error {
 	p.command = exec.Command(commandName, commandArguments...)
 	logger := log.GetLogger().WithFields(logrus.Fields{
 		"command": p.command.Args,
@@ -110,15 +109,15 @@ func (p *ProcessCmd)  SyncRunSimple(commandName string, commandArguments []strin
 	return err
 }
 
-func (p *ProcessCmd)  SyncRun(
+func (p *ProcessCmd) SyncRun(
 	workingDir string,
 	commandName string,
 	commandArguments []string,
 	stdoutWriter io.Writer,
 	stderrWriter io.Writer,
-	stdinReader  io.Reader,
+	stdinReader io.Reader,
 	callbackFunc readCallbackFunc,
-	timeOut int)  (exitCode int, status int, err error) {
+	timeOut int) (exitCode int, status int, err error) {
 
 	status = Success
 	exitCode = 0
@@ -150,10 +149,9 @@ func (p *ProcessCmd)  SyncRun(
 		processState, err := p.command.Process.Wait()
 		finished <- WaitProcessResult{
 			processState: processState,
-			err: err,
+			err:          err,
 		}
 	}()
-
 
 	select {
 	case waitProcessResult := <-finished:
@@ -179,10 +177,10 @@ func (p *ProcessCmd)  SyncRun(
 		exitCode = 1
 		status = Timeout
 		err = errors.New("timeout")
-        p.command.Process.Kill()
+		p.command.Process.Kill()
 	}
 
-	if(p.user_name != "") {
+	if p.user_name != "" {
 		p.removeCredential()
 	}
 
@@ -190,7 +188,7 @@ func (p *ProcessCmd)  SyncRun(
 }
 
 func (p *ProcessCmd) Pid() int {
-	if p.command == nil || p.command.Process == nil{
+	if p.command == nil || p.command.Process == nil {
 		return -1
 	}
 	return p.command.Process.Pid

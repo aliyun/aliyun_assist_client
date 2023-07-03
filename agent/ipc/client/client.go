@@ -114,7 +114,7 @@ func RmRsaKeyPair(keyId string) (errCode int32, err error) {
 		log.GetLogger().Errorf("RmRsaKeyPair failed, keyPairId[%s], StatusCode[%d], errMsg[%s]: ", keyId, resp.Status.StatusCode, resp.Status.ErrMessage)
 		return
 	}
-	log.GetLogger().Info("RmRsaKeyPair success, keyPairId[%s]: ", keyId)
+	log.GetLogger().Infof("RmRsaKeyPair success, keyPairId[%s]: ", keyId)
 	return
 }
 

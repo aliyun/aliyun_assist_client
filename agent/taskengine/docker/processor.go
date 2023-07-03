@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
 	dockerclient "github.com/docker/docker/client"
-	"github.com/sirupsen/logrus"
 
 	dockerutil "github.com/aliyun/aliyun_assist_client/agent/container/docker"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
@@ -21,8 +21,8 @@ import (
 )
 
 const (
-	defaultTimeout time.Duration = 10 * time.Second
-	maxInspectionRetries = 5
+	defaultTimeout       time.Duration = 10 * time.Second
+	maxInspectionRetries               = 5
 )
 
 var (
@@ -34,20 +34,20 @@ var (
 type DockerProcessor struct {
 	TaskId string
 	// Fundamental properties of command process
-	ContainerId string
-	ContainerName string // may be filled when only container id specified
-	CommandType string
+	ContainerId    string
+	ContainerName  string // may be filled when only container id specified
+	CommandType    string
 	CommandContent string
-	Timeout int
+	Timeout        int
 	// Additional execution attributes supported by docker
 	WorkingDirectory string
-	Username string
+	Username         string
 
-	client *dockerclient.Client
+	client          *dockerclient.Client
 	foundContainers []types.Container
 	// stripped and selected name for the container found
 	foundContainerName string
-	cancel context.CancelFunc
+	cancel             context.CancelFunc
 }
 
 // CheckDockerProcessor performs some pre-checking logics to determine whether
@@ -78,17 +78,17 @@ func CheckDockerProcessor(p *DockerProcessor) error {
 	// has been correctly stripped in caller function.
 	if p.ContainerId != "" {
 		containerListFilterKVs = append(containerListFilterKVs, filters.KeyValuePair{
-			Key: "id",
+			Key:   "id",
 			Value: p.ContainerId,
 		})
 	} else if p.ContainerName != "" {
 		containerListFilterKVs = append(containerListFilterKVs, filters.KeyValuePair{
-			Key: "name",
+			Key:   "name",
 			Value: p.ContainerName,
 		})
 	}
 	containerListOptions := types.ContainerListOptions{
-		All: true,
+		All:     true,
 		Filters: filters.NewArgs(containerListFilterKVs...),
 	}
 
@@ -187,19 +187,19 @@ func (p *DockerProcessor) Prepare(commandContent string) error {
 }
 
 func (p *DockerProcessor) SyncRun(
-		stdoutWriter io.Writer,
-		stderrWriter io.Writer,
-		stdinReader  io.Reader)  (int, int, error) {
+	stdoutWriter io.Writer,
+	stderrWriter io.Writer,
+	stdinReader io.Reader) (int, int, error) {
 	// 1. Create an exec instance
 	compiledCommand := []string{"/bin/sh", "-c", p.CommandContent}
 	execConfig := types.ExecConfig{
-		User: p.Username,
-		Tty: false,
-		AttachStdin: stdinReader != nil,
+		User:         p.Username,
+		Tty:          false,
+		AttachStdin:  stdinReader != nil,
 		AttachStderr: stderrWriter != nil,
 		AttachStdout: stdoutWriter != nil,
-		WorkingDir: p.WorkingDirectory,
-		Cmd: compiledCommand,
+		WorkingDir:   p.WorkingDirectory,
+		Cmd:          compiledCommand,
 	}
 	execution, err := createExec(p.client, p.foundContainers[0].ID, execConfig, defaultTimeout)
 	if err != nil {
@@ -209,7 +209,7 @@ func (p *DockerProcessor) SyncRun(
 	// 2. Start the created exec instance and get a hijacked response stream
 	execStartConfig := types.ExecStartCheck{
 		Detach: false,
-		Tty: false,
+		Tty:    false,
 	}
 	hijackedResponse, err := startAndAttachExec(p.client, execution.ID, execStartConfig, defaultTimeout)
 	if err != nil {
@@ -217,7 +217,7 @@ func (p *DockerProcessor) SyncRun(
 	}
 	defer hijackedResponse.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(p.Timeout) * time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(p.Timeout)*time.Second)
 	defer cancel()
 	p.cancel = cancel
 
@@ -230,13 +230,13 @@ func (p *DockerProcessor) SyncRun(
 
 	// Wait for command finished, or timeout
 	select {
-	case <- ctx.Done():
+	case <-ctx.Done():
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			if ctxErr == context.DeadlineExceeded {
 				return 1, process.Timeout, errors.New("timeout")
 			}
 		}
-	case err := <- streamed:
+	case err := <-streamed:
 		if err != nil {
 			return 1, process.Fail, taskerrors.NewContainerRuntimeInternalError(err)
 		}
@@ -249,7 +249,7 @@ func (p *DockerProcessor) SyncRun(
 	var exitCode int
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
-	for retries := 0;; {
+	for retries := 0; ; {
 		inspection, err := inspectExec(p.client, execution.ID, defaultTimeout)
 		if err != nil {
 			finalErr = err
@@ -264,14 +264,14 @@ func (p *DockerProcessor) SyncRun(
 		retries++
 		if retries == maxInspectionRetries {
 			log.GetLogger().WithFields(logrus.Fields{
-				"containerId": p.ContainerId,
+				"containerId":   p.ContainerId,
 				"containerName": p.ContainerName,
-				"execId": execution.ID,
+				"execId":        execution.ID,
 			}).WithError(ErrInconsistentExecProcessState).Errorln("Failed to conclude process state after exec session")
 			return 1, process.Fail, taskerrors.NewContainerRuntimeInternalError(ErrInconsistentExecProcessState)
 		}
 
-		<- ticker.C
+		<-ticker.C
 	}
 	if finalErr != nil {
 		return 1, process.Fail, taskerrors.NewContainerRuntimeInternalError(finalErr)

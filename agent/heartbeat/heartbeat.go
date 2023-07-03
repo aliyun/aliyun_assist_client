@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 	"github.com/tidwall/gjson"
 
 	"github.com/aliyun/aliyun_assist_client/agent/checkvirt"
@@ -39,11 +39,11 @@ var (
 	_retryCounter uint16
 	_retryMutex   *sync.Mutex
 
-	_processStartTime int64
+	_processStartTime   int64
 	_acknowledgeCounter uint64
-	_sendCounter uint64
-	_winVirtioIsOld   int
-	_machineId string
+	_sendCounter        uint64
+	_winVirtioIsOld     int
+	_machineId          string
 )
 
 func checkWindowsVirtVer() int {

@@ -2,6 +2,7 @@ package instance
 
 import (
 	"os"
+	"time"
 
 	"github.com/aliyun/aliyun_assist_client/agent/inventory/model"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
@@ -30,6 +31,6 @@ func GetInstanceInfo() (info *model.InstanceInformation, err error) {
 	if ip != nil {
 		i.IpAddress = ip.String()
 	}
-	i.RamRole, _ = util.GetRoleName()
+	i.RamRole, _ = util.GetRoleNameTtl(time.Duration(5) * time.Hour)
 	return &i, nil
 }

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 	criapis "k8s.io/cri-api/pkg/apis"
 	runtimeapis "k8s.io/cri-api/pkg/apis/runtime/v1"
 	"k8s.io/kubernetes/pkg/kubelet/cri/remote"
@@ -16,11 +16,11 @@ import (
 
 type containerConnection struct {
 	runtimeService criapis.RuntimeService
-	containerId string
-	containerName string
+	containerId    string
+	containerName  string
 }
 
-type filterFunc func ([]*runtimeapis.Container) []*runtimeapis.Container
+type filterFunc func([]*runtimeapis.Container) []*runtimeapis.Container
 
 func getRuntimeService(runtimeEndpoints []libcri.RuntimeEndpoint, connectTimeout time.Duration, containerId string, containerName string) (*containerConnection, error) {
 	conditions := &runtimeapis.ContainerFilter{}
@@ -110,7 +110,7 @@ func getRuntimeService(runtimeEndpoints []libcri.RuntimeEndpoint, connectTimeout
 		}
 		if len(containers) == 0 {
 			log.GetLogger().WithFields(logrus.Fields{
-				"containerId": containerId,
+				"containerId":   containerId,
 				"containerName": containerName,
 			}).WithError(err).Warningf("Cannot find container matching specified conditions on %s runtime via %s", endpoint.RuntimeName, endpoint.Endpoint)
 			continue
@@ -139,7 +139,7 @@ func determineContainer(service criapis.RuntimeService, containers []*runtimeapi
 
 	connection := &containerConnection{
 		runtimeService: service,
-		containerId: containers[0].Id,
+		containerId:    containers[0].Id,
 	}
 	if containers[0].Metadata != nil {
 		connection.containerName = containers[0].Metadata.Name

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io/ioutil"
 	"math/rand"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -17,7 +16,6 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/timermanager"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
-	"github.com/aliyun/aliyun_assist_client/agent/util/jsonutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
 )
 
@@ -118,12 +116,13 @@ func pluginHealthCheckScan() {
 	pluginHealthCheckTimeMut.Unlock()
 	log.GetLogger().Info("pluginHealthCheckScan: start")
 	// 1.检查插件列表，如果没有插件就不需要健康检查
-	pluginInfoList, err := loadPlugins()
+	installedPlugins, err := LoadInstalledPlugins()
 	if err != nil {
 		log.GetLogger().WithError(err).Error("pluginHealthCheckScan: loadPlugins err: " + err.Error())
 		return
 	}
-	if pluginInfoList == nil {
+	_, pluginInfoList := installedPlugins.FindAll()
+	if len(pluginInfoList) == 0 {
 		log.GetLogger().Infof("pluginHealthCheckScan: there is no plugin")
 		return
 	}
@@ -286,12 +285,13 @@ func pluginHealthCheckPull() {
 	}
 	log.GetLogger().Info("pluginHealthCheckPull: start")
 	// 1.检查插件列表，如果没有插件就不需要健康检查
-	pluginInfoList, err := loadPlugins()
+	installedPlugins, err := LoadInstalledPlugins()
 	if err != nil {
 		log.GetLogger().Error("pluginHealthCheckPull: loadPlugins err: " + err.Error())
 		return
 	}
-	if pluginInfoList == nil {
+	_, pluginInfoList := installedPlugins.FindAll()
+	if len(pluginInfoList) == 0 {
 		log.GetLogger().Infof("pluginHealthCheckPull: there is no plugin")
 		return
 	}
@@ -300,7 +300,7 @@ func pluginHealthCheckPull() {
 	pluginStatusRequest := PluginStatusResquest{
 		Plugin: []PluginStatus{},
 	}
-	pluginDir, err := getPluginPath()
+	pluginDir, err := util.GetPluginPath()
 	if err != nil {
 		log.GetLogger().Error("pluginHealthCheckPull: getPluginPath err: ", err.Error())
 		return
@@ -417,12 +417,13 @@ func pluginHealthCheckPull() {
 func pluginUpdateCheck() {
 	log.GetLogger().Info("pluginUpdateCheck start")
 	// get installed plugin list
-	pluginInfoList, err := loadPlugins()
+	installedPlugins, err := LoadInstalledPlugins()
 	if err != nil {
 		log.GetLogger().WithError(err).Error("pluginUpdateCheck fail: loadPlugins fail")
 		return
 	}
-	if pluginInfoList == nil {
+	_, pluginInfoList := installedPlugins.FindAll()
+	if len(pluginInfoList) == 0 {
 		log.GetLogger().Info("pluginUpdateCheck cancel: there is no plugins")
 		return
 	}
@@ -508,7 +509,7 @@ func pluginUpdateCheck() {
 
 func pluginLocalListReport() {
 	log.GetLogger().Info("pluginLocalListReport: start")
-	pluginInfoList, err := loadPlugins()
+	installedPlugins, err := LoadInstalledPlugins()
 	if err != nil {
 		log.GetLogger().Error("pluginLocalListReport: loadPlugins err: ", err.Error())
 		return
@@ -517,6 +518,7 @@ func pluginLocalListReport() {
 	versionList := []string{}
 	osList := []string{}
 	archList := []string{}
+	_, pluginInfoList := installedPlugins.FindAll()
 	for _, p := range pluginInfoList {
 		if p.IsRemoved {
 			continue
@@ -569,38 +571,6 @@ func parsePluginUpdateCheck(content string) (PluginUpdateCheckResponse, error) {
 		return pluginUpdateCheckResp, err
 	}
 	return pluginUpdateCheckResp, nil
-}
-
-func loadPlugins() ([]PluginInfo, error) {
-	pluginPath, err := getPluginPath()
-	if err != nil {
-		return nil, err
-	}
-	pluginPath += string(os.PathSeparator) + "installed_plugins"
-	if !util.CheckFileIsExist(pluginPath) {
-		return nil, nil
-	}
-	installedPlugins := InstalledPlugins{}
-	if err := jsonutil.UnmarshalFile(pluginPath, &installedPlugins); err != nil {
-		if content, err1 := ioutil.ReadFile(pluginPath); err1 == nil {
-			log.GetLogger().Errorf("Unmarshal installedPlugins fail content: %s", string(content))
-		}
-		return nil, err
-	}
-	if len(installedPlugins.PluginList) == 0 {
-		return nil, nil
-	}
-	return installedPlugins.PluginList, nil
-}
-
-func getPluginPath() (string, error) {
-	pluginDir, err := util.GetCurrentPath()
-	if err != nil {
-		return "", err
-	}
-	pluginDir += ".." + string(os.PathSeparator) + "plugin"
-	util.MakeSurePath(pluginDir)
-	return pluginDir, nil
 }
 
 func refreshTimer(timer *timermanager.Timer, nextInterval int) error {

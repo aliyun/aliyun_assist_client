@@ -133,7 +133,8 @@ func GetPluginPath() (string , error) {
 	if err != nil {
 		return "", err
 	}
-	path := cur + ".." + string(filepath.Separator) + "plugin"
+	// Use filepath.Join() to clean the parent directory element `..` in path
+	path := filepath.Join(cur, "..", "plugin")
 	err = MakeSurePath(path)
 	return path, err
 }

@@ -17,11 +17,11 @@ import (
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/message"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 	"github.com/containerd/console"
 	"github.com/creack/goselect"
 	"github.com/gorilla/websocket"
 	tsize "github.com/kopoli/go-terminal-size"
-	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh/terminal"
 )
 

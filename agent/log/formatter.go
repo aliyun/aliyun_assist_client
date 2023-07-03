@@ -1,10 +1,10 @@
 package log
 
 import (
-	"github.com/sirupsen/logrus"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 )
 
 type CustomLogrusTextFormatter struct {
 	LogrusTextFormatter logrus.TextFormatter
-	Fileds logrus.Fields
+	Fileds              logrus.Fields
 }

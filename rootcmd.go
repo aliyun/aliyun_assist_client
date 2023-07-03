@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	logrusr "github.com/bombsimon/logrusr/v3"
+	logrusr "github.com/aliyun/aliyun_assist_client/thirdparty/bombsimon/logrusr/v3"
 	"k8s.io/klog/v2"
 
 	"github.com/aliyun/aliyun_assist_client/agent/channel"
@@ -51,7 +51,7 @@ type Options struct {
 	Register       bool
 	DeRegister     bool
 	Region         string
-	Tags 		   []string
+	Tags           []string
 	ActivationCode string
 	ActivationId   string
 	NetWorkMode    string
@@ -77,7 +77,7 @@ const (
 	RegisterFlagName       = "register"
 	DeRegisterFlagName     = "deregister"
 	RegionFlagName         = "RegionId"
-	TagFlagName 		   = "tag"
+	TagFlagName            = "tag"
 	ActivationCodeFlagName = "ActivationCode"
 	ActivationIdFlagName   = "ActivationId"
 	NetworkModeFlagName    = "NetworkMode"
@@ -180,16 +180,16 @@ var (
 			Category:     "caller",
 		},
 		{
-			Name: TagFlagName,
-			Shorthand: 'T',
-			Short: i18n.T(`used in register mode`, `（该参数仅限在注册为云助手托管实例时使用）`),
+			Name:         TagFlagName,
+			Shorthand:    'T',
+			Short:        i18n.T(`used in register mode`, `（该参数仅限在注册为云助手托管实例时使用）`),
 			AssignedMode: cli.AssignedRepeatable,
-			Category: "caller",
+			Category:     "caller",
 		},
 		{
-			Name: ActivationCodeFlagName,
-			Shorthand: 'C',
-			Short: i18n.T(`used in register mode`, `（该参数仅限在注册为云助手托管实例时使用）`),
+			Name:         ActivationCodeFlagName,
+			Shorthand:    'C',
+			Short:        i18n.T(`used in register mode`, `（该参数仅限在注册为云助手托管实例时使用）`),
 			AssignedMode: cli.AssignedOnce,
 			Category:     "caller",
 		},
@@ -442,11 +442,6 @@ func runRootCommand(ctx *cli.Context, args []string) error {
 	if e != nil {
 		log.GetLogger().Fatal("PatchGolang failed :", e.Error())
 	}
-	version.AssistVersion = assistVer
-	version.GitCommitHash = gitHash
-	// User-Agent header value MUST be manually initialized since version
-	// information in version package is manually passed in as above
-	util.InitUserAgentValue()
 
 	if options.IsVerbose {
 		util.SetVerboseMode(true)
@@ -474,7 +469,7 @@ func runRootCommand(ctx *cli.Context, args []string) error {
 				cli.Exit(1)
 			}
 			tags = append(tags, hybrid.Tag{
-				Key: words[0],
+				Key:   words[0],
 				Value: words[1],
 			})
 		}

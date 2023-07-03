@@ -14,7 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/container"
@@ -33,12 +33,12 @@ const (
 	defaultQuotoPre = 6000
 )
 
-type FinishCallback func ()
+type FinishCallback func()
 
 type Task struct {
-	taskInfo             models.RunTaskInfo
-	scheduleLocation     *time.Location
-	onFinish             FinishCallback
+	taskInfo         models.RunTaskInfo
+	scheduleLocation *time.Location
+	onFinish         FinishCallback
 
 	processer               models.TaskProcessor
 	startTime               time.Time
@@ -62,36 +62,36 @@ func NewTask(taskInfo models.RunTaskInfo, scheduleLocation *time.Location, onFin
 	var processor models.TaskProcessor
 	if taskInfo.ContainerId != "" || taskInfo.ContainerName != "" {
 		processor = container.DetectContainerProcessor(&container.ContainerCommandOptions{
-			TaskId: taskInfo.TaskId,
-			ContainerId: taskInfo.ContainerId,
+			TaskId:        taskInfo.TaskId,
+			ContainerId:   taskInfo.ContainerId,
 			ContainerName: taskInfo.ContainerName,
-			CommandType: taskInfo.CommandType,
-			Timeout: timeout,
+			CommandType:   taskInfo.CommandType,
+			Timeout:       timeout,
 
 			WorkingDirectory: taskInfo.WorkingDir,
-			Username: taskInfo.Username,
+			Username:         taskInfo.Username,
 		})
 	} else {
 		processor = &host.HostProcessor{
-			TaskId: taskInfo.TaskId,
+			TaskId:      taskInfo.TaskId,
 			CommandType: taskInfo.CommandType,
-			Repeat: taskInfo.Repeat,
-			Timeout: timeout,
+			Repeat:      taskInfo.Repeat,
+			Timeout:     timeout,
 
-			CommandName: taskInfo.CommandName,
-			WorkingDirectory: taskInfo.WorkingDir,
-			Username: taskInfo.Username,
+			CommandName:         taskInfo.CommandName,
+			WorkingDirectory:    taskInfo.WorkingDir,
+			Username:            taskInfo.Username,
 			WindowsUserPassword: taskInfo.Password,
 		}
 	}
 
 	task := &Task{
-		taskInfo:  taskInfo,
+		taskInfo:         taskInfo,
 		scheduleLocation: scheduleLocation,
-		onFinish:  onFinish,
-		processer: processor,
-		canceled:  false,
-		droped:    0,
+		onFinish:         onFinish,
+		processer:        processor,
+		canceled:         false,
+		droped:           0,
 	}
 
 	return task

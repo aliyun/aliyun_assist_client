@@ -4,14 +4,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/aliyun/aliyun_assist_client/agent/clientreport"
 	"math/rand"
 	"runtime"
 	"runtime/debug"
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/aliyun/aliyun_assist_client/agent/clientreport"
+
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 
 	"github.com/aliyun/aliyun_assist_client/agent/inventory/gatherers/instance"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
