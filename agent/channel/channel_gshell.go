@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
 	"os"
-	"runtime"
 	"sync"
 	"time"
 
@@ -84,11 +84,13 @@ func (c *GshellChannel) startChannelUnsafe() error {
 		log.GetLogger().Warning("startChannelUnsafe run duplicated, return it")
 		return nil // startChannelUnsage 同一时间只能有一个执行
 	}
-	gshellPath := "/dev/virtio-ports/org.qemu.guest_agent.0"
-	if runtime.GOOS == "windows" {
-		gshellPath = "\\\\.\\Global\\org.qemu.guest_agent.0"
+	var gshellPath string
+	var e error
+	var h *os.File
+	gshellPath, e = getGshellPath()
+	if e == nil {
+		h, e = os.OpenFile(gshellPath, os.O_RDWR, 0666)
 	}
-	h, e := os.OpenFile(gshellPath, os.O_RDWR, 0666)
 	if e != nil {
 		metrics.GetChannelFailEvent(
 			metrics.EVENT_SUBCATEGORY_CHANNEL_GSHELL,

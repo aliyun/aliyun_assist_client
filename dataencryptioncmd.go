@@ -176,7 +176,7 @@ func runDataEncryptionCmd(ctx *cli.Context, args []string) error {
 	jsonFlag := ctx.Flags().Get(JsonFlagName).IsAssigned()
 
 	// Necessary initialization work
-	log.InitLog("aliyun_assist_main.log", logPath)
+	log.InitLog("aliyun_assist_main.log", logPath, true)
 	// IF write log failed, do nothing
 	log.GetLogger().SetErrorCallback(func(error){})
 	// Add field SubCmd to make log entries separated from the main process's

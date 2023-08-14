@@ -16,6 +16,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	pm "github.com/aliyun/aliyun_assist_client/agent/pluginmanager/acspluginmanager"
@@ -24,16 +25,13 @@ import (
 	versioning "github.com/aliyun/aliyun_assist_client/agent/version"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/aliyun-cli/cli"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/aliyun-cli/i18n"
-	"github.com/aliyun/aliyun_assist_client/thirdparty/single"
 )
-
-var SingleAppLock *single.Single
 
 func main() {
 	cli.Version = versioning.AssistVersion
-	log.InitLog("acs_plugin_manager.log", "")
+	log.InitLog("acs_plugin_manager.log", "", true)
 	// If write log failed, do nothing
-	log.GetLogger().SetErrorCallback(func(error){})
+	log.GetLogger().SetErrorCallback(func(error) {})
 	cli.PlatformCompatible()
 	writer := cli.DefaultWriter()
 
@@ -82,19 +80,42 @@ func execute(ctx *cli.Context, args []string) error {
 	separator, _ := flag.SeparatorFlag(ctx.Flags()).GetValue()
 	file, _ := flag.FileFlag(ctx.Flags()).GetValue()
 
-	if verbose {
-		log.GetLogger().Infof("verbose[%v]  list[%v]  local[%v]  verify[%v]  status[%v]  exec[%v]  plugin[%v]  pluginId[%v]  pluginversion[%v]  params[%v]  paramsV2[%s]  url[%v]  separator[%v]  file[%v]  ",
-			verbose, list, local, verify, status, exec, plugin, pluginId, pluginVersion, params, paramsV2, url, separator, file)
+	var fetchTimeoutInSeconds int = 20
+	if fetchTimeout, assigned := flag.FetchTimeoutFlag(ctx.Flags()).GetValue(); assigned {
+		fetchTimeoutValue, err := strconv.Atoi(fetchTimeout)
+		if err != nil {
+			return fmt.Errorf(`Invalid fetch timeout argument "%s": %w`, fetchTimeout, err)
+		}
+		fetchTimeoutInSeconds = fetchTimeoutValue
 	}
 
-	if plugin != "" {
-		single.SetPidFile("/var/tmp/acs-plugin-manager.pid")
-		SingleAppLock = single.New(plugin)
-		if err := SingleAppLock.CheckLock(); err != nil && err == single.ErrAlreadyRunning {
-			fmt.Println("exit by another plugin process is running")
-			log.GetLogger().Infoln("exit by another plugin process is running")
-			return nil
+	var optionalExecutionTimeoutInSeconds *int = nil
+	if executionTimeout, assigned := flag.ExecutionTimeoutFlag(ctx.Flags()).GetValue(); assigned {
+		executionTimeoutValue, err := strconv.Atoi(executionTimeout)
+		if err != nil {
+			return fmt.Errorf(`Invalid timeout argument for execution "%s": %w`, executionTimeout, err)
 		}
+
+		optionalExecutionTimeoutInSeconds = &executionTimeoutValue
+	}
+
+	if verbose {
+		log.GetLogger().WithFields(log.Fields{
+			"verbose":       verbose,
+			"list":          list,
+			"local":         local,
+			"verify":        verify,
+			"status":        status,
+			"exec":          exec,
+			"plugin":        plugin,
+			"pluginId":      pluginId,
+			"pluginversion": pluginVersion,
+			"params":        params,
+			"paramsV2":      paramsV2,
+			"url":           url,
+			"separator":     separator,
+			"file":          file,
+		}).Infof("Command-line options")
 	}
 
 	exitCode := 0
@@ -103,11 +124,35 @@ func execute(ctx *cli.Context, args []string) error {
 	} else if list {
 		exitCode, err = pluginManager.List(plugin, local)
 	} else if verify {
-		exitCode, err = pluginManager.VerifyPlugin(url, params, separator, paramsV2)
+		exitCode, err = pluginManager.VerifyPlugin(&pm.VerifyFetchOptions{
+			Url: url,
+
+			FetchTimeoutInSeconds: fetchTimeoutInSeconds,
+		}, &pm.ExecuteParams{
+			Params:    params,
+			Separator: separator,
+			ParamsV2:  paramsV2,
+
+			OptionalExecutionTimeoutInSeconds: optionalExecutionTimeoutInSeconds,
+		})
 	} else if status {
 		exitCode, err = pluginManager.ShowPluginStatus()
 	} else if exec {
-		exitCode, err = pluginManager.ExecutePlugin(file, plugin, pluginId, params, separator, paramsV2, pluginVersion, local)
+		exitCode, err = pluginManager.ExecutePlugin(&pm.ExecFetchOptions{
+			File:       file,
+			PluginName: plugin,
+			PluginId:   pluginId,
+			Version:    pluginVersion,
+			Local:      local,
+
+			FetchTimeoutInSeconds: fetchTimeoutInSeconds,
+		}, &pm.ExecuteParams{
+			Params:    params,
+			Separator: separator,
+			ParamsV2:  paramsV2,
+
+			OptionalExecutionTimeoutInSeconds: optionalExecutionTimeoutInSeconds,
+		})
 	} else if remove {
 		exitCode, err = pluginManager.RemovePlugin(plugin)
 	} else {

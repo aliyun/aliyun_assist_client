@@ -11,9 +11,9 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/config"
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/i18n"
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/portforward"
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/sendpublickey"
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/session"
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/ssh"
-	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/sendpublickey"
 	"github.com/spf13/pflag"
 )
 
@@ -54,7 +54,7 @@ func parseOptions() Options {
 }
 
 func main() {
-	log.InitLog("aliyun_ecs_session_log", "")
+	log.InitLog("aliyun_ecs_session_log", "", true)
 	log.GetLogger().Infoln("session plugin started_ ", os.Args[:])
 
 	cli.PlatformCompatible()

@@ -15,6 +15,7 @@ import (
 const (
 	OSWin   = "windows"
 	OSLinux = "linux"
+	OSFreebsd = "freebsd"
 )
 
 // GetUptimeOfMs returns system uptime in millisecond precision, which would be
@@ -32,8 +33,8 @@ func GetOsType() string {
 		return OSWin
 	} else if runtime.GOOS == OSLinux {
 		return OSLinux
-	} else if runtime.GOOS == "freebsd" {
-		return "freebsd"
+	} else if runtime.GOOS == OSFreebsd {
+		return OSFreebsd
 	} else {
 		return "unknown"
 	}

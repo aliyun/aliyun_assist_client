@@ -265,10 +265,10 @@ func (p *HostProcessor) SideEffect() error {
 	if p.resultStatus == process.Success {
 		if p.exitCode == exitcodePoweroff {
 			taskLogger.Infof("Poweroff the instance due to the special task exitcode %d", p.exitCode)
-			powerutil.Powerdown()
+			powerutil.Shutdown(false)
 		} else if p.exitCode == exitcodeReboot {
 			taskLogger.Infof("Reboot the instance due to the special task exitcode %d", p.exitCode)
-			powerutil.Reboot()
+			powerutil.Shutdown(true)
 		}
 	}
 

@@ -1,0 +1,3 @@
+package checkospanic
+
+func ReportLastOsPanic() {}

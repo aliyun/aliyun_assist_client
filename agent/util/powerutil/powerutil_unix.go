@@ -3,19 +3,7 @@
 
 package powerutil
 
-import (
-	"github.com/aliyun/aliyun_assist_client/agent/log"
-	"github.com/aliyun/aliyun_assist_client/agent/util"
+const (
+	powerdownCmd = "shutdown -h now"
+	rebootCmd = "shutdown -r now"
 )
-
-func Powerdown() {
-	shutdownCmd := "shutdown -h now"
-	log.GetLogger().Infoln("powerdown......")
-	util.ExeCmd(shutdownCmd)
-}
-
-func Reboot() {
-	rebootCmd := "shutdown -r now"
-	log.GetLogger().Infoln("reboot......")
-	util.ExeCmd(rebootCmd)
-}

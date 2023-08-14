@@ -1,6 +1,7 @@
 package util
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -273,6 +274,33 @@ func HttpDownlod(url string, FilePath string) error {
 	if err != nil {
 		return err
 	}
+	_, err = io.Copy(f, res.Body)
+	return err
+}
+
+func HttpDownloadContext(ctx context.Context, url string, FilePath string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+
+	client := http.Client{
+		// NOTE: `transport` variable would be nil when init function fails, and
+		// DefaultTransport will be used instead, thus it's safe to directly
+		// reference `transport` variable.
+		Transport: GetHTTPTransport(),
+	}
+	res, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+
+	f, err := os.Create(FilePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
 	_, err = io.Copy(f, res.Body)
 	return err
 }

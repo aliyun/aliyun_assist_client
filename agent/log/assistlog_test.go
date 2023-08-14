@@ -7,6 +7,6 @@ import (
 )
 
 func TestGetLogger(t *testing.T) {
-	InitLog("test", "")
+	InitLog("test", "", false)
 	assert.NotNil(t, GetLogger())
 }

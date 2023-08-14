@@ -16,34 +16,39 @@ type EventSubCategory string
 
 const (
 	// event id
-	EVENT_CHANNEL_FAILED    MetricsEventID = "agent.channel.failed"
-	EVENT_CHANNEL_SWITCH    MetricsEventID = "agent.channel.switch"
-	EVENT_UPDATE_FAILED     MetricsEventID = "agent.update.failed"
-	EVENT_TASK_FAILED       MetricsEventID = "agent.task.failed"
-	EVENT_TASK_WARN			MetricsEventID = "agent.task.warn"
-	EVENT_HYBRID_REGISTER   MetricsEventID = "agent.hybrid.register"
-	EVENT_HYBRID_UNREGISTER MetricsEventID = "agent.hybrid.unregister"
-	EVENT_SESSION_FAILED    MetricsEventID = "agent.session.failed"
-	EVENT_PERF_CPU_OVERLOAD MetricsEventID = "agent.pref.cup.overload"
-	EVENT_PERF_MEM_OVERLOAD MetricsEventID = "agent.pref.mem.overload"
-	EVENT_BASE_STARTUP      MetricsEventID = "agent.startup"
-	EVENT_BASE_VIRTIO       MetricsEventID = "agent.virtio"
-	EVENT_KDUMP             MetricsEventID = "agent.kdump"
-	EVENT_PLUGIN_EXECUTE    MetricsEventID = "agent.plugin.execute"
-	EVENT_PLUGIN_LOCALLIST  MetricsEventID = "agent.plugin.locallist"
-	EVENT_PLUGIN_UPDATE     MetricsEventID = "agent.plugin.update"
+	EVENT_CHANNEL_FAILED                     MetricsEventID = "agent.channel.failed"
+	EVENT_CHANNEL_SWITCH                     MetricsEventID = "agent.channel.switch"
+	EVENT_UPDATE_FAILED                      MetricsEventID = "agent.update.failed"
+	EVENT_TASK_FAILED                        MetricsEventID = "agent.task.failed"
+	EVENT_TASK_WARN                          MetricsEventID = "agent.task.warn"
+	EVENT_HYBRID_REGISTER                    MetricsEventID = "agent.hybrid.register"
+	EVENT_HYBRID_UNREGISTER                  MetricsEventID = "agent.hybrid.unregister"
+	EVENT_SESSION_FAILED                     MetricsEventID = "agent.session.failed"
+	EVENT_PERF_CPU_OVERLOAD                  MetricsEventID = "agent.pref.cup.overload"
+	EVENT_PERF_MEM_OVERLOAD                  MetricsEventID = "agent.pref.mem.overload"
+	EVENT_BASE_STARTUP                       MetricsEventID = "agent.startup"
+	EVENT_BASE_SHUTDOWN_FAILED               MetricsEventID = "agent.shutdown.failed"
+	EVENT_BASE_VIRTIO                        MetricsEventID = "agent.virtio"
+	EVENT_KDUMP                              MetricsEventID = "agent.kdump"
+	EVENT_PLUGIN_EXECUTE                     MetricsEventID = "agent.plugin.execute"
+	EVENT_PLUGIN_LOCALLIST                   MetricsEventID = "agent.plugin.locallist"
+	EVENT_PLUGIN_UPDATE                      MetricsEventID = "agent.plugin.update"
+	EVENT_LINUX_GUESTOS_PANIC                MetricsEventID = "Linux-GuestOS-Panic"
+	EVENT_WINDOWS_WER_SYSTEM_ERRORRE_PORTING MetricsEventID = "Microsoft-Windows-WER-SystemErrorReporting"
 
 	// event category
-	EVENT_CATEGORY_CHANNEL EventCategory = "CHANNEL"
-	EVENT_CATEGORY_UPDATE  EventCategory = "UPDATE"
-	EVENT_CATEGORY_TASK    EventCategory = "TASK"
-	EVENT_CATEGORY_HYBRID  EventCategory = "HYBRID"
-	EVENT_CATEGORY_SESSION EventCategory = "SESSION"
-	EVENT_CATEGORY_PERF    EventCategory = "PERF"
-	EVENT_CATEGORY_STARTUP EventCategory = "STARTUP"
-	EVENT_CATEGORY_VIRTIO  EventCategory = "VIRTIO"
-	EVENT_CATEGORY_KDUMP   EventCategory = "KDUMP"
-	EVENT_CATEGORY_PLUGIN  EventCategory = "PLUGIN"
+	EVENT_CATEGORY_CHANNEL  EventCategory = "CHANNEL"
+	EVENT_CATEGORY_UPDATE   EventCategory = "UPDATE"
+	EVENT_CATEGORY_TASK     EventCategory = "TASK"
+	EVENT_CATEGORY_HYBRID   EventCategory = "HYBRID"
+	EVENT_CATEGORY_SESSION  EventCategory = "SESSION"
+	EVENT_CATEGORY_PERF     EventCategory = "PERF"
+	EVENT_CATEGORY_STARTUP  EventCategory = "STARTUP"
+	EVENT_CATEGORY_SHUTDOWN EventCategory = "SHUTDOWN"
+	EVENT_CATEGORY_VIRTIO   EventCategory = "VIRTIO"
+	EVENT_CATEGORY_KDUMP    EventCategory = "KDUMP"
+	EVENT_CATEGORY_PLUGIN   EventCategory = "PLUGIN"
+	EVENT_CATEGORY_PANIC    EventCategory = "PANIC"
 
 	// event subcategory
 	EVENT_SUBCATEGORY_CHANNEL_GSHELL    EventSubCategory = "gshell"
@@ -53,10 +58,11 @@ const (
 	EVENT_SUBCATEGORY_HYBRID_UNREGISTER EventSubCategory = "unregister"
 	EVENT_SUBCATEGORY_PERF_CPU          EventSubCategory = "cpu"
 	EVENT_SUBCATEGORY_PERF_MEM          EventSubCategory = "mem"
+	EVENT_SUBCATEGORY_GOESTOS           EventSubCategory = "guestos"
 
 	// event level
 	EVENT_LEVEL_ERROR EventLevel = "ERROR"
-	EVENT_LEVEL_WARN EventLevel = "WARN"
+	EVENT_LEVEL_WARN  EventLevel = "WARN"
 	EVENT_LEVEL_INFO  EventLevel = "INFO"
 )
 
@@ -81,7 +87,7 @@ type CommonInfo struct {
 	OsVersion     string `json:"osVersion"`
 	VirtualType   string `json:"virtualType"`
 	Distribution  string `json:"distribution"`
-	KernelVersion string `json:"kernekVersion"`
+	KernelVersion string `json:"kernelVersion"`
 }
 
 func (m *MetricsEvent) ReportEvent() {
@@ -147,7 +153,7 @@ func getCommonInfoStr() string {
 		platFormName, _ := osutil.PlatformName()
 		platFormVersion, _ := osutil.PlatformVersion()
 		_commonInfo.Distribution = platFormName + " " + platFormVersion
-		_commonInfo.KernelVersion = getKernelVersion()
+		_commonInfo.KernelVersion = osutil.GetKernelVersion()
 		str, err := json.Marshal(&_commonInfo)
 		if err != nil {
 			log.GetLogger().Errorf("metrics Marshal _commonInfo err: %s", err.Error())
@@ -319,6 +325,18 @@ func GetBaseStartupEvent(keywords ...string) *MetricsEvent {
 	return event
 }
 
+func GetShutDownFailedEvent(keywords ...string) *MetricsEvent {
+	event := &MetricsEvent{
+		EventId:    EVENT_BASE_SHUTDOWN_FAILED,
+		Category:   EVENT_CATEGORY_SHUTDOWN,
+		EventLevel: EVENT_LEVEL_ERROR,
+		EventTime:  time.Now().UnixNano() / 1e6,
+		Common:     getCommonInfoStr(),
+		KeyWords:   genKeyWordsStr(keywords...),
+	}
+	return event
+}
+
 // ecs_dump服务状态上报
 func GetKdumpServiceStatusEvent(keywords ...string) *MetricsEvent {
 	event := &MetricsEvent{
@@ -360,6 +378,32 @@ func GetPluginUpdateEvent(keywords ...string) *MetricsEvent {
 	event := &MetricsEvent{
 		EventId:    EVENT_PLUGIN_UPDATE,
 		Category:   EVENT_CATEGORY_PLUGIN,
+		EventLevel: EVENT_LEVEL_INFO,
+		EventTime:  time.Now().UnixNano() / 1e6,
+		Common:     getCommonInfoStr(),
+		KeyWords:   genKeyWordsStr(keywords...),
+	}
+	return event
+}
+
+func GetLinuxGuestOSPanicEvent(keywords ...string) *MetricsEvent {
+	event := &MetricsEvent{
+		EventId: EVENT_LINUX_GUESTOS_PANIC,
+		Category: EVENT_CATEGORY_PANIC,
+		SubCategory: EVENT_SUBCATEGORY_GOESTOS,
+		EventLevel: EVENT_LEVEL_INFO,
+		EventTime:  time.Now().UnixNano() / 1e6,
+		Common:     getCommonInfoStr(),
+		KeyWords:   genKeyWordsStr(keywords...),
+	}
+	return event
+}
+
+func GetWindowsGuestOSPanicEvent(keywords ...string) *MetricsEvent {
+	event := &MetricsEvent{
+		EventId: EVENT_WINDOWS_WER_SYSTEM_ERRORRE_PORTING,
+		Category: EVENT_CATEGORY_PANIC,
+		SubCategory: EVENT_SUBCATEGORY_GOESTOS,
 		EventLevel: EVENT_LEVEL_INFO,
 		EventTime:  time.Now().UnixNano() / 1e6,
 		Common:     getCommonInfoStr(),

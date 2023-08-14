@@ -49,7 +49,7 @@ type cancellableAndSafeWriter struct {
 	lock          sync.Mutex
 }
 
-type readCallbackFunc func(stdoutWriter io.Reader, stderrWriter io.Reader)
+type ReadCallbackFunc func(stdoutWriter io.Reader, stderrWriter io.Reader)
 
 func (p *ProcessCmd) Cancel() {
 	if p.command != nil {
@@ -116,7 +116,7 @@ func (p *ProcessCmd) SyncRun(
 	stdoutWriter io.Writer,
 	stderrWriter io.Writer,
 	stdinReader io.Reader,
-	callbackFunc readCallbackFunc,
+	callbackFunc ReadCallbackFunc,
 	timeOut int) (exitCode int, status int, err error) {
 
 	status = Success
@@ -153,6 +153,12 @@ func (p *ProcessCmd) SyncRun(
 		}
 	}()
 
+	var timeoutChannel <-chan time.Time = nil
+	if timeOut > 0 {
+		timer := time.NewTimer(time.Duration(timeOut) * time.Second)
+		defer timer.Stop()
+		timeoutChannel = timer.C
+	}
 	select {
 	case waitProcessResult := <-finished:
 		log.GetLogger().Println("Command completed.", commandName)
@@ -172,7 +178,7 @@ func (p *ProcessCmd) SyncRun(
 			exitCode = 1
 			return exitCode, Fail, waitProcessResult.err
 		}
-	case <-time.After(time.Duration(timeOut) * time.Second):
+	case <- timeoutChannel:
 		log.GetLogger().Errorln("Timeout in run command.", commandName)
 		exitCode = 1
 		status = Timeout

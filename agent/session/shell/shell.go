@@ -4,13 +4,14 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"os"
+	"time"
+	"unicode/utf8"
+
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/session/channel"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
-	"os"
-	"runtime"
-	"time"
-	"unicode/utf8"
+	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
 )
 
 
@@ -111,7 +112,7 @@ func (p *ShellPlugin) Execute(dataChannel channel.ISessionChannel, cancelFlag ut
 		errorCode = exitCode
 	}
 
-	if runtime.GOOS == "linux" {
+	if osutil.GetOsType() == osutil.OSLinux || osutil.GetOsType() == osutil.OSFreebsd {
 		p.waitPid()
 	}
 
