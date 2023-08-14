@@ -116,12 +116,11 @@ func pluginHealthCheckScan() {
 	pluginHealthCheckTimeMut.Unlock()
 	log.GetLogger().Info("pluginHealthCheckScan: start")
 	// 1.检查插件列表，如果没有插件就不需要健康检查
-	installedPlugins, err := LoadInstalledPlugins()
+	pluginInfoList, err := _findAllInstalledPlugins()
 	if err != nil {
 		log.GetLogger().WithError(err).Error("pluginHealthCheckScan: loadPlugins err: " + err.Error())
 		return
 	}
-	_, pluginInfoList := installedPlugins.FindAll()
 	if len(pluginInfoList) == 0 {
 		log.GetLogger().Infof("pluginHealthCheckScan: there is no plugin")
 		return
@@ -285,12 +284,11 @@ func pluginHealthCheckPull() {
 	}
 	log.GetLogger().Info("pluginHealthCheckPull: start")
 	// 1.检查插件列表，如果没有插件就不需要健康检查
-	installedPlugins, err := LoadInstalledPlugins()
+	pluginInfoList, err := _findAllInstalledPlugins()
 	if err != nil {
 		log.GetLogger().Error("pluginHealthCheckPull: loadPlugins err: " + err.Error())
 		return
 	}
-	_, pluginInfoList := installedPlugins.FindAll()
 	if len(pluginInfoList) == 0 {
 		log.GetLogger().Infof("pluginHealthCheckPull: there is no plugin")
 		return
@@ -417,12 +415,11 @@ func pluginHealthCheckPull() {
 func pluginUpdateCheck() {
 	log.GetLogger().Info("pluginUpdateCheck start")
 	// get installed plugin list
-	installedPlugins, err := LoadInstalledPlugins()
+	pluginInfoList, err := _findAllInstalledPlugins()
 	if err != nil {
 		log.GetLogger().WithError(err).Error("pluginUpdateCheck fail: loadPlugins fail")
 		return
 	}
-	_, pluginInfoList := installedPlugins.FindAll()
 	if len(pluginInfoList) == 0 {
 		log.GetLogger().Info("pluginUpdateCheck cancel: there is no plugins")
 		return
@@ -509,7 +506,7 @@ func pluginUpdateCheck() {
 
 func pluginLocalListReport() {
 	log.GetLogger().Info("pluginLocalListReport: start")
-	installedPlugins, err := LoadInstalledPlugins()
+	pluginInfoList, err := _findAllInstalledPlugins()
 	if err != nil {
 		log.GetLogger().Error("pluginLocalListReport: loadPlugins err: ", err.Error())
 		return
@@ -518,7 +515,6 @@ func pluginLocalListReport() {
 	versionList := []string{}
 	osList := []string{}
 	archList := []string{}
-	_, pluginInfoList := installedPlugins.FindAll()
 	for _, p := range pluginInfoList {
 		if p.IsRemoved {
 			continue
@@ -581,4 +577,15 @@ func refreshTimer(timer *timermanager.Timer, nextInterval int) error {
 	mutableSchedule.SetInterval(time.Duration(nextInterval) * time.Second)
 	timer.RefreshTimer()
 	return nil
+}
+
+func _findAllInstalledPlugins() ([]PluginInfo, error){
+	installedPlugins, err := LoadInstalledPlugins()
+	if err != nil {
+		return nil, err
+	}
+	defer installedPlugins.Close()
+
+	_, pluginInfoList, err := installedPlugins.FindAll()
+	return pluginInfoList, err
 }

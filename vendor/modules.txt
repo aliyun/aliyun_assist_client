@@ -22,8 +22,6 @@ github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses
 github.com/aliyun/alibaba-cloud-sdk-go/sdk/utils
 github.com/aliyun/alibaba-cloud-sdk-go/services/ecs
 github.com/aliyun/alibaba-cloud-sdk-go/services/oos
-# github.com/bombsimon/logrusr/v3 v3.0.0
-## explicit; go 1.17
 # github.com/containerd/console v1.0.3
 ## explicit; go 1.13
 github.com/containerd/console
@@ -40,7 +38,7 @@ github.com/davecgh/go-spew/spew
 ## explicit
 github.com/docker/distribution/digestset
 github.com/docker/distribution/reference
-# github.com/docker/docker v20.10.18+incompatible
+# github.com/docker/docker v24.0.4+incompatible
 ## explicit
 github.com/docker/docker/api
 github.com/docker/docker/api/types
@@ -127,15 +125,12 @@ github.com/kirinlabs/HttpRequest
 # github.com/kopoli/go-terminal-size v0.0.0-20170219200355-5c97524c8b54
 ## explicit
 github.com/kopoli/go-terminal-size
-# github.com/lestrrat-go/file-rotatelogs v2.4.0+incompatible
-## explicit
-github.com/lestrrat-go/file-rotatelogs
-github.com/lestrrat-go/file-rotatelogs/internal/option
 # github.com/lestrrat-go/strftime v1.0.4
 ## explicit; go 1.12
 github.com/lestrrat-go/strftime
 # github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0
 ## explicit; go 1.16
+github.com/lufia/plan9stats
 # github.com/marcsauter/single v0.0.0-20201009143647-9f8d81240be2
 ## explicit
 github.com/marcsauter/single
@@ -206,8 +201,7 @@ github.com/pkg/errors
 github.com/pmezard/go-difflib/difflib
 # github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c
 ## explicit; go 1.14
-# github.com/rifflock/lfshook v0.0.0-20180920164130-b9218ef580f5
-## explicit
+github.com/power-devops/perfstat
 # github.com/rodaine/table v1.0.1
 ## explicit; go 1.14
 github.com/rodaine/table
@@ -221,9 +215,11 @@ github.com/shirou/gopsutil/net
 github.com/shirou/gopsutil/process
 # github.com/shirou/gopsutil/v3 v3.22.10
 ## explicit; go 1.15
-# github.com/sirupsen/logrus v1.8.1
-## explicit; go 1.13
-github.com/sirupsen/logrus
+github.com/shirou/gopsutil/v3/cpu
+github.com/shirou/gopsutil/v3/internal/common
+github.com/shirou/gopsutil/v3/mem
+github.com/shirou/gopsutil/v3/net
+github.com/shirou/gopsutil/v3/process
 # github.com/spf13/pflag v1.0.5
 ## explicit; go 1.12
 github.com/spf13/pflag
@@ -253,10 +249,14 @@ github.com/viney-shih/go-lock
 github.com/yookoala/realpath
 # github.com/yusufpapurcu/wmi v1.2.2
 ## explicit; go 1.16
-# golang.org/x/crypto v0.0.0-20220214200702-86341886e292
+github.com/yusufpapurcu/wmi
+# go.etcd.io/bbolt v1.3.7
+## explicit; go 1.17
+go.etcd.io/bbolt
+# golang.org/x/crypto v0.11.0
 ## explicit; go 1.17
 golang.org/x/crypto/ssh/terminal
-# golang.org/x/net v0.0.0-20220225172249-27dd8689420f
+# golang.org/x/net v0.12.0
 ## explicit; go 1.17
 golang.org/x/net/html
 golang.org/x/net/html/atom
@@ -273,7 +273,7 @@ golang.org/x/net/trace
 # golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 ## explicit
 golang.org/x/sync/semaphore
-# golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a
+# golang.org/x/sys v0.10.0
 ## explicit; go 1.17
 golang.org/x/sys/internal/unsafeheader
 golang.org/x/sys/plan9
@@ -283,10 +283,10 @@ golang.org/x/sys/windows/registry
 golang.org/x/sys/windows/svc
 golang.org/x/sys/windows/svc/eventlog
 golang.org/x/sys/windows/svc/mgr
-# golang.org/x/term v0.0.0-20210927222741-03fcf44c2211
+# golang.org/x/term v0.10.0
 ## explicit; go 1.17
 golang.org/x/term
-# golang.org/x/text v0.3.7
+# golang.org/x/text v0.11.0
 ## explicit; go 1.17
 golang.org/x/text/encoding
 golang.org/x/text/encoding/charmap
@@ -358,8 +358,6 @@ google.golang.org/grpc/serviceconfig
 google.golang.org/grpc/stats
 google.golang.org/grpc/status
 google.golang.org/grpc/tap
-# google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.2.0
-## explicit; go 1.9
 # google.golang.org/protobuf v1.28.1
 ## explicit; go 1.11
 google.golang.org/protobuf/encoding/prototext

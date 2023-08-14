@@ -224,7 +224,7 @@ func getArch() (formatArch string) {
 		formatArch = ARCH_ARM
 	} else if strings.Contains(arch, "386") || strings.Contains(arch, "686") { // x86: i386 i686
 		formatArch = ARCH_32
-	} else if arch == "x86_64" { // x64: x86_64
+	} else if arch == "x86_64" || arch == "amd64" { // x64: x86_64
 		formatArch = ARCH_64
 	} else {
 		log.GetLogger().Errorln("Get Arch: unknown arch: ", arch)

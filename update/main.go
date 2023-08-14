@@ -77,7 +77,7 @@ func main() {
 		return
 	}
 
-	log.InitLog("aliyun_assist_update.log", "")
+	log.InitLog("aliyun_assist_update.log", "", false)
 	log.GetLogger().Infof("Starting...... version: %s githash: %s", version.AssistVersion, version.GitCommitHash)
 	SingleAppLock = single.New("AliyunAssistUpdateSingleLock")
 	if err := SingleAppLock.CheckLock(); err != nil && err == single.ErrAlreadyRunning {

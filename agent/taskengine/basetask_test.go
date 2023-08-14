@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/models"
+	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
 )
 
 func addMockServer() {
@@ -39,7 +40,7 @@ func TestRunTask(t *testing.T) {
 	var commandType string
 	var content string
 	var workingDir string
-	if runtime.GOOS == "linux" {
+	if osutil.GetOsType() == osutil.OSLinux || osutil.GetOsType() == osutil.OSFreebsd {
 		commandType = "RunShellScript"
 		content = base64.StdEncoding.EncodeToString([]byte("pwd"))
 		workingDir = "/tmp"

@@ -107,7 +107,7 @@ func runListContainersCmd(ctx *cli.Context, args []string) error {
 	}
 
 	// Necessary initialization work
-	log.InitLog("aliyun_assist_main.log", logPath)
+	log.InitLog("aliyun_assist_main.log", logPath, true)
 	// Redirect logging messages from kubernetes CRI client via klog to logrus
 	// used by ourselves
 	klog.SetLogger(logrusr.New(log.GetLogger()).WithName("klog"))

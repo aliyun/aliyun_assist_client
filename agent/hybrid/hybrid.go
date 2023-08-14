@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"runtime"
 	"strings"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
@@ -77,12 +76,8 @@ func Register(region string, code string, id string, name string, networkmode st
 		return false
 	}
 	hostname, _ := os.Hostname()
-	osType := "unknown"
-	if runtime.GOOS == "windows" {
-		osType = "windows"
-	} else if runtime.GOOS == "linux" {
-		osType = "linux"
-	}
+	osType := osutil.GetOsType()
+
 	ip, _ := osutil.ExternalIP()
 	var pub, pri bytes.Buffer
 	err := genRsaKey(&pub, &pri)
@@ -241,10 +236,10 @@ func genRsaKey(pub io.Writer, pri io.Writer) error {
 
 func restartService() {
 	processer := process.ProcessCmd{}
-	if runtime.GOOS == "linux" {
+	if osutil.GetOsType() == "linux" || osutil.GetOsType() == "freebsd" {
 		processer.SyncRunSimple("aliyun-service", strings.Split("--stop", " "), 10)
 		processer.SyncRunSimple("aliyun-service", strings.Split("--start", " "), 10)
-	} else if runtime.GOOS == "windows" {
+	} else if osutil.GetOsType() == "windows" {
 		processer.SyncRunSimple("net", strings.Split("stop AliyunService", " "), 10)
 		processer.SyncRunSimple("net", strings.Split("start AliyunService", " "), 10)
 	}

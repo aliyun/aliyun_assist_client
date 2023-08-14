@@ -30,6 +30,7 @@ type UpdateCheckReport struct {
 	OsVersion  string `json:"os_version"`
 	AppID      string `json:"app_id"`
 	AppVersion string `json:"app_version"`
+	KernelVersion string `json:"kernel_version"`
 }
 
 func FetchUpdateInfo() (*UpdateCheckResp, error) {
@@ -39,6 +40,7 @@ func FetchUpdateInfo() (*UpdateCheckResp, error) {
 		AppID:      "aliyun assistant",
 		OsVersion:  osutil.GetVersion(),
 		Arch:       osutil.GetOsArch(),
+		KernelVersion: osutil.GetKernelVersion(),
 	}
 	jsonBytes, _ := json.Marshal(*report)
 	log.GetLogger().Info("UpdateCheck request: ", string(jsonBytes))

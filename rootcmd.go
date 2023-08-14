@@ -13,6 +13,7 @@ import (
 
 	"github.com/aliyun/aliyun_assist_client/agent/channel"
 	"github.com/aliyun/aliyun_assist_client/agent/checkkdump"
+	"github.com/aliyun/aliyun_assist_client/agent/checkospanic"
 	"github.com/aliyun/aliyun_assist_client/agent/checkvirt"
 	"github.com/aliyun/aliyun_assist_client/agent/clientreport"
 	"github.com/aliyun/aliyun_assist_client/agent/cryptdata"
@@ -381,6 +382,10 @@ func (p *program) run() {
 
 		taskengine.Fetch(false, "", taskengine.NormalTaskType, isColdstart)
 	})
+	// Report last os panic if panic record found
+	if isColdstart, err := flagging.IsColdstart(); err != nil || isColdstart {
+		wrapgo.GoWithDefaultPanicHandler(checkospanic.ReportLastOsPanic)
+	}
 
 	time.Sleep(time.Duration(3*60) * time.Second)
 	log.GetLogger().Infoln("Start PerfMon ......")
@@ -430,7 +435,7 @@ func parseOptions(ctx *cli.Context) Options {
 
 func runRootCommand(ctx *cli.Context, args []string) error {
 	options := parseOptions(ctx)
-	log.InitLog("aliyun_assist_main.log", options.LogPath)
+	log.InitLog("aliyun_assist_main.log", options.LogPath, false)
 	// Redirect logging messages from kubernetes CRI client via klog to logrus
 	// used by ourselves
 	klog.SetLogger(logrusr.New(log.GetLogger()).WithName("klog"))

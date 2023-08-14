@@ -17,6 +17,7 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/util/process"
 	"github.com/aliyun/aliyun_assist_client/agent/util/versionutil"
 	"github.com/aliyun/aliyun_assist_client/agent/version"
+	"github.com/aliyun/aliyun_assist_client/common/zipfile"
 )
 
 const (
@@ -56,7 +57,7 @@ func CompareFileMD5(filePath string, expectedMD5 string) error {
 
 
 func ExtractPackage(filePath string, destination string) error {
-	return util.Unzip(filePath, destination)
+	return zipfile.Unzip(filePath, destination)
 }
 
 

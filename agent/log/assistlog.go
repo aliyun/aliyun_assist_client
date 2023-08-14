@@ -5,15 +5,17 @@ import (
 	"path/filepath"
 	"time"
 
+	rotatelogs "github.com/aliyun/aliyun_assist_client/thirdparty/file-rotatelogs"
 	log "github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
-	rotatelogs "github.com/lestrrat-go/file-rotatelogs"
 	"github.com/pkg/errors"
 )
 
 var Log *log.Logger
 var defaultLevel log.Level = log.InfoLevel
 
-func InitLog(filename string, logpath string) {
+type Fields = log.Fields
+
+func InitLog(filename string, logpath string, ignoreRotationError bool) {
 	logdir := ""
 	if logpath == "" {
 		path, _ := os.Executable()
@@ -27,6 +29,7 @@ func InitLog(filename string, logpath string) {
 		rotatelogs.WithMaxAge(time.Duration(24*30)*time.Hour),    //最长保留30天
 		rotatelogs.WithRotationTime(time.Duration(24)*time.Hour), //每天进行一次日志切割
 		rotatelogs.WithLinkName(logdir+"/log/"+filename),         // 为日志文件创建一个名字不变的链接
+		rotatelogs.IgnoreRotationError(ignoreRotationError),
 	)
 	if err != nil {
 		log.Errorf("config local file system logger error. %+v", errors.WithStack(err))
@@ -40,7 +43,7 @@ func InitLog(filename string, logpath string) {
 
 func GetLogger() *log.Logger {
 	if Log == nil {
-		InitLog("aliyun_assist_test", "")
+		InitLog("aliyun_assist_test", "", false)
 	}
 	return Log
 }

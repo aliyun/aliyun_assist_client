@@ -6,23 +6,25 @@ import (
 )
 
 const (
-	HelpFlagName          = "help"
-	VerboseFlagName       = "verbose"
-	VersionFlagName       = "version"
-	ListFlagName          = "list"
-	LocalFlagName         = "local"
-	VerifyFlagName        = "verify"
-	StatusFlagName        = "status"
-	PluginFlagName        = "plugin"
-	PluginIdFlagName      = "pluginId"
-	PluginVersionFlagName = "pluginVersion"
-	ParamsFlagName        = "params"
-	ParamsV2FlagName      = "paramsV2"
-	UrlFlagName           = "url"
-	SeparatorFlagName     = "separator"
-	FileFlagName          = "file"
-	ExecFlagName          = "exec"
-	RemoveFlagName        = "remove"
+	HelpFlagName             = "help"
+	VerboseFlagName          = "verbose"
+	VersionFlagName          = "version"
+	ListFlagName             = "list"
+	LocalFlagName            = "local"
+	VerifyFlagName           = "verify"
+	StatusFlagName           = "status"
+	PluginFlagName           = "plugin"
+	PluginIdFlagName         = "pluginId"
+	PluginVersionFlagName    = "pluginVersion"
+	ParamsFlagName           = "params"
+	ParamsV2FlagName         = "paramsV2"
+	UrlFlagName              = "url"
+	SeparatorFlagName        = "separator"
+	FileFlagName             = "file"
+	ExecFlagName             = "exec"
+	FetchTimeoutFlagName     = "fetchTimeout"
+	ExecutionTimeoutFlagName = "timeout"
+	RemoveFlagName           = "remove"
 )
 
 func AddFlags(fs *cli.FlagSet) {
@@ -42,6 +44,8 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewVerifyFlag())
 	fs.Add(NewStatusFlag())
 	fs.Add(NewExecFlag())
+	fs.Add(NewFetchTimeoutFlag())
+	fs.Add(NewExecutionTimeoutFlag())
 	fs.Add(NewRemoveFlag())
 }
 
@@ -103,6 +107,14 @@ func FileFlag(fs *cli.FlagSet) *cli.Flag {
 
 func ExecFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(ExecFlagName)
+}
+
+func FetchTimeoutFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(FetchTimeoutFlagName)
+}
+
+func ExecutionTimeoutFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(ExecutionTimeoutFlagName)
 }
 
 func RemoveFlag(fs *cli.FlagSet) *cli.Flag {
@@ -230,8 +242,6 @@ func NewPluginIdFlag() *cli.Flag {
 			"通过插件id指定插件")}
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair|RamRoleArnWithRoleName}
 func NewPluginVersionFlag() *cli.Flag {
 	return &cli.Flag{
 		Category:     "caller",
@@ -296,6 +306,28 @@ func NewFileFlag() *cli.Flag {
 		Short: i18n.T(
 			"select plugin file",
 			"指定插件文件")}
+}
+
+func NewFetchTimeoutFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         FetchTimeoutFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Short: i18n.T(
+			"Maximum time in seconds that you allow acs-plugin-manger to fetch the plugin. By default is 20 seconds. 0 means no time limit on fetching",
+			"允许获取插件过程消耗的最长时间，单位为秒。默认为20秒。设为0表示不限获取时间"),
+	}
+}
+
+func NewExecutionTimeoutFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         ExecutionTimeoutFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Short: i18n.T(
+			"Maximum time in seconds that you allow the plugin to run. By default the value defined in plugin is used. 0 means no time limit on execution",
+			"允许插件运行的最长时间，单位为秒。默认使用插件包中定义的超时时间值。设为0表示不限运行时间"),
+	}
 }
 
 func NewExecFlag() *cli.Flag {

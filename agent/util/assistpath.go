@@ -123,6 +123,10 @@ func getCrossVersionDir() (string, error) {
 
 func GetCachePath() (string, error) {
 	cur, err := GetCurrentPath()
+	if err != nil {
+		return "", err
+	}
+
 	path := filepath.Join(cur, "..", "cache")
 	MakeSurePath((path))
 	return path, err

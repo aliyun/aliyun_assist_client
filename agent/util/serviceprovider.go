@@ -150,7 +150,8 @@ func GetDeRegisterService() string {
 
 func GetRegisterService(region, networkmode string) string {
 	if IsSelfHosted() {
-		return os.Getenv("ALIYUN_ASSIST_SERVER_HOST")
+		host := os.Getenv("ALIYUN_ASSIST_SERVER_HOST")
+		return "https://" + host + "/luban/api/instance/register"
 	}
 	domain := HYBRID_DOMAIN
 	if networkmode == "vpc" {

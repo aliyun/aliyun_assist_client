@@ -336,17 +336,13 @@ func OnRecvMsg(Msg string, ChannelType int) string {
 		gshellCmdReply.Return.CmdOutput = "execute command success"
 		retStr, _ := json.Marshal(gshellCmdReply)
 		reboot := false
-		if gshellShutdown.Arguments.Mode == "powerdown" {
-		} else if gshellShutdown.Arguments.Mode == "reboot" {
+		if gshellShutdown.Arguments.Mode == powerutil.PowerdownMode {
+		} else if gshellShutdown.Arguments.Mode == powerutil.RebootMode {
 			reboot = true
 		} else {
 			return BuildInvalidRet("invalid guest-shutdown command")
 		}
-		if reboot {
-			powerutil.Reboot()
-		} else {
-			powerutil.Powerdown()
-		}
+		powerutil.Shutdown(reboot)
 		return string(retStr)
 	}
 	return BuildInvalidRet("invalid command")
