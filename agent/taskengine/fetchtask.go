@@ -33,6 +33,7 @@ type sendFileInfo struct {
 }
 
 type tasks struct {
+	Code          int                      `json:"code"`
 	RunTasks      []taskInfo               `json:"run"`
 	StopTasks     []taskInfo               `json:"stop"`
 	TestTasks     []taskInfo               `json:"test"`
@@ -60,7 +61,7 @@ func newTaskCollection() *taskCollection {
 	return &taskInfos
 }
 
-func parseTaskInfo(jsonStr string) *taskCollection {
+func parseTaskInfo(jsonStr string) (int, *taskCollection) {
 	logger := log.GetLogger().WithFields(logrus.Fields{
 		"module": "parseTaskInfo",
 	})
@@ -73,7 +74,7 @@ func parseTaskInfo(jsonStr string) *taskCollection {
 		logger.WithFields(logrus.Fields{
 			"jsonString": jsonStr,
 		}).WithError(err).Errorln("Invalid task info json")
-		return taskInfos
+		return 0, taskInfos
 	}
 
 	for _, v := range task_lists.RunTasks {
@@ -117,7 +118,7 @@ func parseTaskInfo(jsonStr string) *taskCollection {
 		taskInfos.sessionInfos = append(taskInfos.sessionInfos, sessionTask)
 	}
 
-	return taskInfos
+	return task_lists.Code, taskInfos
 }
 
 func FetchTaskList(reason FetchReason, taskId string, taskType int, isColdstart bool) *taskCollection {
@@ -154,18 +155,25 @@ func FetchTaskList(reason FetchReason, taskId string, taskType int, isColdstart 
 
 	var err error
 	var response string
-	response, err = util.HttpPost(url, "", "")
-
-	for i := 0; i < 3 && err != nil; i++ {
-		time.Sleep(time.Duration(2) * time.Second)
-		response, err = util.HttpPost(url, "", "")
+	var taskInfos *taskCollection
+	var code int
+	for idx := 0; idx < 4; idx++ {
+		response, err = util.HttpPostWithTimeout(url, "", "", 8, false)
+		for i := 0; i < 3 && err != nil; i++ {
+			time.Sleep(time.Duration(2) * time.Second)
+			response, err = util.HttpPostWithTimeout(url, "", "", 8, false)
+		}
+		if err != nil {
+			return newTaskCollection()
+		}
+		code, taskInfos = parseTaskInfo(response)
+		if code == 408 {
+			time.Sleep(time.Duration(2) * time.Second)
+			continue
+		}
+		break
 	}
 
-	if err != nil {
-		return newTaskCollection()
-	}
-
-	taskInfos := parseTaskInfo(response)
 	return taskInfos
 }
 

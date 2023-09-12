@@ -8,13 +8,15 @@ import (
 	"testing"
 
 	"bou.ke/monkey"
-	"github.com/aliyun/aliyun_assist_client/agent/taskengine/timermanager"
-	"github.com/aliyun/aliyun_assist_client/agent/taskengine/models"
-	"github.com/aliyun/aliyun_assist_client/agent/taskengine/taskerrors"
-	"github.com/aliyun/aliyun_assist_client/agent/taskengine/host"
-	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/aliyun/aliyun_assist_client/agent/taskengine/host"
+	"github.com/aliyun/aliyun_assist_client/agent/taskengine/models"
+	"github.com/aliyun/aliyun_assist_client/agent/taskengine/taskerrors"
+	"github.com/aliyun/aliyun_assist_client/agent/taskengine/timermanager"
+	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/internal/testutil"
 )
 
 func TestEnableFetchingTask(t *testing.T) {
@@ -29,7 +31,7 @@ func mockMetrics() {
 	httpmock.Activate()
 	util.NilRequest.Set()
 	const mockRegion = "cn-test100"
-	util.MockMetaServer(mockRegion)
+	testutil.MockMetaServer(mockRegion)
 
 	httpmock.RegisterResponder("POST",
 		fmt.Sprintf("https://%s.axt.aliyun.com/luban/api/metrics", mockRegion),

@@ -2,52 +2,27 @@ package util
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
-	"net"
 	"net/http"
 	"os"
-	"path"
-	"path/filepath"
-	"runtime"
-	"strconv"
-	"sync"
 	"time"
 
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
-	"github.com/google/uuid"
 	"github.com/kirinlabs/HttpRequest"
 	"github.com/tidwall/gjson"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/util/atomicutil"
-	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
-	"github.com/aliyun/aliyun_assist_client/agent/util/timetool"
-	"github.com/aliyun/aliyun_assist_client/agent/version"
-)
-
-const (
-	UserAgentHeader = "User-Agent"
+	_ "github.com/aliyun/aliyun_assist_client/common/apiserver"
+	"github.com/aliyun/aliyun_assist_client/common/requester"
 )
 
 var (
-	UserAgentValue string = fmt.Sprintf("%s_%s/%s", runtime.GOOS, runtime.GOARCH, version.AssistVersion)
-	CrtPath        string
 	NilRequest     *atomicutil.AtomicBoolean
-	CaCertPool     *x509.CertPool
-
-	_transport                   *http.Transport
-	_initializeHTTPTransportOnce sync.Once
 )
-
-type HttpErrorCode struct {
-	errorCode int
-}
 
 var (
 	ErrHTTPCode = errors.New("http code error")
@@ -56,62 +31,14 @@ var (
 func init() {
 	NilRequest = &atomicutil.AtomicBoolean{}
 	NilRequest.Clear()
-	cpath, _ := os.Executable()
-	dir, _ := filepath.Abs(filepath.Dir(cpath))
-	var caCert []byte
-	var err error
-	CrtPath = os.Getenv("ALIYUN_ASSIST_CERT_PATH")
-	if CrtPath != "" && CheckFileIsExist(CrtPath) {
-		caCert, err = ioutil.ReadFile(CrtPath)
-		if err != nil {
-			return
-		}
-	} else {
-		CrtPath = path.Join(dir, "config", "GlobalSignRootCA.crt")
-		// log.GetLogger().Infoln("crt:", CrtPath)
-		caCert, err = ioutil.ReadFile(CrtPath)
-		if err != nil {
-			return
-		}
-	}
-	CaCertPool = x509.NewCertPool()
-	CaCertPool.AppendCertsFromPEM(caCert)
-}
-
-func (e *HttpErrorCode) Error() string {
-	return fmt.Sprintf("The error code is %d", e.errorCode)
-}
-func (e *HttpErrorCode) GetCode() int {
-	return e.errorCode
 }
 
 func GetHTTPTransport() *http.Transport {
 	if NilRequest.IsSet() {
 		return nil
 	}
-	_initializeHTTPTransportOnce.Do(func() {
-		_transport = &http.Transport{
-			Proxy: GetProxyFunc(),
-			DialContext: (&net.Dialer{
-				Timeout:   30 * time.Second,
-				KeepAlive: 30 * time.Second,
-				DualStack: true,
-			}).DialContext,
-			// TLSClientConfig specifies the TLS configuration, which uses custom
-			// Root CA for assist server
-			TLSClientConfig: &tls.Config{
-				RootCAs: CaCertPool,
-			},
-			// Enabled HTTP/2 protocol when `TLSClientConfig` is not nil
-			ForceAttemptHTTP2:     true,
-			MaxIdleConns:          100,
-			IdleConnTimeout:       90 * time.Second,
-			TLSHandshakeTimeout:   10 * time.Second,
-			ExpectContinueTimeout: 1 * time.Second,
-		}
-	})
 
-	return _transport
+	return requester.GetHTTPTransport(log.GetLogger())
 }
 
 func HttpGet(url string) (error, string) {
@@ -123,18 +50,16 @@ func HttpGetWithTimeout(url string, timeout time.Duration, noLog bool) (error, s
 
 	// 设置超时时间，不设置时，默认30s
 	req.SetTimeout(timeout)
-	req.SetTLSClient(&tls.Config{
-		RootCAs: CaCertPool,
-	})
-
-	if IsHybrid() {
-		addHttpHeads(req)
-	}
 
 	// Add user-agent header
 	req.SetHeaders(map[string]string{
-		UserAgentHeader: UserAgentValue,
+		requester.UserAgentHeader: requester.UserAgentValue,
 	})
+	if extraHeaders, err := requester.GetExtraHTTPHeaders(log.GetLogger()); extraHeaders != nil {
+		req.SetHeaders(extraHeaders)
+	} else if err != nil {
+		log.GetLogger().WithError(err).Error("Failed to construct extra HTTP headers")
+	}
 
 	res, err := req.Get(url)
 	if err != nil {
@@ -144,9 +69,7 @@ func HttpGetWithTimeout(url string, timeout time.Duration, noLog bool) (error, s
 	defer res.Close()
 	content, _ := res.Content()
 	if err == nil && res.StatusCode() > 400 {
-		err = &HttpErrorCode{
-			errorCode: res.StatusCode(),
-		}
+		err = requester.NewHttpErrorCode(res.StatusCode())
 	}
 
 	if noLog {
@@ -158,48 +81,6 @@ func HttpGetWithTimeout(url string, timeout time.Duration, noLog bool) (error, s
 	return err, content
 }
 
-func addHttpHeads(req *HttpRequest.Request) {
-	u4 := uuid.New()
-	str_request_id := u4.String()
-
-	timestamp := timetool.GetAccurateTime()
-	str_timestamp := strconv.FormatInt(timestamp, 10)
-
-	var instance_id string
-	var path string
-	path, _ = GetHybridPath()
-
-	content, _ := ioutil.ReadFile(path + "/instance-id")
-	instance_id = string(content)
-
-	mid, _ := GetMachineID()
-
-	input := instance_id + mid + str_timestamp + str_request_id
-	pri_key, _ := ioutil.ReadFile(path + "/pri-key")
-	output := RsaSign(input, string(pri_key))
-	log.GetLogger().Infoln(input, output)
-
-	internal_ip, err := osutil.ExternalIP()
-	if err == nil {
-		req.SetHeaders(map[string]string{
-			"X-Client-IP": internal_ip.String(),
-		})
-	}
-
-	req.SetHeaders(map[string]string{
-		"x-acs-instance-id": instance_id,
-	})
-	req.SetHeaders(map[string]string{
-		"x-acs-timestamp": str_timestamp, //这也是HttpRequest包的默认设置
-	})
-	req.SetHeaders(map[string]string{
-		"x-acs-request-id": str_request_id, //这也是HttpRequest包的默认设置
-	})
-	req.SetHeaders(map[string]string{
-		"x-acs-signature": output, //这也是HttpRequest包的默认设置
-	})
-}
-
 func HttpPost(url string, data string, contentType string) (string, error) {
 	return HttpPostWithTimeout(url, data, contentType, 5, false)
 }
@@ -208,22 +89,14 @@ func HttpPostWithTimeout(url string, data string, contentType string, timeout ti
 	req := HttpRequest.Transport(GetHTTPTransport())
 	// 设置超时时间，不设置时，默认30s
 	req.SetTimeout(timeout)
-	req.SetTLSClient(&tls.Config{
-		RootCAs: CaCertPool,
-	})
 
 	req.SetHeaders(map[string]string{
-		UserAgentHeader: UserAgentValue,
+		requester.UserAgentHeader: requester.UserAgentValue,
 	})
-	//excude Hybrid instance id
-	if IsHybrid() {
-		addHttpHeads(req)
-	} else {
-		instance_id := GetInstanceId()
-
-		req.SetHeaders(map[string]string{
-			"X-Client-Instance-ID": instance_id,
-		})
+	if extraHeaders, err := requester.GetExtraHTTPHeaders(log.GetLogger()); extraHeaders != nil {
+		req.SetHeaders(extraHeaders)
+	} else if err != nil {
+		log.GetLogger().WithError(err).Error("Failed to construct extra HTTP headers")
 	}
 
 	// 设置Headers
@@ -243,9 +116,7 @@ func HttpPostWithTimeout(url string, data string, contentType string, timeout ti
 	content, _ := res.Content()
 
 	if err == nil && res.StatusCode() > 400 {
-		err = &HttpErrorCode{
-			errorCode: res.StatusCode(),
-		}
+		err = requester.NewHttpErrorCode(res.StatusCode())
 	}
 
 	if noLog {
@@ -319,6 +190,9 @@ func HttpDownloadWithTimeout(url string, filePath string, timeout time.Duration)
 	res, err := client.Get(url)
 	if err != nil {
 		return err
+	}
+	if res.StatusCode != 200 {
+		return requester.NewHttpErrorCode(res.StatusCode)
 	}
 
 	f, err := os.Create(filePath)

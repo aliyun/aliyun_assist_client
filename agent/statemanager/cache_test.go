@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 )
 
 func removeCacheDir(p string) {
@@ -14,7 +14,7 @@ func removeCacheDir(p string) {
 }
 
 func TestConfigCache(t *testing.T) {
-	p, _ := util.GetCachePath()
+	p, _ := pathutil.GetCachePath()
 	removeCacheDir(p)
 	defer removeCacheDir(p)
 
@@ -44,7 +44,7 @@ func TestConfigCache(t *testing.T) {
 }
 
 func TestTemplateCache(t *testing.T) {
-	p, _ := util.GetCachePath()
+	p, _ := pathutil.GetCachePath()
 	removeCacheDir(p)
 	defer removeCacheDir(p)
 	

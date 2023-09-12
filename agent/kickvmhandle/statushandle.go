@@ -8,7 +8,7 @@ import (
 
 	"github.com/aliyun/aliyun_assist_client/agent/checknet"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
-	"github.com/aliyun/aliyun_assist_client/agent/util/networkcategory"
+	"github.com/aliyun/aliyun_assist_client/common/networkcategory"
 )
 
 type StatusHandle struct {

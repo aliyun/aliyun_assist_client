@@ -17,6 +17,7 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/timermanager"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
+	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 )
 
 /*
@@ -298,7 +299,7 @@ func pluginHealthCheckPull() {
 	pluginStatusRequest := PluginStatusResquest{
 		Plugin: []PluginStatus{},
 	}
-	pluginDir, err := util.GetPluginPath()
+	pluginDir, err := pathutil.GetPluginPath()
 	if err != nil {
 		log.GetLogger().Error("pluginHealthCheckPull: getPluginPath err: ", err.Error())
 		return

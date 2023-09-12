@@ -4,19 +4,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"testing"
 	"time"
-	"net/http"
+
+	"github.com/jarcoal/httpmock"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/aliyun/aliyun_assist_client/agent/inventory/model"
-	"github.com/aliyun/aliyun_assist_client/agent/util/jsonutil"
-	"github.com/aliyun/aliyun_assist_client/agent/util/timetool"
-	"github.com/jarcoal/httpmock"
-
 	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/agent/util/jsonutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
-	"github.com/stretchr/testify/assert"
+	"github.com/aliyun/aliyun_assist_client/agent/util/timetool"
+	"github.com/aliyun/aliyun_assist_client/internal/testutil"
 )
 
 func TestChecksum(t *testing.T) {
@@ -107,7 +108,7 @@ func TestInventoryUploader(t *testing.T) {
 	defer httpmock.DeactivateAndReset()
 	defer util.NilRequest.Clear()
 	mockReginId := "mock-reginid"
-	util.MockMetaServer(mockReginId)
+	testutil.MockMetaServer(mockReginId)
 	httpmock.RegisterResponder("POST",
 		fmt.Sprintf("https://%s.axt.aliyun.com/luban/api/instance/put_inventory", mockReginId),
 		func(h *http.Request) (*http.Response, error) {

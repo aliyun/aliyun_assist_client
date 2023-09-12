@@ -17,8 +17,8 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine"
 	"github.com/aliyun/aliyun_assist_client/agent/update"
-	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/util/powerutil"
+	"github.com/aliyun/aliyun_assist_client/common/apiserver"
 )
 
 var _gshellChannel IChannel = nil
@@ -159,7 +159,7 @@ func GetCurrentChannelType() int {
 
 func TryStartGshellChannel() {
 	_gshellChannel = NewGshellChannel(OnRecvMsg)
-	if util.IsHybrid() == false {
+	if apiserver.IsHybrid() == false {
 		err := _gshellChannel.StartChannel()
 		if err != nil {
 			log.GetLogger().Infoln("TryStartGshellChannel failed ", err)

@@ -23,7 +23,7 @@ type VerifyFetchOptions struct {
 	FetchTimeoutInSeconds int
 }
 
-type ExecuteParams struct {
+type CommonExecuteParams struct {
 	Params    string
 	Separator string
 	ParamsV2  string
@@ -31,7 +31,7 @@ type ExecuteParams struct {
 	OptionalExecutionTimeoutInSeconds *int
 }
 
-func (ep *ExecuteParams) SplitArgs() []string {
+func (ep *CommonExecuteParams) SplitArgs() []string {
 	var args []string
 	if ep.ParamsV2 != "" {
 		args, _ = shlex.Split(ep.ParamsV2)

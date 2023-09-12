@@ -13,6 +13,7 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/common/apiserver"
 )
 
 type GshellChannel struct {
@@ -30,7 +31,7 @@ type gshellStatus struct {
 }
 
 func (c *GshellChannel) IsSupported() bool {
-	if util.IsHybrid() {
+	if apiserver.IsHybrid() {
 		return false
 	}
 	if !c.Working.IsSet() {

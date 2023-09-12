@@ -1,4 +1,4 @@
-package util
+package requester
 
 import (
 	"net/http"
@@ -8,8 +8,6 @@ import (
 
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 	"golang.org/x/net/http/httpproxy"
-
-	"github.com/aliyun/aliyun_assist_client/agent/log"
 )
 
 var (
@@ -17,15 +15,16 @@ var (
 	_requestAssistProxyFunc   func(*http.Request) (*url.URL, error)
 )
 
-func GetProxyFunc() func(*http.Request) (*url.URL, error) {
+func GetProxyFunc(logger logrus.FieldLogger) func(*http.Request) (*url.URL, error) {
 	_obtainAssistProxyEnvOnce.Do(func() {
 		assistProxyEnv := os.Getenv("ALIYUN_ASSIST_PROXY")
-		if assistProxyEnv != "" {
-			log.GetLogger().WithFields(logrus.Fields{
-				"ALIYUN_ASSIST_PROXY": assistProxyEnv,
-			}).Infoln("Detected environment variable ALIYUN_ASSIST_PROXY for proxy setting")
+		if assistProxyEnv == "" {
+			return
 		}
 
+		logger.WithFields(logrus.Fields{
+			"ALIYUN_ASSIST_PROXY": assistProxyEnv,
+		}).Infoln("Detected environment variable ALIYUN_ASSIST_PROXY for proxy setting")
 		proxyConfig := &httpproxy.Config{
 			HTTPProxy:  assistProxyEnv,
 			HTTPSProxy: assistProxyEnv,

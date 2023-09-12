@@ -17,36 +17,40 @@ import (
 
 const portTaskType = "PortForwardTask"
 
-type SessionTask struct{
+type SessionTask struct {
 	taskId       string
 	sessionId    string
 	websocketUrl string
-	cmdContent       string
-	username   string
+
+	cmdContent   string
+	username     string
 	passwordName string
-	portNumber string
-	sessionChannel      *channel.SessionChannel
-	shellPlugin         *shell.ShellPlugin
-	portPlugin         *port.PortPlugin
-	cancelFlag         util.CancelFlag
-	flowLimit	int
+	targetHost   string
+	portNumber   string
+	flowLimit    int
+
+	sessionChannel *channel.SessionChannel
+	shellPlugin    *shell.ShellPlugin
+	portPlugin     *port.PortPlugin
+	cancelFlag     util.CancelFlag
 }
 
-
-func NewSessionTask(sessionId string,
-	                websocketUrl string,
-	                taskId string, cmdContent string, username string, passwordName string,
-	                portNumber string, flowLimit int) *SessionTask{
+func NewSessionTask(sessionId string, websocketUrl string, taskId string,
+	cmdContent string, username string, passwordName string, targetHost string,
+	portNumber string, flowLimit int) *SessionTask {
 	task := &SessionTask{
-		sessionId:sessionId,
-		taskId:taskId,
-		websocketUrl:websocketUrl,
-		cmdContent:cmdContent,
-		passwordName:passwordName,
-		username:username,
+		sessionId:    sessionId,
+		taskId:       taskId,
+		websocketUrl: websocketUrl,
+
+		cmdContent:   cmdContent,
+		passwordName: passwordName,
+		username:     username,
+		targetHost:   targetHost,
+		portNumber:   portNumber,
+		flowLimit:    flowLimit,
+
 		cancelFlag: util.NewChanneledCancelFlag(),
-		portNumber:portNumber,
-		flowLimit: flowLimit,
 	}
 	return task
 }
@@ -75,20 +79,20 @@ func ReportSessionResult(taskID string, status string) {
 
 func (sessionTask *SessionTask) isPortForwardTask() bool {
 	if sessionTask.portNumber != "" {
-		return true;
+		return true
 	}
-	return false;
+	return false
 }
 
-func (sessionTask *SessionTask) runTask() (string, error){
+func (sessionTask *SessionTask) runTask() (string, error) {
 	ret := GetSessionFactory().ContainsTask(sessionTask.sessionId)
 	if ret == true {
 		log.GetLogger().Errorln("NewSessionChannel failed")
-		return  shell.Session_id_duplicate, errors.New("NewSessionChannel failed")
+		return shell.Session_id_duplicate, errors.New("NewSessionChannel failed")
 	}
 	if sessionTask.isPortForwardTask() {
-		port_num,_ := strconv.Atoi(sessionTask.portNumber)
-		sessionTask.portPlugin= port.NewPortPlugin(sessionTask.sessionId, port_num, sessionTask.flowLimit)
+		port_num, _ := strconv.Atoi(sessionTask.portNumber)
+		sessionTask.portPlugin = port.NewPortPlugin(sessionTask.sessionId, sessionTask.targetHost, port_num, sessionTask.flowLimit)
 	} else {
 		sessionTask.shellPlugin = shell.NewShellPlugin(sessionTask.sessionId, sessionTask.cmdContent, sessionTask.username, sessionTask.passwordName, sessionTask.flowLimit)
 	}
@@ -96,12 +100,12 @@ func (sessionTask *SessionTask) runTask() (string, error){
 
 	host := util.GetServerHost()
 	if host == "" {
-		return  shell.Init_channel_failed, errors.New("No available host")
+		return shell.Init_channel_failed, errors.New("No available host")
 	}
 
-	websocketUrl :=  "wss://" + host + "/luban/session/backend?channelId=" + sessionTask.sessionId
+	websocketUrl := "wss://" + host + "/luban/session/backend?channelId=" + sessionTask.sessionId
 	log.GetLogger().Infoln("url: ", websocketUrl)
-	var err error;
+	var err error
 	var session_channel *channel.SessionChannel
 	if sessionTask.isPortForwardTask() {
 		session_channel, err = channel.NewSessionChannel(websocketUrl, sessionTask.sessionId, sessionTask.portPlugin.InputStreamMessageHandler, sessionTask.cancelFlag)
@@ -113,21 +117,21 @@ func (sessionTask *SessionTask) runTask() (string, error){
 
 	if err != nil {
 		log.GetLogger().Errorln("NewSessionChannel failed", err)
-		return  shell.Init_channel_failed, errors.New("NewSessionChannel failed")
+		return shell.Init_channel_failed, errors.New("NewSessionChannel failed")
 	}
 	sessionTask.sessionChannel = session_channel
 
 	err = session_channel.Open()
 	if err != nil {
 		log.GetLogger().Errorln("NewSessionChannel failed", err)
-		return  shell.Open_channel_failed, errors.New("NewSessionChannel failed")
+		return shell.Open_channel_failed, errors.New("NewSessionChannel failed")
 	}
 
 	done := make(chan int, 1)
 	error_code := shell.Ok
 
 	go func() {
-		time.Sleep(1*time.Second)
+		time.Sleep(1 * time.Second)
 		if sessionTask.isPortForwardTask() {
 			log.GetLogger().Infoln("run portPlugin")
 			error_code = sessionTask.portPlugin.Execute(session_channel, sessionTask.cancelFlag)
@@ -140,17 +144,17 @@ func (sessionTask *SessionTask) runTask() (string, error){
 	}()
 
 	select {
-		case <-done:
-			log.GetLogger().Println("shell end", sessionTask.sessionId)
-		case <-time.After(time.Duration(3600*3) * time.Second):
-			log.GetLogger().Println("shell timeout", sessionTask.sessionId)
-			error_code = shell.Timeout
+	case <-done:
+		log.GetLogger().Println("shell end", sessionTask.sessionId)
+	case <-time.After(time.Duration(3600*3) * time.Second):
+		log.GetLogger().Println("shell timeout", sessionTask.sessionId)
+		error_code = shell.Timeout
 	}
 
-	return error_code,nil
+	return error_code, nil
 }
 
-func DoSessionTask(tasks [] models.SessionTaskInfo) {
+func DoSessionTask(tasks []models.SessionTaskInfo) {
 	go func() {
 		for _, s := range tasks {
 			session := NewSessionTask(s.SessionId,
@@ -159,6 +163,7 @@ func DoSessionTask(tasks [] models.SessionTaskInfo) {
 				s.CmdContent,
 				s.Username,
 				s.Password,
+				s.TargetHost,
 				s.PortNumber,
 				s.FlowLimit)
 			session.RunTask(s.SessionId)
@@ -166,13 +171,13 @@ func DoSessionTask(tasks [] models.SessionTaskInfo) {
 	}()
 }
 
-func (sessionTask *SessionTask) RunTask(taskid string) error{
+func (sessionTask *SessionTask) RunTask(taskid string) error {
 	log.GetLogger().Infoln("run task", taskid, sessionTask.sessionId)
-	code,err := sessionTask.runTask()
+	code, err := sessionTask.runTask()
 	ReportSessionResult(taskid, code)
 	sessionTask.sessionChannel.Close()
 	GetSessionFactory().RemoveTask(sessionTask.sessionId)
-	if err != nil  {
+	if err != nil {
 		metrics.GetTaskFailedEvent(
 			"errormsg", err.Error(),
 			"taskid", sessionTask.taskId,
@@ -191,11 +196,11 @@ func (sessionTask *SessionTask) RunTask(taskid string) error{
 	return err
 }
 
-func (sessionTask *SessionTask) StopTask() error{
+func (sessionTask *SessionTask) StopTask() error {
 	log.GetLogger().Infoln("stop task", sessionTask.taskId)
-	if sessionTask.shellPlugin != nil  || sessionTask.portPlugin != nil {
+	if sessionTask.shellPlugin != nil || sessionTask.portPlugin != nil {
 		sessionTask.cancelFlag.Set(util.Completed)
-	} else{
+	} else {
 		log.GetLogger().Errorln("sesison plugin is invalid")
 	}
 

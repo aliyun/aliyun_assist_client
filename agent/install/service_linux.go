@@ -167,6 +167,7 @@ func ServiceConfig() *service.Config {
 	} else {
 		ServiceName = "aliyun-service"
 		option["SysvScript"] = sysvScript
+		option["LogOutput"] = true
 	}
 
 	return &service.Config{

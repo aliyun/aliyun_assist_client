@@ -3,9 +3,10 @@ package util
 import (
 	"fmt"
 	"time"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/oos"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
-	"github.com/aliyun/aliyun_assist_client/agent/util/networkcategory"
+	"github.com/aliyun/aliyun_assist_client/common/networkcategory"
 )
 
 var (

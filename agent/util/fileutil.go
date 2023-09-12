@@ -1,14 +1,15 @@
 package util
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
-
-	"errors"
 	"path/filepath"
 	"strings"
+
+	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 )
 
 func CheckFileIsExist(filename string) bool {
@@ -56,7 +57,7 @@ func CopyDir(srcPath string, destPath string) error {
 		if !f.IsDir() {
 			copyFile(path, destNewPath)
 		} else {
-			MakeSurePath(destPath)
+			pathutil.MakeSurePath(destPath)
 		}
 		return nil
 	})
@@ -74,7 +75,7 @@ func copyFile(src, dest string) (err error) {
 	if idx > 0 {
 		destdir = dest[:idx+1]
 	}
-	MakeSurePath(destdir)
+	pathutil.MakeSurePath(destdir)
 	dstFile, err := os.Create(dest)
 	if err != nil {
 		return err

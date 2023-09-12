@@ -22,6 +22,7 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/util/versionutil"
 	"github.com/aliyun/aliyun_assist_client/common/filelock"
 	"github.com/aliyun/aliyun_assist_client/common/fuzzyjson"
+	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 	"github.com/aliyun/aliyun_assist_client/common/zipfile"
 )
 
@@ -79,7 +80,7 @@ const Separator = string(filepath.Separator)
 
 func NewPluginManager(verbose bool) (*PluginManager, error) {
 	var err error
-	PLUGINDIR, err = util.GetPluginPath()
+	PLUGINDIR, err = pathutil.GetPluginPath()
 	if err != nil {
 		return nil, err
 	}
@@ -537,7 +538,13 @@ func (pm *PluginManager) executePluginFromFile(packagePath string, fetchTimeoutI
 		"PLUGIN_DIR=" + fetched.EnvPluginDir,
 		"PRE_PLUGIN_DIR=" + fetched.EnvPrePluginDir,
 	}
-	exitCode, errorCode, err = pm.executePlugin(fetched.Entrypoint, args, executionTimeoutInSeconds, env, false)
+	var options []process.CmdOption
+	options, err = prepareCmdOptions(executeParams)
+	if err != nil {
+		exitCode, errorCode = errProcess(funcName, EXECUTE_FAILED, err, fmt.Sprintf("Failed to set execution options for plugin[%s %s]: %s", pluginName, pluginVersion, err.Error()))
+		return
+	}
+	exitCode, errorCode, err = pm.executePlugin(fetched.Entrypoint, args, executionTimeoutInSeconds, env, false, options...)
 	// 如果是常驻插件，且调用的接口有可能改变插件状态，需要主动上报一次插件状态
 	if pluginType == PLUGIN_PERSIST && needReportStatus(args) {
 		status, err := pm.CheckAndReportPlugin(pluginName, pluginVersion, fetched.Entrypoint, executionTimeoutInSeconds, env)
@@ -602,7 +609,7 @@ func installFromFile(packagePath string, config *pluginConfig, plugin *PluginInf
 	plugin.Md5 = md5Checksum
 
 	pluginPath := filepath.Join(PLUGINDIR, plugin.Name, plugin.Version)
-	util.MakeSurePath(pluginPath)
+	pathutil.MakeSurePath(pluginPath)
 	if err := zipfile.UnzipContext(ctx, packagePath, pluginPath); err != nil {
 		return nil, NewUnzipExitingError(err, fmt.Sprintf("Unzip err, file is [%s], target dir is [%s], err is [%s]", packagePath, pluginPath, err.Error()))
 	}
@@ -728,6 +735,7 @@ func (pm *PluginManager) executePluginOnlineOrLocal(fetchOptions *ExecFetchOptio
 		if exitingErr != nil {
 			err = exitingErr.Unwrap()
 			exitCode, errorCode = errProcess(funcName, exitingErr.ExitCode(), exitingErr.Unwrap(), exitingErr.Error())
+			return
 		}
 	} else {
 		// SHOULD NEVER RUN INTO THIS BRANCH
@@ -749,7 +757,13 @@ func (pm *PluginManager) executePluginOnlineOrLocal(fetchOptions *ExecFetchOptio
 		"PLUGIN_DIR=" + fetched.EnvPluginDir,
 		"PRE_PLUGIN_DIR=" + fetched.EnvPrePluginDir,
 	}
-	exitCode, errorCode, err = pm.executePlugin(fetched.Entrypoint, args, executionTimeoutInSeconds, env, false)
+	var options []process.CmdOption
+	options, err = prepareCmdOptions(executeParams)
+	if err != nil {
+		exitCode, errorCode = errProcess(funcName, EXECUTE_FAILED, err, fmt.Sprintf("Failed to set execution options for plugin[%s %s]: %s", pluginName, pluginVersion, err.Error()))
+		return
+	}
+	exitCode, errorCode, err = pm.executePlugin(fetched.Entrypoint, args, executionTimeoutInSeconds, env, false, options...)
 	// 如果是常驻插件，且调用的接口有可能改变插件状态，需要主动上报一次插件状态
 	if pluginType == PLUGIN_PERSIST && needReportStatus(args) {
 		status, err := pm.CheckAndReportPlugin(pluginName, pluginVersion, fetched.Entrypoint, executionTimeoutInSeconds, env)
@@ -917,7 +931,7 @@ func installFromOnline(onlineInfo *PluginInfo, timeout time.Duration, localArch 
 	}
 
 	unzipdir := filepath.Join(PLUGINDIR, onlineInfo.Name, onlineInfo.Version)
-	util.MakeSurePath(unzipdir)
+	pathutil.MakeSurePath(unzipdir)
 	log.GetLogger().Infoln("Unzip package...")
 	if err := zipfile.UnzipContext(ctx, filePath, unzipdir); err != nil {
 		return nil, NewUnzipExitingError(err, fmt.Sprintf("Unzip package err, plugin.Url is [%s], err is [%s]", onlineInfo.Url, err.Error()))
@@ -1006,7 +1020,7 @@ func installFromOnline(onlineInfo *PluginInfo, timeout time.Duration, localArch 
 	}, nil
 }
 
-func (pm *PluginManager) executePlugin(cmdPath string, paramList []string, timeout int, env []string, quiet bool) (exitCode int, errorCode string, err error) {
+func (pm *PluginManager) executePlugin(cmdPath string, paramList []string, timeout int, env []string, quiet bool, options... process.CmdOption) (exitCode int, errorCode string, err error) {
 	log.GetLogger().Infof("Enter executePlugin, cmdPath[%s] paramList[%v] paramCount[%d] timeout[%d]\n", cmdPath, paramList, len(paramList), timeout)
 	funcName := "ExecutePlugin"
 	if !util.CheckFileIsExist(cmdPath) {
@@ -1019,7 +1033,7 @@ func (pm *PluginManager) executePlugin(cmdPath string, paramList []string, timeo
 		fmt.Printf("Run cmd: %s, params: %v\n", cmdPath, paramList)
 	}
 
-	processCmd := process.NewProcessCmd()
+	processCmd := process.NewProcessCmd(options...)
 	// set environment variable
 	if env != nil && len(env) > 0 {
 		processCmd.SetEnv(env)
@@ -1084,7 +1098,7 @@ func (pm *PluginManager) VerifyPlugin(fetchOptions *VerifyFetchOptions, executeP
 			return exitcode, err
 		}
 
-		util.MakeSurePath(unzipdir)
+		pathutil.MakeSurePath(unzipdir)
 		log.GetLogger().Infoln("Unzip package...")
 		if err := zipfile.UnzipContext(ctx, filePath, unzipdir); err != nil {
 			exitcode, _ := errProcess(funcName, UNZIP_ERR, err, fmt.Sprintf("Unzip package err, url is [%s], err is [%s]", packageUrl, err.Error()))
@@ -1154,7 +1168,13 @@ func (pm *PluginManager) VerifyPlugin(fetchOptions *VerifyFetchOptions, executeP
 		// 如果已有同名插件，表示已有同名插件的执行目录；否则为空
 		"PRE_PLUGIN_DIR=",
 	}
-	exitCode, _, err = pm.executePlugin(cmdPath, executeParams.SplitArgs(), executionTimeoutInSeconds, env, false)
+	var options []process.CmdOption
+	options, err = prepareCmdOptions(executeParams)
+	if err != nil {
+		exitCode, _ = errProcess(funcName, EXECUTE_FAILED, err, fmt.Sprintf("Failed to set execution options: %s", err.Error()))
+		return
+	}
+	exitCode, _, err = pm.executePlugin(cmdPath, executeParams.SplitArgs(), executionTimeoutInSeconds, env, false, options...)
 	return
 }
 

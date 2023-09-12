@@ -52,7 +52,7 @@ func GenRsaKey(specifiedId string, timeout int) (*KeyInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	publicBlock := pem.Block{Type: "Public Key", Bytes: X509PublicKey}
+	publicBlock := pem.Block{Type: "PUBLIC KEY", Bytes: X509PublicKey}
 	buf := bytes.NewBufferString("")
 	if err = pem.Encode(buf, &publicBlock); err != nil {
 		return nil, err

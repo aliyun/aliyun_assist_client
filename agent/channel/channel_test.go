@@ -1,20 +1,22 @@
 package channel
 
 import (
-	"math/rand"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"os"
 	"testing"
 	"time"
 
 	"bou.ke/monkey"
-	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/google/uuid"
-
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/common/pathutil"
+	"github.com/aliyun/aliyun_assist_client/internal/testutil"
 )
 
 func TestGshellChannel(t *testing.T) {
@@ -23,7 +25,7 @@ func TestGshellChannel(t *testing.T) {
 	defer util.NilRequest.Clear()
 	defer httpmock.DeactivateAndReset()
 	const mockRegion = "cn-test100"
-	util.MockMetaServer(mockRegion)
+	testutil.MockMetaServer(mockRegion)
 
 	httpmock.RegisterResponder("POST",
 		fmt.Sprintf("https://%s.axt.aliyun.com/luban/api/metrics", mockRegion),
@@ -53,7 +55,7 @@ func TestGshellChannel(t *testing.T) {
 		os.Remove(path)
 	}
 
-	tempfile, _ := util.GetCurrentPath()
+	tempfile, _ := pathutil.GetCurrentPath()
 	tempfile += "temp"
 	err := util.WriteStringToFile(tempfile, mockRegion)
 	// _, err := os.Create(tempfile)

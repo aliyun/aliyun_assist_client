@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/aliyun/aliyun_assist_client/agent/util/networkcategory"
+	"github.com/aliyun/aliyun_assist_client/common/networkcategory"
 )
 
 var (

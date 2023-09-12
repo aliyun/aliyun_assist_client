@@ -2,15 +2,16 @@ package machineid
 
 import (
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
 	"runtime"
 	"testing"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestMachineId(t *testing.T) {
-	value1,err1 := GetMachineID()
-	value2,err2:= GetMachineID()
+	value1,err1 := getMachineID()
+	value2,err2:= getMachineID()
 	assert.Equal(t, value1, value2)
 	assert.Equal(t, err1, nil)
 	assert.Equal(t, err2, nil)

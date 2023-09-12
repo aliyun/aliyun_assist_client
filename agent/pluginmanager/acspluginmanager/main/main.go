@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -49,6 +49,7 @@ func main() {
 
 	// add default flags
 	flag.AddFlags(rootCmd.Flags())
+	flag.AddPlatformSpecificFlags(rootCmd.Flags())
 
 	ctx := cli.NewCommandContext(writer)
 	ctx.EnterCommand(rootCmd)
@@ -124,20 +125,40 @@ func execute(ctx *cli.Context, args []string) error {
 	} else if list {
 		exitCode, err = pluginManager.List(plugin, local)
 	} else if verify {
+		executeParams := &pm.ExecuteParams{
+			CommonExecuteParams: pm.CommonExecuteParams{
+				Params:    params,
+				Separator: separator,
+				ParamsV2:  paramsV2,
+
+				OptionalExecutionTimeoutInSeconds: optionalExecutionTimeoutInSeconds,
+			},
+		}
+		if err = parsePlatformSpecificFlags(ctx.Flags(), executeParams); err != nil {
+			return err
+		}
+
 		exitCode, err = pluginManager.VerifyPlugin(&pm.VerifyFetchOptions{
 			Url: url,
 
 			FetchTimeoutInSeconds: fetchTimeoutInSeconds,
-		}, &pm.ExecuteParams{
-			Params:    params,
-			Separator: separator,
-			ParamsV2:  paramsV2,
-
-			OptionalExecutionTimeoutInSeconds: optionalExecutionTimeoutInSeconds,
-		})
+		}, executeParams)
 	} else if status {
 		exitCode, err = pluginManager.ShowPluginStatus()
 	} else if exec {
+		executeParams := &pm.ExecuteParams{
+			CommonExecuteParams: pm.CommonExecuteParams{
+				Params:    params,
+				Separator: separator,
+				ParamsV2:  paramsV2,
+
+				OptionalExecutionTimeoutInSeconds: optionalExecutionTimeoutInSeconds,
+			},
+		}
+		if err = parsePlatformSpecificFlags(ctx.Flags(), executeParams); err != nil {
+			return err
+		}
+
 		exitCode, err = pluginManager.ExecutePlugin(&pm.ExecFetchOptions{
 			File:       file,
 			PluginName: plugin,
@@ -146,13 +167,7 @@ func execute(ctx *cli.Context, args []string) error {
 			Local:      local,
 
 			FetchTimeoutInSeconds: fetchTimeoutInSeconds,
-		}, &pm.ExecuteParams{
-			Params:    params,
-			Separator: separator,
-			ParamsV2:  paramsV2,
-
-			OptionalExecutionTimeoutInSeconds: optionalExecutionTimeoutInSeconds,
-		})
+		}, executeParams)
 	} else if remove {
 		exitCode, err = pluginManager.RemovePlugin(plugin)
 	} else {

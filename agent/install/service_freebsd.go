@@ -22,7 +22,7 @@ name="{{.Name}}"
 rcvar="{{.Name}}_enable"
 command="{{.Path}}"
 pidfile="/var/run/$name.pid"
-start_cmd="/usr/sbin/daemon -p $pidfile -f $command"
+start_cmd="/usr/sbin/daemon -p $pidfile -o /var/log/aliyun-service.log -m 3 -f $command"
 load_rc_config $name
 run_rc_command "$1"
 `

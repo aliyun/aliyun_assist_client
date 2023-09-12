@@ -23,6 +23,9 @@ var (
 	// 127.0.0.1-2023-07-05-20:51:21 or <hostname>-2023-07-05-20:51:21
 	vmcorePathRegex      = regexp.MustCompile(`^(?:[\w.-]+)-(\d{4}-\d{2}-\d{2}-\d{2}:\d{2}:\d{2})$`)
 	kernelPanicInfoRegex = regexp.MustCompile(`^(Unable to handle kernel|BUG: unable to handle kernel|Kernel BUG at|kernel BUG at|Bad mode in|Oops|Kernel panic)`)
+	
+	startupTimestampRegex = regexp.MustCompile(`\[\s*\d+\.\d+\]`)
+	readableTimestampRegex = regexp.MustCompile(`\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}(\.\d+)?((\+|\-)\d+)?`)
 )
 
 func ReportLastOsPanic() {
@@ -63,6 +66,7 @@ func ReportLastOsPanic() {
 // ParseVmcore parse fileds `Call Trace` `RIP` `Kernel Panic` from vmcore-dmesg.txt
 func ParseVmcore(content string) (rip, callTrace, panicInfo string) {
 	var callTraceLines []string
+	var callTraceIdx int
 	inCallTrace := false
 	lines := strings.Split(string(content), "\n")
 	for _, line := range lines {
@@ -70,22 +74,38 @@ func ParseVmcore(content string) (rip, callTrace, panicInfo string) {
 		if len(line) == 0 {
 			continue
 		}
-		idx := strings.Index(line, "] ")
-		if idx != -1 && idx < len(line)-1 {
-			line = line[idx+2:]
+		if strings.HasPrefix(line, "[") {
+			idx := strings.Index(line, "]")
+			if idx != -1 && idx < len(line)-1 {
+				line = line[idx+1:]
+			}
+		} else if startupTimestampRegex.MatchString(line) {
+			idxes := startupTimestampRegex.FindStringIndex(line)
+			line = line[idxes[1]:]
+		} else if readableTimestampRegex.MatchString(line) {
+			idxes := readableTimestampRegex.FindStringIndex(line)
+			line = line[idxes[1]:]
+		} else {
+			continue
 		}
+
 		if inCallTrace {
-			if line[0] == ' ' {
+			if len(line) > callTraceIdx && line[callTraceIdx] == ' ' {
 				callTraceLines = append(callTraceLines, line)
 				continue
 			} else {
 				inCallTrace = false
 			}
 		}
-		if len(callTraceLines) == 0 && strings.HasPrefix(strings.ToLower(line), "call trace:") {
+
+		if len(callTraceLines) == 0 && strings.HasPrefix(strings.TrimSpace(strings.ToLower(line)), "call trace:") {
 			callTraceLines = append(callTraceLines, "Call Trace:")
 			inCallTrace = true
-		} else if panicInfo == "" && kernelPanicInfoRegex.MatchString(line) {
+			callTraceIdx = strings.Index(strings.ToLower(line), "call trace:")
+			continue
+		}
+		line = strings.TrimSpace(line)
+		if panicInfo == "" && kernelPanicInfoRegex.MatchString(line) {
 			panicInfo = line
 		} else if rip == "" && strings.HasPrefix(line, "RIP:") {
 			rip = line

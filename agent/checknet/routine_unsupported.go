@@ -4,7 +4,7 @@
 package checknet
 
 import (
-	"github.com/aliyun/aliyun_assist_client/agent/util/networkcategory"
+	"github.com/aliyun/aliyun_assist_client/common/networkcategory"
 )
 
 // RequestNetcheck is currently not supported on this operating system, and is

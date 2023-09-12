@@ -6,7 +6,7 @@ import (
 
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/taskerrors"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
-	"github.com/aliyun/aliyun_assist_client/agent/util/networkcategory"
+	"github.com/aliyun/aliyun_assist_client/common/networkcategory"
 )
 
 var (

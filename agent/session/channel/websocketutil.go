@@ -2,14 +2,12 @@ package channel
 
 import (
 	"errors"
-	"io/ioutil"
-	"strconv"
-	"github.com/aliyun/aliyun_assist_client/agent/log"
-	"github.com/aliyun/aliyun_assist_client/agent/util"
-	"github.com/aliyun/aliyun_assist_client/agent/util/timetool"
-	"github.com/gorilla/websocket"
-	"github.com/google/uuid"
 	"net/http"
+
+	"github.com/gorilla/websocket"
+
+	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/common/requester"
 )
 
 // IWebsocketUtil is the interface for the websocketutil.
@@ -42,33 +40,14 @@ func NewWebsocketUtil(dialerInput *websocket.Dialer) *WebsocketUtil {
 
 // OpenConnection opens a websocket connection provided an input url and request header.
 func (u *WebsocketUtil) OpenConnection(url string, requestHeader http.Header) (*websocket.Conn, error) {
-
 	log.GetLogger().Infof("Opening websocket connection to: %s", url)
 
-	if util.IsHybrid() {
-		u4 := uuid.New()
-		str_request_id := u4.String()
-
-		timestamp := timetool.GetAccurateTime()
-		str_timestamp := strconv.FormatInt(timestamp, 10)
-
-		var instance_id string
-		path, _ := util.GetHybridPath()
-
-		content, _ := ioutil.ReadFile(path + "/instance-id")
-		instance_id = string(content)
-
-		mid, _ := util.GetMachineID()
-
-		input := instance_id + mid + str_timestamp + str_request_id
-		pri_key, _ := ioutil.ReadFile(path + "/pri-key")
-		output := util.RsaSign(input, string(pri_key))
-		log.GetLogger().Infoln(input, output)
-
-		requestHeader.Add("x-acs-instance-id", instance_id)
-		requestHeader.Add("x-acs-timestamp", str_timestamp)
-		requestHeader.Add("x-acs-request-id", str_request_id)
-		requestHeader.Add("x-acs-signature", output)
+	if extraHeaders, err := requester.GetExtraHTTPHeaders(log.GetLogger()); extraHeaders != nil {
+		for k, v := range extraHeaders {
+			requestHeader.Add(k, v)
+		}
+	} else if err != nil {
+		log.GetLogger().WithError(err).Error("Failed to construct extra HTTP headers")
 	}
 
 	conn, resp, err := u.dialer.Dial(url, requestHeader)
