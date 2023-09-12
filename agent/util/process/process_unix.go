@@ -1,4 +1,5 @@
-// +build linux freebsd
+//go:build freebsd || linux
+// +build freebsd linux
 
 package process
 
@@ -43,6 +44,12 @@ func (p *ProcessCmd) prepareProcess() error {
 	}
 
 	p.command.Env = env
+
+	for _, opt := range p.commandOptions {
+		if err := opt(p.command); err != nil {
+			return err
+		}
+	}
 
 	return nil
 }

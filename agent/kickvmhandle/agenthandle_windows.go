@@ -3,11 +3,12 @@
 package kickvmhandle
 
 import (
-	"github.com/aliyun/aliyun_assist_client/agent/log"
-	"github.com/aliyun/aliyun_assist_client/agent/util"
-	"github.com/aliyun/aliyun_assist_client/agent/util/process"
-	"strings"
 	"os"
+	"strings"
+
+	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/agent/util/process"
+	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 )
 
 func stopAgant(params []string) error {
@@ -36,7 +37,7 @@ func removeAgant(params []string) error {
 func updateAgant(params []string) error {
 	log.GetLogger().Println("updateAgant")
 	processer :=  process.ProcessCmd{}
-	path, err := util.GetCurrentPath()
+	path, err := pathutil.GetCurrentPath()
 	if err != nil {
 		return err
 	}

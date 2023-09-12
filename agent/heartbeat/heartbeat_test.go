@@ -12,10 +12,12 @@ import (
 	"time"
 
 	"bou.ke/monkey"
-	"github.com/aliyun/aliyun_assist_client/agent/taskengine/timermanager"
-	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/aliyun/aliyun_assist_client/agent/taskengine/timermanager"
+	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/internal/testutil"
 )
 
 func TestBuildPingRequest(t *testing.T) {
@@ -24,7 +26,7 @@ func TestBuildPingRequest(t *testing.T) {
 	util.NilRequest.Set()
 	defer util.NilRequest.Clear()
 	const mockRegion = "cn-test100"
-	util.MockMetaServer(mockRegion)
+	testutil.MockMetaServer(mockRegion)
 
 	const virtType = "kvm"
 	const osType = "linux"
@@ -143,7 +145,7 @@ func TestInvokePingRequest(t *testing.T) {
 	util.NilRequest.Set()
 	defer util.NilRequest.Clear()
 	const mockRegion = "cn-test100"
-	util.MockMetaServer(mockRegion)
+	testutil.MockMetaServer(mockRegion)
 
 	mockRequestURL := generateFakePingRequest(mockRegion)
 	mockResponse := generateFakeSuccessfulResponseOrPanic()
@@ -167,7 +169,7 @@ func TestInvokePingRequestRetrying(t *testing.T) {
 	defer util.NilRequest.Clear()
 
 	const mockRegion = "cn-test100"
-	util.MockMetaServer(mockRegion)
+	testutil.MockMetaServer(mockRegion)
 
 	mockRequestURL := generateFakePingRequest(mockRegion)
 	mockSuccessfulResponse := generateFakeSuccessfulResponseOrPanic()
@@ -203,7 +205,7 @@ func TestInvokePingRequestRetryingWithLimit(t *testing.T) {
 	}()
 
 	const mockRegion = "cn-test100"
-	util.MockMetaServer(mockRegion)
+	testutil.MockMetaServer(mockRegion)
 
 	mockRequestURL := generateFakePingRequest(mockRegion)
 	mockSuccessfulResponse := generateFakeSuccessfulResponseOrPanic()
@@ -241,7 +243,7 @@ func TestInvokePingRequestNetworkError(t *testing.T) {
 	defer util.NilRequest.Clear()
 
 	const mockRegion = "cn-test100"
-	util.MockMetaServer(mockRegion)
+	testutil.MockMetaServer(mockRegion)
 
 	mockRequestURL := generateFakePingRequest(mockRegion)
 
@@ -263,7 +265,7 @@ func TestInvokePingRequestServerError(t *testing.T) {
 	defer util.NilRequest.Clear()
 
 	const mockRegion = "cn-test100"
-	util.MockMetaServer(mockRegion)
+	testutil.MockMetaServer(mockRegion)
 
 	mockRequestURL := generateFakePingRequest(mockRegion)
 	mockErrorResponse := generateFakeErrorResponseOrPanic()
@@ -284,7 +286,7 @@ func TestInvokePingRequestTimeOut(t *testing.T) {
 	util.NilRequest.Set()
 	defer util.NilRequest.Clear()
 	const mockRegion = "cn-test500"
-	util.MockMetaServer(mockRegion)
+	testutil.MockMetaServer(mockRegion)
 
 	mockRequestURL := generateFakePingRequest(mockRegion)
 	mockSuccessfulResponse := generateFakeSuccessfulResponseOrPanic()
@@ -314,7 +316,7 @@ func Test_doPing(t *testing.T) {
 	util.NilRequest.Set()
 	defer util.NilRequest.Clear()
 	const mockRegion = "cn-test100"
-	util.MockMetaServer(mockRegion)
+	testutil.MockMetaServer(mockRegion)
 	timermanager.InitTimerManager()
 	InitHeartbeatTimer()
 	tests := []struct {

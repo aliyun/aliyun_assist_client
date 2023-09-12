@@ -16,10 +16,10 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/models"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/scriptmanager"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/taskerrors"
-	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/util/errnoutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/powerutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/process"
+	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 )
 
 type HostProcessor struct {
@@ -120,7 +120,7 @@ func (p *HostProcessor) Prepare(commandContent string) error {
 
 	if scriptDir == "" {
 		var err error
-		scriptDir, err = util.GetScriptPath()
+		scriptDir, err = pathutil.GetScriptPath()
 		if err != nil {
 			useScriptFile = false
 			if errnoutil.IsNoEnoughSpaceError(err) {

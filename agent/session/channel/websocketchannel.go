@@ -2,13 +2,15 @@ package channel
 
 import (
 	"errors"
-	"github.com/aliyun/aliyun_assist_client/agent/log"
-	"github.com/aliyun/aliyun_assist_client/agent/util"
-	"github.com/gorilla/websocket"
 	"net/http"
 	"runtime/debug"
 	"sync"
 	"time"
+
+	"github.com/gorilla/websocket"
+
+	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/common/requester"
 )
 
 // IWebSocketChannel is the interface for ControlChannel and DataChannel.
@@ -52,7 +54,7 @@ func (webSocketChannel *WebSocketChannel) Open() error {
 	webSocketChannel.writeLock = &sync.Mutex{}
 
 	header := http.Header{
-		util.UserAgentHeader: []string{util.UserAgentValue},
+		requester.UserAgentHeader: []string{requester.UserAgentValue},
 	}
 
 	ws, err := NewWebsocketUtil(nil).OpenConnection(webSocketChannel.Url, header)

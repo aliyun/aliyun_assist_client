@@ -35,6 +35,7 @@ const (
 	EVENT_PLUGIN_UPDATE                      MetricsEventID = "agent.plugin.update"
 	EVENT_LINUX_GUESTOS_PANIC                MetricsEventID = "Linux-GuestOS-Panic"
 	EVENT_WINDOWS_WER_SYSTEM_ERRORRE_PORTING MetricsEventID = "Microsoft-Windows-WER-SystemErrorReporting"
+	EVENT_AGENT_LAST_PANIC                   MetricsEventID = "agent.last.panic"
 
 	// event category
 	EVENT_CATEGORY_CHANNEL  EventCategory = "CHANNEL"
@@ -388,22 +389,34 @@ func GetPluginUpdateEvent(keywords ...string) *MetricsEvent {
 
 func GetLinuxGuestOSPanicEvent(keywords ...string) *MetricsEvent {
 	event := &MetricsEvent{
-		EventId: EVENT_LINUX_GUESTOS_PANIC,
-		Category: EVENT_CATEGORY_PANIC,
+		EventId:     EVENT_LINUX_GUESTOS_PANIC,
+		Category:    EVENT_CATEGORY_PANIC,
 		SubCategory: EVENT_SUBCATEGORY_GOESTOS,
-		EventLevel: EVENT_LEVEL_INFO,
-		EventTime:  time.Now().UnixNano() / 1e6,
-		Common:     getCommonInfoStr(),
-		KeyWords:   genKeyWordsStr(keywords...),
+		EventLevel:  EVENT_LEVEL_INFO,
+		EventTime:   time.Now().UnixNano() / 1e6,
+		Common:      getCommonInfoStr(),
+		KeyWords:    genKeyWordsStr(keywords...),
 	}
 	return event
 }
 
 func GetWindowsGuestOSPanicEvent(keywords ...string) *MetricsEvent {
 	event := &MetricsEvent{
-		EventId: EVENT_WINDOWS_WER_SYSTEM_ERRORRE_PORTING,
-		Category: EVENT_CATEGORY_PANIC,
+		EventId:     EVENT_WINDOWS_WER_SYSTEM_ERRORRE_PORTING,
+		Category:    EVENT_CATEGORY_PANIC,
 		SubCategory: EVENT_SUBCATEGORY_GOESTOS,
+		EventLevel:  EVENT_LEVEL_INFO,
+		EventTime:   time.Now().UnixNano() / 1e6,
+		Common:      getCommonInfoStr(),
+		KeyWords:    genKeyWordsStr(keywords...),
+	}
+	return event
+}
+
+func GetAgentLastPanicEvent(keywords ...string) *MetricsEvent {
+	event := &MetricsEvent{
+		EventId:    EVENT_AGENT_LAST_PANIC,
+		Category:   EVENT_CATEGORY_PANIC,
 		EventLevel: EVENT_LEVEL_INFO,
 		EventTime:  time.Now().UnixNano() / 1e6,
 		Common:     getCommonInfoStr(),

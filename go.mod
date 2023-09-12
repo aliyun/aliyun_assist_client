@@ -38,6 +38,7 @@ require (
 	github.com/viney-shih/go-lock v1.0.1
 	github.com/yookoala/realpath v1.0.0
 	go.etcd.io/bbolt v1.3.7
+	go.uber.org/atomic v1.11.0
 	golang.org/x/crypto v0.11.0
 	golang.org/x/net v0.12.0
 	golang.org/x/sys v0.10.0

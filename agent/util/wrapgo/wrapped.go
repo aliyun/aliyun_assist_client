@@ -3,6 +3,8 @@ package wrapgo
 import (
 	"runtime/debug"
 	"sync"
+	"fmt"
+	"os"
 )
 
 // PanicHandler is used in wrapped goroutine initiation
@@ -39,6 +41,8 @@ func GoWithPanicHandler(f func(), handler PanicHandler) {
 		defer func () {
 			if panicPayload := recover(); panicPayload != nil {
 				stacktrace := debug.Stack()
+				fmt.Fprintf(os.Stderr, "panic: %v", panicPayload)
+				fmt.Fprint(os.Stderr, string(stacktrace))
 				handler(panicPayload, stacktrace)
 			}
 		}()

@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/internal/testutil"
 )
 
 func TestReportUpdateFailure(t *testing.T) {
@@ -20,7 +21,7 @@ func TestReportUpdateFailure(t *testing.T) {
 	defer httpmock.DeactivateAndReset()
 
 	const mockRegion = "cn-test100"
-	util.MockMetaServer(mockRegion)
+	testutil.MockMetaServer(mockRegion)
 
 	mockResponseBytes, err := json.Marshal(map[string]interface{}{
 		"code": 200,

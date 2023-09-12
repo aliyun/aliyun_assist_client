@@ -22,7 +22,9 @@ jobs:
           cache: true
 
       - name: Vendor
-        run: go mod vendor
+        run: |
+          go mod tidy
+          go mod vendor
 
       - name: Build binary
         run: |

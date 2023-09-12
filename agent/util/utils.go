@@ -4,12 +4,8 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"io"
-	"io/ioutil"
 	"os"
 	"runtime"
-
-	"github.com/aliyun/aliyun_assist_client/agent/util/machineid"
-	
 )
 
 var G_IsWindows bool
@@ -31,17 +27,6 @@ func IsVerboseMode() bool {
 
 func SetVerboseMode(mode bool)  {
 	verbose_mode = mode
-}
-
-func GetMachineID() (string, error) {
-	path, _ := GetHybridPath()
-	path += "/machine-id"
-	if CheckFileIsExist(path) {
-		content, _ := ioutil.ReadFile(path)
-		cached_id := string(content)
-		return cached_id, nil
-	}
-	return machineid.GetMachineID()
 }
 
 /*

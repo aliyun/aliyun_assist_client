@@ -261,8 +261,17 @@ func (task *Task) Run() (taskerrors.ErrorCode, error) {
 			intervalMs = 1000
 		}
 		ticker := time.NewTicker(time.Duration(intervalMs) * time.Millisecond)
+		lastReportOutputTime := time.Now()
 		defer ticker.Stop()
 		for {
+			// serve the stop signal from context channel with higher priority
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				// fallthrough to the next select
+			}
+
 			select {
 			case <-ticker.C:
 				if atomic.LoadUint32(&task.data_sended) > defaultQuotoPre {
@@ -270,7 +279,9 @@ func (task *Task) Run() (taskerrors.ErrorCode, error) {
 				}
 				var running_output bytes.Buffer
 				tryRead(&stdoutWrite, &stderrWrite, &running_output)
-				task.sendRunningOutput(running_output.String())
+				if reported := task.sendRunningOutput(running_output.String(), lastReportOutputTime); reported{
+					lastReportOutputTime = time.Now()
+				}
 				atomic.AddUint32(&task.data_sended, uint32(running_output.Len()))
 				taskLogger.Infof("Running output sent: %d bytes", atomic.LoadUint32(&task.data_sended))
 			case <-ctx.Done():
@@ -470,15 +481,14 @@ func (task *Task) getReportString(output bytes.Buffer) string {
 	return report_string
 }
 
-func (task *Task) sendRunningOutput(data string) {
+func (task *Task) sendRunningOutput(data string, lastReportTime time.Time) bool {
+	if len(data) == 0 && task.taskInfo.Output.SkipEmpty && time.Since(lastReportTime) < time.Minute {
+		return false
+	}
 	url := util.GetRunningOutputService()
 	url += "?taskId=" + task.taskInfo.TaskId + "&start=" + strconv.FormatInt(task.monotonicStartTimestamp, 10)
 	url += task.wallClockQueryParams()
 	url += task.processer.ExtraLubanParams()
-
-	if len(data) == 0 && task.taskInfo.Output.SkipEmpty {
-		return
-	}
 	if G_IsWindows {
 		if langutil.GetDefaultLang() != 0x409 {
 			tmp, _ := langutil.GbkToUtf8([]byte(data))
@@ -486,6 +496,7 @@ func (task *Task) sendRunningOutput(data string) {
 		}
 	}
 	util.HttpPost(url, data, "text")
+	return true
 }
 
 func (task *Task) IsCancled() bool {

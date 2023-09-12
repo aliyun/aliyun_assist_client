@@ -1,9 +1,12 @@
-package util
+package apiserver
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
 )
+
 const (
 	test_pri_key = `-----BEGIN RSA PRIVATE KEY-----
 MIICWwIBAAKBgQDDbHGzrD8n+Hp8YPtU555INT2ZAXLKWE/LdW0/QXJ9KiZoRh29
@@ -38,6 +41,6 @@ func TestRsaSignWithSha256(t *testing.T) {
 }
 
 func TestRsaSignWithMD5(t *testing.T) {
-	value := RsaSign("changfeng", test_pri_key)
+	value := rsaSign(logrus.StandardLogger(), "changfeng", test_pri_key)
 	assert.Equal(t, value, `dpafdQKSIKsZmpFS3V8Wm94N8YBCW14Zix2c4JH2tZ+mTnL1ZIW4kuH0xx68WQM1ETKww6zuDKzvLayjv6KWIcIHBMm5SJCL//MWWyt4ocEc22jdAdoRIL/WWT+4uI6r+Bi5bBE0liWVIBOzVqhxx0dAtBDPzHPgc67ekHsVvTQ=`)
 }

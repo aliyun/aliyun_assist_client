@@ -3,11 +3,11 @@ package pluginmanager
 import (
 	"path/filepath"
 
-	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 )
 
 func getInstalledPluginsBoltPath() (string, error) {
-	pluginPath, err := util.GetPluginPath()
+	pluginPath, err := pathutil.GetPluginPath()
 	if err != nil {
 		return "", err
 	}
@@ -16,7 +16,7 @@ func getInstalledPluginsBoltPath() (string, error) {
 }
 
 func getInstalledPluginsJSONPath() (string, error) {
-	pluginPath, err := util.GetPluginPath()
+	pluginPath, err := pathutil.GetPluginPath()
 	if err != nil {
 		return "", err
 	}

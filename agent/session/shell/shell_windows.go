@@ -3,13 +3,14 @@ package shell
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"strings"
+
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/session/channel"
 	"github.com/aliyun/aliyun_assist_client/agent/session/message"
 	"github.com/aliyun/aliyun_assist_client/agent/session/winpty"
-	"github.com/aliyun/aliyun_assist_client/agent/util"
-	"os"
-	"strings"
+	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 )
 
 const (
@@ -38,7 +39,7 @@ func StartPty(plugin *ShellPlugin)( err error) {
 		finalCmd = plugin.cmdContent
 	}
 	log.GetLogger().Infoln("finalCmd ", finalCmd)
-	exe_path,_ := util.GetCurrentPath()
+	exe_path,_ := pathutil.GetCurrentPath()
 	winptyDllFilePath := exe_path + "Plugin/SessionManager/winpty.dll"
 	var pty *winpty.WinPTY
 	if plugin.username == "" {

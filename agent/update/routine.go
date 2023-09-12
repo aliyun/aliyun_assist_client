@@ -14,6 +14,7 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/util/process"
+	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 	libupdate "github.com/aliyun/aliyun_assist_client/common/update"
 )
 
@@ -184,7 +185,7 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 	}
 
 	// 2. Download update package into temporary directory
-	tempDir, err := util.GetTempPath()
+	tempDir, err := pathutil.GetTempPath()
 	if err != nil {
 		errmsg = fmt.Sprintf("GetTempPath error: %s", err.Error())
 		return err

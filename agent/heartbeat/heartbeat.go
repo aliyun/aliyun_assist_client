@@ -3,30 +3,31 @@ package heartbeat
 import (
 	"errors"
 	"fmt"
+	"math/rand"
 	"net/url"
 	"os"
-	"runtime"
 	"sync"
 	"time"
 
-	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 	"github.com/tidwall/gjson"
 
-	"github.com/aliyun/aliyun_assist_client/agent/checkvirt"
 	"github.com/aliyun/aliyun_assist_client/agent/flagging"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/timermanager"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/timetool"
-	"github.com/aliyun/aliyun_assist_client/agent/version"
+	"github.com/aliyun/aliyun_assist_client/common/apiserver"
+	"github.com/aliyun/aliyun_assist_client/common/machineid"
+	"github.com/aliyun/aliyun_assist_client/common/requester"
 )
 
 const (
 	// DefaultPingIntervalSeconds is the default interval of heart-beat in seconds
-	DefaultPingIntervalSeconds = 1800
-	// MinimumPingIntervalSeconds limits the smallest interval of heart-beat in seconds
-	MinimumPingIntervalSeconds = 30
+	DefaultPingIntervalSeconds = 60
+
+	leastIntervalInMilliseconds = 55000
+	mostIntervalInMilliseconds  = 65000
 )
 
 var (
@@ -42,22 +43,11 @@ var (
 	_processStartTime   int64
 	_acknowledgeCounter uint64
 	_sendCounter        uint64
-	_winVirtioIsOld     int
-	_machineId          string
-)
 
-func checkWindowsVirtVer() int {
-	if runtime.GOOS != "windows" {
-		return 0
-	}
-	for i := 0; i < 26; i++ {
-		err, old := checkvirt.CheckVirtIoVersion(i)
-		if err == nil && old {
-			return 1
-		}
-	}
-	return 0
-}
+	_machineId string
+
+	_intervalRand *rand.Rand
+)
 
 func init() {
 	_retryCounter = 0
@@ -65,31 +55,32 @@ func init() {
 	_processStartTime = timetool.GetAccurateTime()
 	_acknowledgeCounter = 0
 	_sendCounter = 0
-	_winVirtioIsOld = checkWindowsVirtVer()
-	_machineId, _ = util.GetMachineID()
+
+	_machineId, _ = machineid.GetMachineID()
+
+	_intervalRand = rand.New(rand.NewSource(time.Now().UnixNano()))
 }
 
-func buildPingRequest(virtType string, osType string, osVersion string,
-	appVersion string, uptime uint64, timestamp int64, pid int,
-	processUptime int64, acknowledgeCounter uint64, azoneId string,
-	isColdstart bool, sendCounter uint64) string {
-	encodedOsVersion := url.QueryEscape(osVersion)
-	paramChars := fmt.Sprintf("?virt_type=%s&lang=golang&os_type=%s&os_version=%s&app_version=%s&uptime=%d&timestamp=%d&pid=%d&process_uptime=%d&index=%d&az=%s&virtiover=%d&machineid=%s&seq_no=%d",
-		virtType, osType, encodedOsVersion, appVersion, uptime, timestamp, pid,
-		processUptime, acknowledgeCounter, azoneId, _winVirtioIsOld, _machineId,
-		sendCounter)
-	// Only first heart-beat need to carry cold-start flag
-	if acknowledgeCounter == 0 {
-		paramChars = paramChars + fmt.Sprintf("&cold_start=%t", isColdstart)
+func buildBootstrapPingParams() string {
+	virtType := "kvm" // osutil.GetVirtualType() is currently unavailable
+	osVersion := osutil.GetVersion()
+	azoneId := util.GetAzoneId()
+	isColdstart := false
+	if _isColdstart, err := flagging.IsColdstart(); err != nil {
+		log.GetLogger().WithError(err).Errorln("Error encountered when detecting cold-start flag")
+	} else {
+		isColdstart = _isColdstart
 	}
-	url := util.GetPingService() + paramChars
-	return url
+
+	encodedOsVersion := url.QueryEscape(osVersion)
+	return fmt.Sprintf("&virt_type=%s&os_version=%s&az=%s&machineid=%s&cold_start=%t", virtType,
+		encodedOsVersion, azoneId, _machineId, isColdstart)
 }
 
 func invokePingRequest(requestURL string) (string, error) {
 	err, response := util.HttpGet(requestURL)
 	if err != nil {
-		tmp_err, ok := err.(*util.HttpErrorCode)
+		tmp_err, ok := err.(*requester.HttpErrorCode)
 		if !(ok && tmp_err.GetCode() < 500) {
 			_retryMutex.Lock()
 			defer _retryMutex.Unlock()
@@ -101,7 +92,7 @@ func invokePingRequest(requestURL string) (string, error) {
 			}
 			//less than 1h and counter more than 3.
 			if _retryCounter >= 3 {
-				log.GetLogger().WithFields(logrus.Fields{
+				log.GetLogger().WithFields(log.Fields{
 					"requestURL": requestURL,
 					"response":   response,
 				}).WithError(err).Errorln("Retry too frequent")
@@ -113,7 +104,7 @@ func invokePingRequest(requestURL string) (string, error) {
 				if err == nil {
 					return response, nil
 				}
-				log.GetLogger().WithFields(logrus.Fields{
+				log.GetLogger().WithFields(log.Fields{
 					"requestURL": requestURL,
 					"response":   response,
 				}).WithError(err).Errorln("Retry failed")
@@ -124,90 +115,71 @@ func invokePingRequest(requestURL string) (string, error) {
 	return response, nil
 }
 
+func randomNextInterval() time.Duration {
+	nextIntervalInMilliseconds := _intervalRand.Intn(mostIntervalInMilliseconds-leastIntervalInMilliseconds+1) + leastIntervalInMilliseconds
+	return time.Duration(nextIntervalInMilliseconds) * time.Millisecond
+}
+
+func extractNextInterval(content string) time.Duration {
+	if !gjson.Valid(content) {
+		log.GetLogger().WithFields(log.Fields{
+			"response": content,
+		}).Errorln("Invalid json response")
+		return randomNextInterval()
+	}
+
+	json := gjson.Parse(content)
+	nextIntervalField := json.Get("nextInterval")
+	if !nextIntervalField.Exists() {
+		log.GetLogger().WithFields(log.Fields{
+			"response": content,
+		}).Errorln("nextInterval field not found in json response")
+		return randomNextInterval()
+	}
+	nextIntervalValue, ok := nextIntervalField.Value().(float64)
+	if !ok {
+		log.GetLogger().WithFields(log.Fields{
+			"response": content,
+		}).Errorln("Invalid nextInterval value in json response")
+		return randomNextInterval()
+	}
+	nextIntervalInMilliseconds := int(nextIntervalValue)
+	if nextIntervalInMilliseconds < leastIntervalInMilliseconds || nextIntervalInMilliseconds > mostIntervalInMilliseconds {
+		return randomNextInterval()
+	}
+
+	return time.Duration(nextIntervalInMilliseconds) * time.Millisecond
+}
+
 func doPing() error {
-	virtType := "kvm" // osutil.GetVirtualType() is currently unavailable
-	osType := osutil.GetOsType()
-	osVersion := osutil.GetVersion()
-	appVersion := version.AssistVersion
-	startTime := osutil.GetUptimeOfMs()
+	uptime := osutil.GetUptimeOfMs()
 	timestamp := timetool.GetAccurateTime()
 	pid := os.Getpid()
 	processUptime := timetool.GetAccurateTime() - _processStartTime
 	acknowledgeCounter := _acknowledgeCounter
 	sendCounter := _sendCounter
-	azoneId := util.GetAzoneId()
-	isColdstart := false
-	// Only first heart-beat need to carry cold-start flag
+	querystring := fmt.Sprintf("?uptime=%d&timestamp=%d&pid=%d&process_uptime=%d&index=%d&seq_no=%d",
+		uptime, timestamp, pid, processUptime, acknowledgeCounter, sendCounter)
+
+	// Use non-secure HTTP protocol by default to reduce performance impact from
+	// TLS in trustable network environment...
+	schemePart := "http://"
+	// ...but internet for hybrid mode is obviously untrusted
+	if apiserver.IsHybrid() {
+		schemePart = "https://"
+	}
+	url := schemePart + util.GetPingService() + querystring
+	// Only first heart-beat need to carry extra params
 	if acknowledgeCounter == 0 {
-		if _isColdstart, err := flagging.IsColdstart(); err != nil {
-			log.GetLogger().WithError(err).Errorln("Error encountered when detecting cold-start flag")
-		} else {
-			isColdstart = _isColdstart
-		}
+		url = url + buildBootstrapPingParams()
 	}
 
-	url := buildPingRequest(virtType, osType, osVersion, appVersion, startTime,
-		timestamp, pid, processUptime, acknowledgeCounter, azoneId, isColdstart,
-		sendCounter)
-
-	nextIntervalSeconds := DefaultPingIntervalSeconds
-	newTasks := false
-
-	res, err := invokePingRequest(url)
+	responseContent, err := invokePingRequest(url)
 	if err != nil {
-		log.GetLogger().WithFields(logrus.Fields{
+		log.GetLogger().WithFields(log.Fields{
 			"requestURL": url,
 		}).WithError(err).Errorln("Failed to invoke ping request")
-		// task_engine::DebugTask task;
-		// task.RunSystemNetCheck();
 		return err
-	}
-
-	if !gjson.Valid(res) {
-		log.GetLogger().WithFields(logrus.Fields{
-			"requestURL": url,
-			"response":   res,
-		}).Errorln("Invalid json response")
-		return nil
-	}
-
-	json := gjson.Parse(res)
-	nextIntervalField := json.Get("nextInterval")
-	if !nextIntervalField.Exists() {
-		log.GetLogger().WithFields(logrus.Fields{
-			"requestURL": url,
-			"response":   res,
-		}).Errorln("nextInterval field not found in json response")
-		return nil
-	}
-	nextIntervalMilliseconds, ok := nextIntervalField.Value().(float64)
-	if !ok {
-		log.GetLogger().WithFields(logrus.Fields{
-			"requestURL": url,
-			"response":   res,
-		}).Errorln("Invalid nextInterval value in json response")
-		return nil
-	}
-	nextIntervalSeconds = int(nextIntervalMilliseconds) / 1000
-	if nextIntervalSeconds < MinimumPingIntervalSeconds {
-		nextIntervalSeconds = MinimumPingIntervalSeconds
-	}
-
-	newTasksField := json.Get("newTasks")
-	if !newTasksField.Exists() {
-		log.GetLogger().WithFields(logrus.Fields{
-			"requestURL": url,
-			"response":   res,
-		}).Errorln("newTasks field not found in json response")
-		return nil
-	}
-	newTasks, ok = newTasksField.Value().(bool)
-	if !ok {
-		log.GetLogger().WithFields(logrus.Fields{
-			"requestURL": url,
-			"response":   res,
-		}).Errorln("Invalid newTasks value in json response")
-		return nil
 	}
 
 	mutableSchedule, ok := _heartbeatTimer.Schedule.(*timermanager.MutableScheduled)
@@ -216,15 +188,8 @@ func doPing() error {
 		return nil
 	}
 	// Not so graceful way to reset interval of timer: too much implementation exposed.
-	mutableSchedule.SetInterval(time.Duration(nextIntervalSeconds) * time.Second)
+	mutableSchedule.SetInterval(extractNextInterval(responseContent))
 	_heartbeatTimer.RefreshTimer()
-
-	log.GetLogger().WithFields(logrus.Fields{
-		"requestURL":          url,
-		"response":            res,
-		"nextIntervalSeconds": nextIntervalSeconds,
-		"newTasks":            newTasks,
-	}).Infoln("Ping request succeeds")
 
 	return nil
 }

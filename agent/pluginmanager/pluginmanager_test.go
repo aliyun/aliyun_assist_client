@@ -12,10 +12,13 @@ import (
 	"time"
 
 	"bou.ke/monkey"
-	"github.com/aliyun/aliyun_assist_client/agent/taskengine/timermanager"
-	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/aliyun/aliyun_assist_client/agent/taskengine/timermanager"
+	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/common/pathutil"
+	"github.com/aliyun/aliyun_assist_client/internal/testutil"
 )
 
 func TestPluginManager(t *testing.T) {
@@ -32,7 +35,7 @@ func TestPluginManager(t *testing.T) {
 		})
 	defer guard.Unpatch()
 
-	pluginPath, _ := util.GetPluginPath()
+	pluginPath, _ := pathutil.GetPluginPath()
 	pluginPath += string(os.PathSeparator) + "installed_plugins"
 	installed_plugins := "{\"pluginList\": [{\"arch\": \"x64\", \"isPreInstalled\": \"\", \"md5\": \"b085b7d7c0b88e27bbd8a0de8dd5caa2\", \"name\": \"test_plugin_linux\", \"osType\": \"linux\", \"pluginId\": \"local_test_plugin_linux_1.0\", \"pluginType\": 1, \"publisher\": \"aliyun\", \"runPath\": \"main\", \"timeout\": \"5\", \"url\": \"local\", \"version\": \"1.0\"}, {\"arch\": \"X64\", \"isPreInstalled\": \"\", \"md5\": \"b3696ef2e0add78c8f4601d598ba1daa\", \"name\": \"oosutil\", \"osType\": \"LINUX\", \"pluginId\": \"p-hz0100z6doel4hs\", \"pluginType\": 0, \"publisher\": \"aliyun\", \"runPath\": \"oosutil_linux\", \"timeout\": \"60\", \"url\": \"http://aliyun-client-assist-cn-hangzhou.oss-cn-hangzhou-internal.aliyuncs.com/oosutil/linux/oosutil_1.8.zip\", \"version\": \"1.8\"}]}"
 	err := util.WriteStringToFile(pluginPath, installed_plugins)
@@ -50,7 +53,7 @@ func TestPluginManager(t *testing.T) {
 	defer httpmock.DeactivateAndReset()
 	defer util.NilRequest.Clear()
 	const mockRegion = "cn-test100"
-	util.MockMetaServer(mockRegion)
+	testutil.MockMetaServer(mockRegion)
 	httpmock.RegisterResponder("POST",
 		fmt.Sprintf("https://%s.axt.aliyun.com/luban/api/v1/plugin/status", mockRegion),
 		func(h *http.Request) ( hp *http.Response, err error) {

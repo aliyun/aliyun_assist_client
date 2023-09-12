@@ -3,7 +3,7 @@ package checknet
 import (
 	"sync/atomic"
 
-	"github.com/aliyun/aliyun_assist_client/agent/util/networkcategory"
+	"github.com/aliyun/aliyun_assist_client/common/networkcategory"
 )
 
 type _NetworkCategoryCache struct {

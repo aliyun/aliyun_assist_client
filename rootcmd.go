@@ -8,10 +8,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aliyun/aliyun_assist_client/thirdparty/aliyun-cli/cli"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/aliyun-cli/i18n"
 	logrusr "github.com/aliyun/aliyun_assist_client/thirdparty/bombsimon/logrusr/v3"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/service"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/single"
 	"k8s.io/klog/v2"
 
 	"github.com/aliyun/aliyun_assist_client/agent/channel"
+	"github.com/aliyun/aliyun_assist_client/agent/checkagentpanic"
 	"github.com/aliyun/aliyun_assist_client/agent/checkkdump"
 	"github.com/aliyun/aliyun_assist_client/agent/checkospanic"
 	"github.com/aliyun/aliyun_assist_client/agent/checkvirt"
@@ -35,10 +40,7 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/wrapgo"
 	"github.com/aliyun/aliyun_assist_client/agent/version"
-	"github.com/aliyun/aliyun_assist_client/thirdparty/aliyun-cli/cli"
-	"github.com/aliyun/aliyun_assist_client/thirdparty/aliyun-cli/i18n"
-	"github.com/aliyun/aliyun_assist_client/thirdparty/service"
-	"github.com/aliyun/aliyun_assist_client/thirdparty/single"
+	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 )
 
 type Options struct {
@@ -267,7 +269,7 @@ func (p *program) run() {
 	channel.TryStartGshellChannel()
 
 	if runtime.GOOS == "windows" {
-		util.SetCurrentEnvPath()
+		pathutil.SetCurrentEnvPath()
 	}
 	// Logging current working directory information
 	if currentWorkingDirectory, err := os.Getwd(); err == nil {
@@ -302,6 +304,9 @@ func (p *program) run() {
 			wrapgo.CallDefaultPanicHandler(panicPayload, stacktrace)
 		}
 	}()
+
+	// Check last panic and report it
+	checkagentpanic.CheckAgentPanic()
 
 	// Check in main goroutine and update as soon as possible, which use stricter
 	// timeout limitation. NOTE: The preparation phase timeout parameter should
@@ -436,12 +441,17 @@ func parseOptions(ctx *cli.Context) Options {
 func runRootCommand(ctx *cli.Context, args []string) error {
 	options := parseOptions(ctx)
 	log.InitLog("aliyun_assist_main.log", options.LogPath, false)
+	// In windows, redirect stderr to panic.txt in log directory
+	// RedirectStderr need be call after log.InitLog
+	if err := checkagentpanic.RedirectStderr(); err != nil {
+		log.GetLogger().Error("RedirectStderr failed: ", err)
+	}
 	// Redirect logging messages from kubernetes CRI client via klog to logrus
 	// used by ourselves
 	klog.SetLogger(logrusr.New(log.GetLogger()).WithName("klog"))
 
 	if options.LogPath != "" {
-		util.SetScriptPath(options.LogPath)
+		pathutil.SetScriptPath(options.LogPath)
 	}
 	e := PatchGolang()
 	if e != nil {

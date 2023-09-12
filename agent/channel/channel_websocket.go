@@ -4,21 +4,19 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"runtime/debug"
-	"strconv"
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 
 	"github.com/aliyun/aliyun_assist_client/agent/clientreport"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
-	"github.com/aliyun/aliyun_assist_client/agent/util/timetool"
+	_ "github.com/aliyun/aliyun_assist_client/common/apiserver"
+	"github.com/aliyun/aliyun_assist_client/common/requester"
 )
 
 const WEBSOCKET_SERVER = "/luban/notify_server"
@@ -68,40 +66,21 @@ func (c *WebSocketChannel) StartChannel() error {
 	url := "wss://" + host + WEBSOCKET_SERVER
 
 	header := http.Header{
-		util.UserAgentHeader: []string{util.UserAgentValue},
+		requester.UserAgentHeader: []string{requester.UserAgentValue},
 	}
-
-	if util.IsHybrid() {
-		u4 := uuid.New()
-		str_request_id := u4.String()
-
-		timestamp := timetool.GetAccurateTime()
-		str_timestamp := strconv.FormatInt(timestamp, 10)
-
-		var instance_id string
-		path, _ := util.GetHybridPath()
-
-		content, _ := ioutil.ReadFile(path + "/instance-id")
-		instance_id = string(content)
-
-		mid, _ := util.GetMachineID()
-
-		input := instance_id + mid + str_timestamp + str_request_id
-		pri_key, _ := ioutil.ReadFile(path + "/pri-key")
-		output := util.RsaSign(input, string(pri_key))
-		log.GetLogger().Infoln(input, output)
-
-		header.Add("x-acs-instance-id", instance_id)
-		header.Add("x-acs-timestamp", str_timestamp)
-		header.Add("x-acs-request-id", str_request_id)
-		header.Add("x-acs-signature", output)
+	if extraHeaders, err := requester.GetExtraHTTPHeaders(log.GetLogger()); extraHeaders != nil {
+		for k, v := range extraHeaders {
+			header.Add(k, v)
+		}
+	} else if err != nil {
+		log.GetLogger().WithError(err).Error("Failed to construct extra HTTP headers")
 	}
 
 	var MyDialer = &websocket.Dialer{
-		Proxy:            util.GetProxyFunc(),
+		Proxy:            requester.GetProxyFunc(log.GetLogger()),
 		HandshakeTimeout: 45 * time.Second,
 		TLSClientConfig: &tls.Config{
-			RootCAs: util.CaCertPool,
+			RootCAs: requester.GetRootCAs(log.GetLogger()),
 		},
 	}
 	conn, _, err := MyDialer.Dial(url, header)

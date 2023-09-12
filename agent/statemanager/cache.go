@@ -4,11 +4,12 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"os"
-	"sync"
 	"path/filepath"
+	"sync"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 )
 
 var (
@@ -18,7 +19,7 @@ var (
 
 
 func ConfigCacheFilePath() (path string, err error) {
-	cacheDir, err := util.GetCachePath()
+	cacheDir, err := pathutil.GetCachePath()
 	if err != nil {
 		log.GetLogger().WithError(err).Errorln("get path failed")
 		return
@@ -77,13 +78,13 @@ func WriteConfigCache(config *ListInstanceStateConfigurationsResult) error {
 }
 
 func TemplateCachePath(name string, version string) (p string, err error) {
-	cacheDir, err := util.GetCachePath()
+	cacheDir, err := pathutil.GetCachePath()
 	if err != nil {
 		log.GetLogger().WithError(err).Errorln("get template cache path failed")
 		return
 	}
 	templateDir := filepath.Join(cacheDir, "template")
-	util.MakeSurePath(templateDir)
+	pathutil.MakeSurePath(templateDir)
 	p = filepath.Join(cacheDir, "template", name + "_" + version + ".json")
 	return
 }

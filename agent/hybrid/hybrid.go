@@ -13,13 +13,17 @@ import (
 	"os"
 	"strings"
 
+	"github.com/tidwall/gjson"
+
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/process"
 	"github.com/aliyun/aliyun_assist_client/agent/version"
-	"github.com/tidwall/gjson"
+	"github.com/aliyun/aliyun_assist_client/common/apiserver"
+	"github.com/aliyun/aliyun_assist_client/common/machineid"
+	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 )
 
 type RegisterInfo struct {
@@ -69,7 +73,7 @@ func Register(region string, code string, id string, name string, networkmode st
 	}()
 
 	ret = true
-	if util.IsHybrid() {
+	if apiserver.IsHybrid() {
 		fmt.Println("error, agent already register, deregister first")
 		errmsg = "error, agent already register, deregister first"
 		log.GetLogger().Infoln("error, agent already register, deregister first")
@@ -88,7 +92,7 @@ func Register(region string, code string, id string, name string, networkmode st
 		return false
 	}
 	encodeString := base64.StdEncoding.EncodeToString(pub.Bytes())
-	mid, _ := util.GetMachineID()
+	mid, _ := machineid.GetMachineID()
 	info := &RegisterInfo{
 		Code:            code,
 		MachineId:       mid,
@@ -125,7 +129,7 @@ func Register(region string, code string, id string, name string, networkmode st
 	var register_response registerResponse
 	if err := json.Unmarshal([]byte(response), &register_response); err == nil {
 		if register_response.Code == 200 {
-			path, _ := util.GetHybridPath()
+			path, _ := pathutil.GetHybridPath()
 			util.WriteStringToFile(path+"/network-mode", networkmode)
 			util.WriteStringToFile(path+"/pub-key", pub.String())
 			util.WriteStringToFile(path+"/pri-key", pri.String())
@@ -246,7 +250,7 @@ func restartService() {
 }
 
 func clean_unregister_data(need_restart bool) {
-	path, _ := util.GetHybridPath()
+	path, _ := pathutil.GetHybridPath()
 	os.Remove(path + "/pub-key")
 	os.Remove(path + "/pri-key")
 	os.Remove(path + "/region-id")

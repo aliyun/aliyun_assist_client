@@ -5,6 +5,7 @@ import (
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 )
 
 const (
@@ -14,7 +15,7 @@ const (
 
 func isUpdatingDisabled() (bool, error) {
 	// 1. Detect whether updating is disabled across all installed versions
-	crossVersionConfigDir, err := util.GetCrossVersionConfigPath()
+	crossVersionConfigDir, err := pathutil.GetCrossVersionConfigPath()
 	if err != nil {
 		return false, err
 	}
@@ -25,7 +26,7 @@ func isUpdatingDisabled() (bool, error) {
 	}
 
 	// 2. Detect whether updating is disabled in this installed version
-	currentVersionConfigDir, err := util.GetConfigPath()
+	currentVersionConfigDir, err := pathutil.GetConfigPath()
 	if err != nil {
 		return false, err
 	}
@@ -40,7 +41,7 @@ func isUpdatingDisabled() (bool, error) {
 
 func isBootstrapUpdatingDisabled() (bool, error) {
 	// 1. Detect whether bootstrap updating is disabled across all installed versions
-	crossVersionConfigDir, err := util.GetCrossVersionConfigPath()
+	crossVersionConfigDir, err := pathutil.GetCrossVersionConfigPath()
 	if err != nil {
 		return false, err
 	}
@@ -51,7 +52,7 @@ func isBootstrapUpdatingDisabled() (bool, error) {
 	}
 
 	// 2. Detect whether bootstrap updating is disabled in this installed version
-	currentVersionConfigDir, err := util.GetConfigPath()
+	currentVersionConfigDir, err := pathutil.GetConfigPath()
 	if err != nil {
 		return false, err
 	}

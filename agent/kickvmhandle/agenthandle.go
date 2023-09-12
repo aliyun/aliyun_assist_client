@@ -3,6 +3,7 @@ package kickvmhandle
 import (
 	"errors"
 )
+
 // type:agent
 var agentRoute map[string]handleFunc
 func init ()  {

@@ -2,11 +2,15 @@ package hybrid
 
 import (
 	"bytes"
-	"github.com/aliyun/aliyun_assist_client/agent/util"
-	"github.com/jarcoal/httpmock"
-	"github.com/stretchr/testify/assert"
 	"io/ioutil"
 	"testing"
+
+	"github.com/jarcoal/httpmock"
+	"github.com/stretchr/testify/assert"
+
+	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/common/pathutil"
+	"github.com/aliyun/aliyun_assist_client/internal/testutil"
 )
 
 func TestKeyPair(t *testing.T) {
@@ -25,7 +29,7 @@ func TestRegister(t *testing.T) {
 
 	region := "cn-test100"
 
-	util.MockMetaServer(region)
+	testutil.MockMetaServer(region)
 
 	url := "https://" + region + util.HYBRID_DOMAIN + "/luban/api/instance/register";
 	httpmock.RegisterResponder("POST", url,
@@ -37,7 +41,7 @@ func TestRegister(t *testing.T) {
 	ret := Register(region, "test_code", "test_id", "test_machine", "vpc", false, nil)
 
 	assert.True(t, ret)
-	path,_ := util.GetHybridPath()
+	path,_ := pathutil.GetHybridPath()
 	path_instance_id := path + "/instance-id"
 	content,_ := ioutil.ReadFile(path_instance_id)
 	assert.Equal(t, string(content), "xx-123" )

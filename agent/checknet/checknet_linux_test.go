@@ -9,10 +9,10 @@ import (
 	"testing"
 
 	"bou.ke/monkey"
-	"github.com/aliyun/aliyun_assist_client/agent/util"
-	"github.com/aliyun/aliyun_assist_client/agent/util/networkcategory"
 	"github.com/jarcoal/httpmock"
-	// "bou.ke/monkey"
+
+	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/common/networkcategory"
 )
 
 func deletefile(file string) {

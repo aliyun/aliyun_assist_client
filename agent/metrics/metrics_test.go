@@ -1,11 +1,14 @@
 package metrics
 
 import (
-	"testing"
-	"net/http"
 	"fmt"
-	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"net/http"
+	"testing"
+
 	"github.com/jarcoal/httpmock"
+
+	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/internal/testutil"
 )
 
 func TestMetrics(t *testing.T) {
@@ -14,7 +17,7 @@ func TestMetrics(t *testing.T) {
 	defer httpmock.DeactivateAndReset()
 	defer util.NilRequest.Clear()
 	mockRegionId := "mock-region"
-	util.MockMetaServer(mockRegionId)
+	testutil.MockMetaServer(mockRegionId)
 	httpmock.RegisterResponder("POST",
 		fmt.Sprintf("https://%s.axt.aliyun.com/luban/api/metrics", mockRegionId),
 		func(h *http.Request) (*http.Response, error) {

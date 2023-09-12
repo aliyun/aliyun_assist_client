@@ -28,6 +28,8 @@ type WaitProcessResult struct {
 	err          error
 }
 
+type CmdOption func (*exec.Cmd) error
+
 type ProcessCmd struct {
 	canceledChan chan bool
 	command      *exec.Cmd
@@ -35,10 +37,14 @@ type ProcessCmd struct {
 	password     string
 	homeDir      string
 	env          []string
+
+	commandOptions []CmdOption
 }
 
-func NewProcessCmd() *ProcessCmd {
-	p := &ProcessCmd{}
+func NewProcessCmd(options... CmdOption) *ProcessCmd {
+	p := &ProcessCmd{
+		commandOptions: options,
+	}
 	return p
 }
 

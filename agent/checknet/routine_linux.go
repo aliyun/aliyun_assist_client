@@ -9,8 +9,8 @@ import (
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/util/atomicutil"
-	"github.com/aliyun/aliyun_assist_client/agent/util/networkcategory"
 	"github.com/aliyun/aliyun_assist_client/agent/util/wrapgo"
+	"github.com/aliyun/aliyun_assist_client/common/networkcategory"
 )
 
 var (

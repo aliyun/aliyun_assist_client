@@ -1,4 +1,5 @@
 package util
+
 import "os"
 
 // Copyright (c) 2017-2023 Alibaba Group Holding Limited.
@@ -82,8 +83,10 @@ func GetErrorOutputService() string {
 	return url
 }
 
+// GetPingService returns heart-beat API but without the scheme part, unlike
+// other API address provider function
 func GetPingService() string {
-	url := "https://" + GetServerHost()
+	url := GetServerHost()
 	url += "/luban/api/heart-beat"
 	return url
 }
