@@ -1,11 +1,13 @@
+//go:build !windows
 // +build !windows
 
 package daemon
 
 import (
 	"os"
-	"os/exec"
 	"syscall"
+
+	"github.com/aliyun/aliyun_assist_client/common/executil"
 )
 
 // Daemonize runs this program as daemon.
@@ -14,13 +16,13 @@ import (
 // simple initiate another process of this program with special setting.
 func Daemonize() error {
 	executablePath := os.Args[0]
-	cmd := exec.Command(executablePath)
+	cmd := executil.Command(executablePath)
 	cmd.Stdin = nil
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Setpgid: true,
-		Pgid: 0,
+		Pgid:    0,
 	}
 
 	err := cmd.Start()
@@ -30,5 +32,5 @@ func Daemonize() error {
 
 	cmd.Process.Release()
 	os.Exit(0)
-	return nil;
+	return nil
 }

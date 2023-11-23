@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/common/envutil"
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/cli"
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/config"
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/i18n"
@@ -71,6 +72,7 @@ func main() {
 
 	// set language with current profile
 	i18n.SetLanguage(profile.Language)
+	envutil.ClearExecErrDot()
 
 	// create root command
 	rootCmd := &cli.Command{

@@ -1,19 +1,21 @@
+//go:build windows
 // +build windows
 
 package pluginmanager
 
 import (
 	"errors"
-	"github.com/aliyun/aliyun_assist_client/agent/log"
-	"github.com/aliyun/aliyun_assist_client/agent/util/process"
-	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
-	"golang.org/x/sys/windows"
 	"io"
 	"os"
-	"os/exec"
 	"strings"
 	"time"
 	"unsafe"
+
+	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/agent/util/process"
+	"github.com/aliyun/aliyun_assist_client/common/executil"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
+	"golang.org/x/sys/windows"
 )
 
 // We use this struct to retreive process handle(which is unexported)
@@ -75,7 +77,7 @@ func syncRunKillGroup(workingDir string, commandName string, commandArguments []
 		}
 	}()
 
-	cmd := exec.Command(commandName, commandArguments...)
+	cmd := executil.Command(commandName, commandArguments...)
 	cmd.Stdout = stdoutWriter
 	cmd.Stderr = stderrWriter
 	cmd.Dir = workingDir

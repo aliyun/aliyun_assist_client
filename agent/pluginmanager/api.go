@@ -24,6 +24,7 @@ type PluginStatus struct {
 	Name    string `json:"name"`
 	Status  string `json:"status"`
 	Version string `json:"version"`
+	SysTagType string `json:"sysTagType,omitempty"`
 }
 type PluginStatusResquest struct {
 	Plugin []PluginStatus `json:"plugin"`

@@ -1,3 +1,4 @@
+//go:build freebsd || linux || netbsd || openbsd
 // +build freebsd linux netbsd openbsd
 
 package instancedetailedinformation
@@ -6,12 +7,12 @@ import (
 	"fmt"
 	"math"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 
 	"github.com/aliyun/aliyun_assist_client/agent/inventory/model"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/common/executil"
 )
 
 const (
@@ -28,7 +29,7 @@ const (
 var cmdExecutor = executeCommand
 
 func executeCommand(command string, args ...string) ([]byte, error) {
-	cmd := exec.Command(command, args...)
+	cmd := executil.Command(command, args...)
 	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, "LANG=en_US.UTF-8")
 	return cmd.CombinedOutput()
@@ -54,12 +55,13 @@ func collectPlatformDependentInstanceData() (appData []model.InstanceDetailedInf
 }
 
 // parseLscpuOutput collects relevant fields from lscpu output, which has the following format (some lines omitted):
-//   CPU(s):                2
-//   Thread(s) per core:    1
-//   Core(s) per socket:    2
-//   Socket(s):             1
-//   Model name:            Intel(R) Xeon(R) CPU E5-2676 v3 @ 2.40GHz
-//   CPU MHz:               2400.072
+//
+//	CPU(s):                2
+//	Thread(s) per core:    1
+//	Core(s) per socket:    2
+//	Socket(s):             1
+//	Model name:            Intel(R) Xeon(R) CPU E5-2676 v3 @ 2.40GHz
+//	CPU MHz:               2400.072
 func parseLscpuOutput(output string) (data []model.InstanceDetailedInformation) {
 	cpuSpeedMHzStr := getFieldValue(output, cpuSpeedMHzKey)
 	if cpuSpeedMHzStr != "" {

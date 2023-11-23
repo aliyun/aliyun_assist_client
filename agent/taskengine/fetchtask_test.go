@@ -10,7 +10,7 @@ var strsession string = `{"code":200,"instanceId":"i-2zxxxx","session":[{"cmdCon
 
 
 func TestFetchTask(t *testing.T) {
-  info := parseTaskInfo(strjson)
+  _, info := parseTaskInfo(strjson)
   runInfo := info.runInfos[0]
 
   assert.Equal(t, runInfo.TaskId, "t-bj0sgni1w9lnnk")
@@ -20,7 +20,7 @@ func TestFetchTask(t *testing.T) {
 }
 
 func TestFetchSessionTask(t *testing.T) {
-  info := parseTaskInfo(strsession)
+  _, info := parseTaskInfo(strsession)
   sessionInfo := info.sessionInfos[0]
 
   assert.Equal(t, sessionInfo.CmdContent, "pwd")

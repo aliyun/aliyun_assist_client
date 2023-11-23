@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os/exec"
 	"time"
+
+	"github.com/aliyun/aliyun_assist_client/common/executil"
 )
 
 const (
@@ -20,7 +22,7 @@ var (
 
 // SyncRunDetached simply runs command in new session and process group
 func SyncRunDetached(command string, arguments []string, timeout int) (exitcode int, status int, err error) {
-	cmd := exec.Command(command, arguments...)
+	cmd := executil.Command(command, arguments...)
 	cmd.Stdin = nil
 	cmd.Stdout = nil
 	cmd.Stderr = nil
@@ -44,12 +46,12 @@ func SyncRunDetached(command string, arguments []string, timeout int) (exitcode 
 	defer timer.Stop()
 	// Either normally finished, or killed due to timeout
 	status = Success
-	for r := 0 ; r < 2; r++ {
+	for r := 0; r < 2; r++ {
 		select {
-		case <- timer.C:
+		case <-timer.C:
 			cmd.Process.Kill()
 			status = Timeout
-		case exitResult := <- terminated:
+		case exitResult := <-terminated:
 			timer.Stop()
 			close(terminated)
 

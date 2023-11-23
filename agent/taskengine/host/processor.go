@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
@@ -19,6 +18,7 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/util/errnoutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/powerutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/process"
+	"github.com/aliyun/aliyun_assist_client/common/executil"
 	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 )
 
@@ -144,7 +144,7 @@ func (p *HostProcessor) Prepare(commandContent string) error {
 			// file exists.
 			taskLogger.Error("Save script file error: ", err)
 			if errors.Is(err, scriptmanager.ErrScriptFileExists) {
-				if (p.Repeat == models.RunTaskOnce || p.Repeat == models.RunTaskNextRebootOnly) {
+				if p.Repeat == models.RunTaskOnce || p.Repeat == models.RunTaskNextRebootOnly {
 					return taskerrors.NewScriptFileExistedError(p.scriptFilePath, err)
 				}
 			} else if errnoutil.IsNoEnoughSpaceError(err) {
@@ -187,7 +187,7 @@ func (p *HostProcessor) Prepare(commandContent string) error {
 			p.invokeCommandArgs = []string{"-c", p.CommandContent}
 		}
 
-		if _, err := exec.LookPath(p.invokeCommand); err != nil {
+		if _, err := executil.LookPath(p.invokeCommand); err != nil {
 			return taskerrors.NewSystemDefaultShellNotFoundError(err)
 		}
 	} else if p.CommandType == "RunPowerShellScript" {
@@ -198,7 +198,7 @@ func (p *HostProcessor) Prepare(commandContent string) error {
 			p.invokeCommandArgs = []string{"-command", p.CommandContent}
 		}
 
-		if _, err := exec.LookPath(p.invokeCommand); err != nil {
+		if _, err := executil.LookPath(p.invokeCommand); err != nil {
 			return taskerrors.NewPowershellNotFoundError(err)
 		}
 

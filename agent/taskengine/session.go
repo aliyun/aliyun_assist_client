@@ -175,7 +175,9 @@ func (sessionTask *SessionTask) RunTask(taskid string) error {
 	log.GetLogger().Infoln("run task", taskid, sessionTask.sessionId)
 	code, err := sessionTask.runTask()
 	ReportSessionResult(taskid, code)
-	sessionTask.sessionChannel.Close()
+	if sessionTask.sessionChannel != nil {
+		sessionTask.sessionChannel.Close()
+	}
 	GetSessionFactory().RemoveTask(sessionTask.sessionId)
 	if err != nil {
 		metrics.GetTaskFailedEvent(

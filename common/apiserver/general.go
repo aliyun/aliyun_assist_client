@@ -125,6 +125,10 @@ func (p *GeneralProvider) ServerDomain(logger logrus.FieldLogger) (string, error
 }
 
 func (p *GeneralProvider) ExtraHTTPHeaders(logger logrus.FieldLogger) (map[string]string, error) {
+	if p.regionId.Load() == "" {
+		return nil, requester.ErrNotProvided
+	}
+
 	p.initInstanceIdHeadersOnce.Do(func() {
 		instanceId := func () string {
 			instanceId, err := httpGetWithoutExtraHeader(logger, "http://100.100.100.200/latest/meta-data/instance-id")

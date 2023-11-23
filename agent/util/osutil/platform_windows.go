@@ -1,14 +1,15 @@
+//go:build windows
 // +build windows
 
 package osutil
 
 import (
-	"os/exec"
+	"fmt"
 	"regexp"
 	"strings"
-	"fmt"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/common/executil"
 )
 
 const caption = "Caption"
@@ -26,14 +27,14 @@ func getPlatformVersion() (value string, err error) {
 	return getPlatformDetails(version)
 }
 
-func getPlatformDetails(property string, ) (value string, err error) {
+func getPlatformDetails(property string) (value string, err error) {
 	log.GetLogger().Debug(gettingPlatformDetailsMessage)
 	value = notAvailableMessage
 
 	cmdName := "wmic"
 	cmdArgs := []string{"OS", "get", property, "/format:list"}
 	var cmdOut []byte
-	if cmdOut, err = exec.Command(cmdName, cmdArgs...).Output(); err != nil {
+	if cmdOut, err = executil.Command(cmdName, cmdArgs...).Output(); err != nil {
 		log.GetLogger().Debugf("There was an error running %v %v, err:%v", cmdName, cmdArgs, err)
 		return
 	}
@@ -51,7 +52,6 @@ func getPlatformDetails(property string, ) (value string, err error) {
 	log.GetLogger().Debugf(commandOutputMessage, value)
 	return
 }
-
 
 func getArch() (formatArch string) {
 	// 云助手的windows版架构只有amd64的

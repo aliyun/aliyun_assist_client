@@ -44,6 +44,9 @@ var (
 	_acknowledgeCounter uint64
 	_sendCounter        uint64
 
+	_lastHttpFailedSendCounter uint64 // record the _sendCounter value when http ping failed
+	_tryHttp                   bool
+
 	_machineId string
 
 	_intervalRand *rand.Rand
@@ -55,6 +58,9 @@ func init() {
 	_processStartTime = timetool.GetAccurateTime()
 	_acknowledgeCounter = 0
 	_sendCounter = 0
+
+	_lastHttpFailedSendCounter = 0
+	_tryHttp = true
 
 	_machineId, _ = machineid.GetMachineID()
 
@@ -77,14 +83,24 @@ func buildBootstrapPingParams() string {
 		encodedOsVersion, azoneId, _machineId, isColdstart)
 }
 
-func invokePingRequest(requestURL string) (string, error) {
-	err, response := util.HttpGet(requestURL)
+func invokePingRequest(isHttpScheme bool, urlWithoutScheme string, willSwitchScheme bool) (string, error) {
+	httpRequestURL := "http://" + urlWithoutScheme
+	httpsRequestURL := "https://" + urlWithoutScheme
+	var requestURL, switchedRequestUrl *string
+	if isHttpScheme {
+		requestURL = &httpRequestURL
+		switchedRequestUrl = &httpsRequestURL
+	} else {
+		requestURL = &httpsRequestURL
+		switchedRequestUrl = &httpRequestURL
+	}
+	err, response := util.HttpGet(*requestURL)
 	if err != nil {
 		tmp_err, ok := err.(*requester.HttpErrorCode)
 		if !(ok && tmp_err.GetCode() < 500) {
 			_retryMutex.Lock()
 			defer _retryMutex.Unlock()
-			Gap := time.Now().Sub(_startTime)
+			Gap := time.Since(_startTime)
 			//more than 1h than reset counter and start time.
 			if Gap.Minutes() >= 60 {
 				_retryCounter = 0
@@ -93,23 +109,55 @@ func invokePingRequest(requestURL string) (string, error) {
 			//less than 1h and counter more than 3.
 			if _retryCounter >= 3 {
 				log.GetLogger().WithFields(log.Fields{
-					"requestURL": requestURL,
+					"requestURL": *requestURL,
 					"response":   response,
 				}).WithError(err).Errorln("Retry too frequent")
 			} else {
 				//do retry
 				time.Sleep(3 * time.Second)
-				err, response := util.HttpGet(requestURL)
 				_retryCounter++
+				err, response := util.HttpGet(*requestURL)
 				if err == nil {
+					// Keep use current scheme next time
+					if isHttpScheme {
+						_tryHttp = true
+					} else {
+						_tryHttp = false
+						_lastHttpFailedSendCounter = _sendCounter
+					}
 					return response, nil
 				}
 				log.GetLogger().WithFields(log.Fields{
-					"requestURL": requestURL,
+					"requestURL": *requestURL,
 					"response":   response,
 				}).WithError(err).Errorln("Retry failed")
+				if willSwitchScheme {
+					err, response = util.HttpGet(*switchedRequestUrl)
+					if err == nil {
+						// Use another scheme next time
+						if isHttpScheme {
+							_tryHttp = false
+							_lastHttpFailedSendCounter = _sendCounter
+						} else {
+							_tryHttp = true
+						}
+						return response, nil
+					}
+					log.GetLogger().WithFields(log.Fields{
+						"switchedRequestURL": *switchedRequestUrl,
+						"response":   response,
+					}).WithError(err).Errorln("Retry failed with switched requestURL")
+				}
 			}
 		}
+		// Use another scheme next time
+		if isHttpScheme {
+			_tryHttp = false
+			_lastHttpFailedSendCounter = _sendCounter
+		} else {
+			_tryHttp = true
+		}
+
 		return "", err
 	}
 	return response, nil
@@ -163,21 +211,35 @@ func doPing() error {
 
 	// Use non-secure HTTP protocol by default to reduce performance impact from
 	// TLS in trustable network environment...
-	schemePart := "http://"
+	isHttpScheme := true
+	willSwitchScheme := true
+	// If HTTP protocol is not accessible use HTTPS. Actively try the http protocol
+	// after 24 * 60 heart-beats
+	if !_tryHttp {
+		if sendCounter-_lastHttpFailedSendCounter > 24*60 {
+			log.GetLogger().Info("heart-beat by https more than 24*60 times, try http")
+			isHttpScheme = true
+			_tryHttp = true
+		} else {
+			isHttpScheme = false
+		}
+	}
 	// ...but internet for hybrid mode is obviously untrusted
 	if apiserver.IsHybrid() {
-		schemePart = "https://"
+		isHttpScheme = false
+		willSwitchScheme = false
 	}
-	url := schemePart + util.GetPingService() + querystring
+	urlWithoutScheme := util.GetPingService() + querystring
 	// Only first heart-beat need to carry extra params
 	if acknowledgeCounter == 0 {
-		url = url + buildBootstrapPingParams()
+		urlWithoutScheme = urlWithoutScheme + buildBootstrapPingParams()
 	}
 
-	responseContent, err := invokePingRequest(url)
+	responseContent, err := invokePingRequest(isHttpScheme, urlWithoutScheme, willSwitchScheme)
 	if err != nil {
 		log.GetLogger().WithFields(log.Fields{
-			"requestURL": url,
+			"requestURLWithourScheme": urlWithoutScheme,
+			"isHttpScheme": isHttpScheme,
 		}).WithError(err).Errorln("Failed to invoke ping request")
 		return err
 	}

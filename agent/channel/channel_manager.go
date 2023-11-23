@@ -141,6 +141,9 @@ func (m *ChannelMgr) Uninit() {
 func (m *ChannelMgr) GetCurrentChannelType() int {
 	m.ChannelSetLock.Lock()
 	defer m.ChannelSetLock.Unlock()
+	if m.ActiveChannel == nil {
+		return ChannelNone
+	}
 	return m.ActiveChannel.GetChannelType()
 }
 

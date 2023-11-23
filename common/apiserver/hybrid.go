@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -49,11 +50,21 @@ func (p *HybridModeProvider) ServerDomain(logger logrus.FieldLogger) (string, er
 	if getNetworkTypeInHybrid() == "vpc" {
 		return regionId + IntranetDomain, nil
 	} else {
+		// Try domain region-axt.aliyuncs.com first,
+		// if not success use region.axt.aliyuncs.com
+		domain := fmt.Sprintf("%s-%s", regionId, strings.TrimLeft(InternetDomain, "."))
+		if err := connectionDetect(logger, domain); err == nil {
+			return domain, nil
+		}
 		return regionId + InternetDomain, nil
 	}
 }
 
 func (*HybridModeProvider) ExtraHTTPHeaders(logger logrus.FieldLogger) (map[string]string, error) {
+	if !IsHybrid() {
+		return nil, requester.ErrNotProvided
+	}
+
 	u4 := uuid.New()
 	str_request_id := u4.String()
 

@@ -1,3 +1,4 @@
+//go:build windows
 // +build windows
 
 package application
@@ -5,13 +6,12 @@ package application
 import (
 	"encoding/json"
 	"fmt"
-	"os/exec"
 	"runtime"
 	"strings"
 
-	"github.com/aliyun/aliyun_assist_client/agent/log"
-
 	"github.com/aliyun/aliyun_assist_client/agent/inventory/model"
+	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/common/executil"
 )
 
 const (
@@ -100,7 +100,7 @@ var ArgsToReadRegistryFromWow6432Node = fmt.Sprintf(ArgsToReadRegistryApplicatio
 var cmdExecutor = executeCommand
 
 func executeCommand(command string, args ...string) ([]byte, error) {
-	return exec.Command(command, args...).CombinedOutput()
+	return executil.Command(command, args...).CombinedOutput()
 }
 
 // collectPlatformDependentApplicationData collects application data for windows platform

@@ -36,6 +36,7 @@ type pluginConfig struct {
 	Version           string      `json:"version"`
 	PluginType_       interface{} `json:"pluginType"`
 	HeartbeatInterval int         `json:"heartbeatInterval"`
+	AddSysTag 		  bool 		  `json:"addSysTag"`
 	pluginTypeStr     string
 }
 
@@ -340,7 +341,11 @@ func (pm *PluginManager) RemovePlugin(pluginName string) (exitCode int, err erro
 		exitCode, _ = errProcess(funcName, DUMP_INSTALLEDPLUGINS_ERR, err, "Update installed_plugins file err: "+err.Error())
 		return
 	}
-	if err = pm.ReportPluginStatus(pluginInfo.Name, pluginInfo.Version, REMOVED); err != nil {
+	sysTagType := ""
+	if pluginInfo.AddSysTag {
+		sysTagType = RemoveSysTag
+	}
+	if err = pm.ReportPluginStatus(pluginInfo.Name, pluginInfo.Version, REMOVED, sysTagType); err != nil {
 		log.GetLogger().Errorf("Plugin[%s] is removed, but report the removed plugin to server error: %s", pluginInfo.Name, err.Error())
 	}
 	// 删除插件目录
@@ -545,9 +550,9 @@ func (pm *PluginManager) executePluginFromFile(packagePath string, fetchTimeoutI
 		return
 	}
 	exitCode, errorCode, err = pm.executePlugin(fetched.Entrypoint, args, executionTimeoutInSeconds, env, false, options...)
-	// 如果是常驻插件，且调用的接口有可能改变插件状态，需要主动上报一次插件状态
-	if pluginType == PLUGIN_PERSIST && needReportStatus(args) {
-		status, err := pm.CheckAndReportPlugin(pluginName, pluginVersion, fetched.Entrypoint, executionTimeoutInSeconds, env)
+	// 常驻插件和一次性插件：需要主动上报一次插件状态
+	if pluginType == PLUGIN_PERSIST {
+		status, err := pm.CheckAndReportPlugin(pluginName, pluginVersion, fetched.Entrypoint, executionTimeoutInSeconds, env, "")
 		log.GetLogger().WithFields(log.Fields{
 			"pluginName":    pluginName,
 			"pluginVersion": pluginVersion,
@@ -556,6 +561,8 @@ func (pm *PluginManager) executePluginFromFile(packagePath string, fetchTimeoutI
 			"env":           env,
 			"status":        status,
 		}).WithError(err).Infof("CheckAndReportPlugin")
+	} else if pluginType == PLUGIN_ONCE {
+		pm.ReportPluginStatus(pluginName, pluginVersion, ONCE_INSTALLED, "")
 	}
 	return
 }
@@ -592,6 +599,7 @@ func installFromFile(packagePath string, config *pluginConfig, plugin *PluginInf
 	plugin.Timeout = config.Timeout
 	plugin.Publisher = config.Publisher
 	plugin.Version = config.Version
+	plugin.AddSysTag = config.AddSysTag
 	plugin.SetPluginType(config.PluginType())
 	plugin.Url = "local"
 	if config.HeartbeatInterval <= 0 {
@@ -638,6 +646,7 @@ func installFromFile(packagePath string, config *pluginConfig, plugin *PluginInf
 		PluginName: config.Name,
 		PluginVersion: config.Version,
 		PluginType: config.PluginType(),
+		AddSysTag: config.AddSysTag,
 
 		Entrypoint: cmdPath,
 		ExecutionTimeoutInSeconds: executionTimeoutInSeconds,
@@ -764,9 +773,18 @@ func (pm *PluginManager) executePluginOnlineOrLocal(fetchOptions *ExecFetchOptio
 		return
 	}
 	exitCode, errorCode, err = pm.executePlugin(fetched.Entrypoint, args, executionTimeoutInSeconds, env, false, options...)
-	// 如果是常驻插件，且调用的接口有可能改变插件状态，需要主动上报一次插件状态
-	if pluginType == PLUGIN_PERSIST && needReportStatus(args) {
-		status, err := pm.CheckAndReportPlugin(pluginName, pluginVersion, fetched.Entrypoint, executionTimeoutInSeconds, env)
+	// 常驻插件：如果是从线上拉取的插件，或者调用的接口有可能改变插件状态，需要主动上报一次插件状态
+	// 一次性插件：如果插件是从线上拉取的，需要上报一次插件状态
+	sysTagType := ""
+	if pluginType == PLUGIN_PERSIST && (needReportStatus(args) || resource == FetchFromOnline) {
+		if resource == FetchFromOnline {
+			if fetched.AddSysTag {
+				sysTagType = AddSysTag
+			} else if len(fetched.EnvPrePluginDir) != 0 {
+				sysTagType = RemoveSysTag
+			}
+		}
+		status, err := pm.CheckAndReportPlugin(pluginName, pluginVersion, fetched.Entrypoint, executionTimeoutInSeconds, env, sysTagType)
 		log.GetLogger().WithFields(log.Fields{
 			"pluginName":    pluginName,
 			"pluginVersion": pluginVersion,
@@ -775,6 +793,13 @@ func (pm *PluginManager) executePluginOnlineOrLocal(fetchOptions *ExecFetchOptio
 			"env":           env,
 			"status":        status,
 		}).WithError(err).Infof("CheckAndReportPlugin")
+	} else if pluginType == PLUGIN_ONCE && resource == FetchFromOnline  {
+		if fetched.AddSysTag {
+			sysTagType = AddSysTag
+		} else if len(fetched.EnvPrePluginDir) != 0 {
+			sysTagType = RemoveSysTag
+		}
+		pm.ReportPluginStatus(pluginName, pluginVersion, ONCE_INSTALLED, sysTagType)
 	}
 	return
 }
@@ -797,6 +822,7 @@ func queryFromLocalOnly(pluginName string, pluginVersion string) (*Fetched, Exit
 		PluginName: localInfo.Name,
 		PluginVersion: localInfo.Version,
 		PluginType: localInfo.PluginType(),
+		AddSysTag: localInfo.AddSysTag,
 
 		Entrypoint: filepath.Join(envPluginDir, localInfo.RunPath),
 		ExecutionTimeoutInSeconds: executionTimeoutInSeconds,
@@ -958,6 +984,7 @@ func installFromOnline(onlineInfo *PluginInfo, timeout time.Duration, localArch 
 	// 接口返回的插件信息中没有HeartbeatInterval字段，需要以插件包中的config.json为准
 	onlineInfo.HeartbeatInterval = config.HeartbeatInterval
 	onlineInfo.SetPluginType(config.PluginType())
+	onlineInfo.AddSysTag = config.AddSysTag
 
 	cmdPath := filepath.Join(unzipdir, config.RunPath)
 	// 检查系统类型和架构是否符合
@@ -1012,6 +1039,7 @@ func installFromOnline(onlineInfo *PluginInfo, timeout time.Duration, localArch 
 		PluginName: config.Name,
 		PluginVersion: config.Version,
 		PluginType: config.PluginType(),
+		AddSysTag: config.AddSysTag,
 
 		Entrypoint: cmdPath,
 		ExecutionTimeoutInSeconds: executionTimeoutInSeconds,
@@ -1179,7 +1207,7 @@ func (pm *PluginManager) VerifyPlugin(fetchOptions *VerifyFetchOptions, executeP
 }
 
 // 向服务端上报某个插件状态
-func (pm *PluginManager) ReportPluginStatus(pluginName, pluginVersion, status string) error {
+func (pm *PluginManager) ReportPluginStatus(pluginName, pluginVersion, status string, sysTagType string) error {
 	if len(pluginName) > PLUGIN_NAME_MAXLEN {
 		pluginName = pluginName[:PLUGIN_NAME_MAXLEN]
 	}
@@ -1192,6 +1220,7 @@ func (pm *PluginManager) ReportPluginStatus(pluginName, pluginVersion, status st
 				Name:    pluginName,
 				Version: pluginVersion,
 				Status:  status,
+				SysTagType: sysTagType,
 			},
 		},
 	}
@@ -1213,7 +1242,7 @@ func (pm *PluginManager) ReportPluginStatus(pluginName, pluginVersion, status st
 }
 
 // 检查并上报常驻插件状态
-func (pm *PluginManager) CheckAndReportPlugin(pluginName, pluginVersion, cmdPath string, timeout int, env []string) (status string, err error) {
+func (pm *PluginManager) CheckAndReportPlugin(pluginName, pluginVersion, cmdPath string, timeout int, env []string, sysTagType string) (status string, err error) {
 	exitCode := 0
 	status = PERSIST_UNKNOWN
 	exitCode, _, err = pm.executePlugin(cmdPath, []string{"--status"}, timeout, env, true)
@@ -1225,7 +1254,7 @@ func (pm *PluginManager) CheckAndReportPlugin(pluginName, pluginVersion, cmdPath
 	} else {
 		status = PERSIST_RUNNING
 	}
-	return status, pm.ReportPluginStatus(pluginName, pluginVersion, status)
+	return status, pm.ReportPluginStatus(pluginName, pluginVersion, status, sysTagType)
 }
 
 func needReportStatus(paramsList []string) bool {

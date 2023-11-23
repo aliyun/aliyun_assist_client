@@ -97,24 +97,18 @@ func NewTask(taskInfo models.RunTaskInfo, scheduleLocation *time.Location, onFin
 	return task
 }
 
-func tryRead(stdoutWrite, stderrWrite io.Reader, out *bytes.Buffer) {
-	buf_stdout := make([]byte, 1024)
-	n, _ := stdoutWrite.Read(buf_stdout)
-	buf_stderr := make([]byte, 1024)
-	m, _ := stderrWrite.Read(buf_stderr)
+func tryRead(stdouterrWrite io.Reader, out *bytes.Buffer) {
+	buf_stdout := make([]byte, 2048)
+	n, _ := stdouterrWrite.Read(buf_stdout)
 	out.Write(buf_stdout[:n])
-	out.Write(buf_stderr[:m])
 }
 
-func tryReadAll(stdoutWrite, stderrWrite io.Reader, out *bytes.Buffer) {
+func tryReadAll(stdouterrWrite io.Reader, out *bytes.Buffer) {
 	for {
-		buf_stdout := make([]byte, 1024)
-		n, _ := stdoutWrite.Read(buf_stdout)
-		buf_stderr := make([]byte, 1024)
-		m, _ := stderrWrite.Read(buf_stderr)
+		buf_stdout := make([]byte, 2048)
+		n, _ := stdouterrWrite.Read(buf_stdout)
 		out.Write(buf_stdout[:n])
-		out.Write(buf_stderr[:m])
-		if m == 0 && n == 0 {
+		if n == 0 {
 			break
 		}
 	}
@@ -233,8 +227,7 @@ func (task *Task) Run() (taskerrors.ErrorCode, error) {
 	}
 
 	taskLogger.Info("Prepare command process")
-	var stdoutWrite process.SafeBuffer
-	var stderrWrite process.SafeBuffer
+	var stdouterrWrite process.SafeBuffer
 
 	task.startTime = time.Now()
 	task.monotonicStartTimestamp = timetool.ToAccurateTime(task.startTime.Local())
@@ -275,15 +268,20 @@ func (task *Task) Run() (taskerrors.ErrorCode, error) {
 			select {
 			case <-ticker.C:
 				if atomic.LoadUint32(&task.data_sended) > defaultQuotoPre {
-					return
+					tryRead(&stdouterrWrite, &task.output)
+					if reported := task.sendRunningOutput("", lastReportOutputTime); reported{
+						lastReportOutputTime = time.Now()
+					}
+					taskLogger.Infof("Running output sent: %d bytes, just report running no output sent", atomic.LoadUint32(&task.data_sended))
+				} else {
+					var running_output bytes.Buffer
+					tryRead(&stdouterrWrite, &running_output)
+					if reported := task.sendRunningOutput(running_output.String(), lastReportOutputTime); reported{
+						lastReportOutputTime = time.Now()
+					}
+					atomic.AddUint32(&task.data_sended, uint32(running_output.Len()))
+					taskLogger.Infof("Running output sent: %d bytes", atomic.LoadUint32(&task.data_sended))
 				}
-				var running_output bytes.Buffer
-				tryRead(&stdoutWrite, &stderrWrite, &running_output)
-				if reported := task.sendRunningOutput(running_output.String(), lastReportOutputTime); reported{
-					lastReportOutputTime = time.Now()
-				}
-				atomic.AddUint32(&task.data_sended, uint32(running_output.Len()))
-				taskLogger.Infof("Running output sent: %d bytes", atomic.LoadUint32(&task.data_sended))
 			case <-ctx.Done():
 				return
 			}
@@ -292,7 +290,7 @@ func (task *Task) Run() (taskerrors.ErrorCode, error) {
 
 	taskLogger.Info("Start command process")
 	var status int
-	task.exit_code, status, err = task.processer.SyncRun(&stdoutWrite, &stderrWrite, nil)
+	task.exit_code, status, err = task.processer.SyncRun(&stdouterrWrite, &stdouterrWrite, nil)
 	if status == process.Success {
 		taskLogger.WithFields(logrus.Fields{
 			"exitcode":   task.exit_code,
@@ -316,7 +314,7 @@ func (task *Task) Run() (taskerrors.ErrorCode, error) {
 	stopSendRunning()
 	// Wait for the goroutine sending running output to exit
 	<-stoppedSendRunning
-	tryReadAll(&stdoutWrite, &stderrWrite, &task.output)
+	tryReadAll(&stdouterrWrite, &task.output)
 
 	task.endTime = time.Now()
 	task.monotonicEndTimestamp = timetool.ToAccurateTime(timetool.ToStableElapsedTime(task.endTime, task.startTime).Local())

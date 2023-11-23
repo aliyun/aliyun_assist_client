@@ -50,6 +50,9 @@ func (webSocketChannel *WebSocketChannel) IsActive() bool {
 func (webSocketChannel *WebSocketChannel) Open() error {
 
 	// initialize the write mutex
+	logger := log.GetLogger().WithField(
+		"wssurl", webSocketChannel.Url,
+	)
 	log.GetLogger().Infoln("WebSocketChannel Open")
 	webSocketChannel.writeLock = &sync.Mutex{}
 
@@ -57,7 +60,7 @@ func (webSocketChannel *WebSocketChannel) Open() error {
 		requester.UserAgentHeader: []string{requester.UserAgentValue},
 	}
 
-	ws, err := NewWebsocketUtil(nil).OpenConnection(webSocketChannel.Url, header)
+	ws, err := NewWebsocketUtil(logger, nil).OpenConnection(webSocketChannel.Url, header)
 	if err != nil {
 		log.GetLogger().Errorln("WebSocketChannel Open failed", err)
 		return err
@@ -139,11 +142,14 @@ func (webSocketChannel *WebSocketChannel) StartPings() {
 // Close closes the corresponding connection.
 func (webSocketChannel *WebSocketChannel) Close() error {
 
+	logger := log.GetLogger().WithField(
+		"wssurl", webSocketChannel.Url,
+	)
 	log.GetLogger().Info("Closing websocket channel connection to: " + webSocketChannel.Url)
 	if webSocketChannel.IsOpen == true {
 		// Send signal to stop receiving message
 		webSocketChannel.IsOpen = false
-		return NewWebsocketUtil( nil).CloseConnection(webSocketChannel.Connection)
+		return NewWebsocketUtil(logger, nil).CloseConnection(webSocketChannel.Connection)
 	}
 
 	log.GetLogger().Debugf("Websocket channel connection to: " + webSocketChannel.Url + " is already Closed!")

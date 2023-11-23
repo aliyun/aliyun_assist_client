@@ -8,8 +8,8 @@ import (
 )
 
 func (f *CustomLogrusTextFormatter) Format(entry *logrus.Entry) ([]byte, error) {
-	if f.Fileds != nil {
-		for k, v := range f.Fileds {
+	if f.CommonFields != nil {
+		for k, v := range f.CommonFields {
 			entry.Data[k] = v
 		}
 	}

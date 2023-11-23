@@ -7,6 +7,7 @@ import (
 	"github.com/marcsauter/single"
 	"github.com/spf13/pflag"
 
+	"github.com/aliyun/aliyun_assist_client/common/envutil"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/version"
 )
@@ -87,6 +88,7 @@ func main() {
 	}
 	defer SingleAppLock.TryUnlock()
 
+	envutil.ClearExecErrDot()
 	if options.CheckUpdate {
 		// Exclusive options check
 		if options.ForceUpdate || options.LocalInstall != "" {

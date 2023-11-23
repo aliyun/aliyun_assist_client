@@ -134,15 +134,15 @@ func pluginHealthCheckScan() {
 	persistPluginCount := 0
 	pluginInfoMap := make(map[string]*PluginInfo)
 	for _, pluginInfo := range pluginInfoList {
+		if pluginInfo.IsRemoved {
+			continue
+		}
 		pluginInfoMap[pluginInfo.Name] = &pluginInfo
 		if pluginInfo.PluginType() == PLUGIN_ONCE {
 			pluginStatus := PluginStatus{
 				Name:    pluginInfo.Name,
 				Status:  ONCE_INSTALLED,
 				Version: pluginInfo.Version,
-			}
-			if pluginInfo.IsRemoved {
-				pluginStatus.Status = REMOVED
 			}
 			// 太长的名称和版本号字段进行截断
 			if len(pluginStatus.Name) > PLUGIN_NAME_MAXLEN {
@@ -176,6 +176,9 @@ func pluginHealthCheckScan() {
 		}
 
 		for _, pluginInfo := range pluginStatusList {
+			if pluginInfo.Status == REMOVED {
+				continue
+			}
 			pluginStatus := PluginStatus{
 				Name:    pluginInfo.Name,
 				Version: pluginInfo.Version,
@@ -209,6 +212,10 @@ func pluginHealthCheckScan() {
 				pluginStatusRequest.Plugin = append(pluginStatusRequest.Plugin, pluginStatus)
 			}
 		}
+	}
+	if len(pluginStatusRequest.Plugin) == 0 {
+		log.GetLogger().Infof("pluginHealthCheckScan: there is no plugin need report status")
+		return
 	}
 	requestPayloadBytes, err := json.Marshal(pluginStatusRequest)
 	if err != nil {

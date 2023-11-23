@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,7 +20,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -31,6 +30,7 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/cli"
+	"github.com/aliyun/aliyun_assist_client/common/executil"
 	jmespath "github.com/jmespath/go-jmespath"
 )
 
@@ -371,7 +371,7 @@ func (cp *Profile) GetClientByPrivateKey(config *sdk.Config) (*sdk.Client, error
 
 func (cp *Profile) GetClientByExternal(config *sdk.Config, ctx *cli.Context) (*sdk.Client, error) {
 	args := strings.Fields(cp.ProcessCommand)
-	cmd := exec.Command(args[0], args[1:]...)
+	cmd := executil.Command(args[0], args[1:]...)
 	buf, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, err

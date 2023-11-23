@@ -8,6 +8,7 @@ import (
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/common/requester"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 )
 
 // IWebsocketUtil is the interface for the websocketutil.
@@ -22,13 +23,14 @@ type WebsocketUtil struct {
 }
 
 
-func NewWebsocketUtil(dialerInput *websocket.Dialer) *WebsocketUtil {
+func NewWebsocketUtil(logger logrus.FieldLogger, dialerInput *websocket.Dialer) *WebsocketUtil {
 	var websocketUtil *WebsocketUtil
 
 	if dialerInput == nil {
 		websocketUtil = &WebsocketUtil{
 			dialer: websocket.DefaultDialer,
 		}
+		websocketUtil.dialer.Proxy = requester.GetProxyFunc(logger)
 	} else {
 		websocketUtil = &WebsocketUtil{
 			dialer: dialerInput,

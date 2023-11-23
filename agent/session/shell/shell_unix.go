@@ -1,3 +1,4 @@
+//go:build linux || freebsd
 // +build linux freebsd
 
 package shell
@@ -8,46 +9,50 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
-	"strings"
 	"syscall"
 
 	"github.com/creack/pty"
+	"github.com/google/shlex"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/session/channel"
 	"github.com/aliyun/aliyun_assist_client/agent/session/message"
 	"github.com/aliyun/aliyun_assist_client/agent/util/process"
+	"github.com/aliyun/aliyun_assist_client/common/executil"
 )
 
 type ShellPlugin struct {
-	id        string
-	stdin       *os.File
-	stdout      *os.File
-	cmdContent        string
-	username   string
+	id           string
+	stdin        *os.File
+	stdout       *os.File
+	cmdContent   string
+	username     string
 	passwordName string
-	dataChannel channel.ISessionChannel
-	cmd *exec.Cmd
+	dataChannel  channel.ISessionChannel
+	cmd          *exec.Cmd
 	first_ws_col uint32
 	first_ws_row uint32
-	flowLimit	int
-	sendInterval	int
+	flowLimit    int
+	sendInterval int
 }
 
 const (
-	termEnvVariable       = "TERM=xterm-256color"
-	langEnvVariable       = "LANG=C.UTF-8"
-	langEnvVariableKey    = "LANG"
-	homeEnvVariable       = "HOME=/home/"
-	default_runas_user    = "ecs-assist-user"
+	termEnvVariable    = "TERM=xterm-256color"
+	langEnvVariable    = "LANG=C.UTF-8"
+	langEnvVariableKey = "LANG"
+	homeEnvVariable    = "HOME=/home/"
+	default_runas_user = "ecs-assist-user"
 )
 
-func StartPty(plugin *ShellPlugin)( err error) {
+func StartPty(plugin *ShellPlugin) (err error) {
 	if plugin.cmdContent == "" {
-		plugin.cmd = exec.Command(shellCommand)
+		plugin.cmd = executil.Command(shellCommand)
 	} else {
-		cmdArgs := strings.Split(plugin.cmdContent," ")
-		plugin.cmd = exec.Command(cmdArgs[0], cmdArgs[1:]...)
+		cmdArgs, err := shlex.Split(plugin.cmdContent)
+		if err != nil {
+			return fmt.Errorf("split command content failed: ", err)
+		}
+		plugin.cmd = executil.Command(cmdArgs[0], cmdArgs[1:]...)
 	}
 
 	plugin.cmd.Env = append(os.Environ(), termEnvVariable)
@@ -101,7 +106,7 @@ func StartPty(plugin *ShellPlugin)( err error) {
 	return nil
 }
 
-func (p *ShellPlugin) waitPid() () {
+func (p *ShellPlugin) waitPid() {
 	go func() {
 		defer func() {
 			log.GetLogger().Infoln("stop in run waitPid")
@@ -113,7 +118,7 @@ func (p *ShellPlugin) waitPid() () {
 
 		p.cmd.Process.Kill()
 		p.cmd.Wait()
-	} ()
+	}()
 }
 
 func (p *ShellPlugin) stop() (err error) {
@@ -128,8 +133,6 @@ func (p *ShellPlugin) stop() (err error) {
 	}
 	return nil
 }
-
-
 
 func (p *ShellPlugin) SetSize(ws_col, ws_row uint32) (err error) {
 	if p.stdin == nil {
@@ -197,7 +200,7 @@ func (p *ShellPlugin) InputStreamMessageHandler(streamDataMessage message.Messag
 			} else {
 				log.GetLogger().Errorf("Parse status code err: %s", err)
 			}
-		} 
+		}
 		break
 	}
 	return nil
