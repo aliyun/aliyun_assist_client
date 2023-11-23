@@ -47,10 +47,11 @@ type PluginInfo struct {
 	RunPath           string      `json:"runPath"`
 	Timeout           string      `json:"timeout"`
 	IsPreInstalled    string      `json:"isPreInstalled"`
-	PluginType_        interface{} `json:"pluginType"`
+	PluginType_       interface{} `json:"pluginType"`
 	pluginTypeStr     string
 	HeartbeatInterval int  `json:"heartbeatInterval"`
 	IsRemoved         bool `json:"isRemoved"`
+	AddSysTag         bool `json:"addSysTag"`
 }
 
 func (pi *PluginInfo) PluginType() string {
@@ -58,7 +59,7 @@ func (pi *PluginInfo) PluginType() string {
 		switch pi.PluginType_.(type) {
 		case string:
 			pt, _ := pi.PluginType_.(string)
-			if pt == PLUGIN_ONCE  || pt == "" { // 空字符串
+			if pt == PLUGIN_ONCE || pt == "" { // 空字符串
 				pi.pluginTypeStr = PLUGIN_ONCE
 			} else if pt == PLUGIN_PERSIST {
 				pi.pluginTypeStr = PLUGIN_PERSIST

@@ -1,17 +1,20 @@
+//go:build windows
 // +build windows
 
 package util
 
 import (
-	"os/exec"
 	"bytes"
+	"os/exec"
 	"strings"
+
 	"github.com/aliyun/aliyun_assist_client/agent/util/langutil"
+	"github.com/aliyun/aliyun_assist_client/common/executil"
 )
 
 func ExeCmdNoWait(cmd string) (error, int) {
 	var command *exec.Cmd
-	command = exec.Command("cmd", "/c", cmd)
+	command = executil.Command("cmd", "/c", cmd)
 	err := command.Start()
 	if nil != err {
 		return err, 0
@@ -19,10 +22,9 @@ func ExeCmdNoWait(cmd string) (error, int) {
 	return nil, command.Process.Pid
 }
 
-
 func ExeCmd(cmd string) (error, string, string) {
 	var command *exec.Cmd
-	command = exec.Command("cmd", "/c", cmd)
+	command = executil.Command("cmd", "/c", cmd)
 	var outInfo bytes.Buffer
 	var errInfo bytes.Buffer
 	command.Stdout = &outInfo

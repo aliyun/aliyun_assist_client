@@ -1,17 +1,17 @@
+//go:build darwin || freebsd || linux || netbsd || openbsd
 // +build darwin freebsd linux netbsd openbsd
 
 package osutil
 
 import (
-	"os/exec"
-	"strings"
 	"runtime"
+	"strings"
 
 	ini "gopkg.in/ini.v1"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/common/executil"
 )
-
 
 const (
 	osReleaseFile          = "/etc/os-release"
@@ -63,7 +63,7 @@ func getPlatformDetails() (name string, version string, err error) {
 			return
 		}
 
-		if strings.Contains(contents, "CentOS") || strings.Contains(contents, "Aliyun") || strings.Contains(contents, "Alibaba"){
+		if strings.Contains(contents, "CentOS") || strings.Contains(contents, "Aliyun") || strings.Contains(contents, "Alibaba") {
 			data := strings.Split(contents, "release")
 			name = strings.TrimSpace(data[0])
 			if len(data) >= 2 {
@@ -161,7 +161,7 @@ func getPlatformDetails() (name string, version string, err error) {
 	} else if runtime.GOOS == "freebsd" {
 		log.GetLogger().Debugf(fetchingDetailsMessage, unameCommand)
 
-		if contentsBytes, err = exec.Command(unameCommand, "-sr").Output(); err != nil {
+		if contentsBytes, err = executil.Command(unameCommand, "-sr").Output(); err != nil {
 			log.GetLogger().Debugf(errorOccurredMessage, unameCommand, err)
 			return
 		}
@@ -179,7 +179,7 @@ func getPlatformDetails() (name string, version string, err error) {
 		log.GetLogger().Debugf(fetchingDetailsMessage, lsbReleaseCommand)
 
 		// platform name
-		if contentsBytes, err = exec.Command(lsbReleaseCommand, "-i").Output(); err != nil {
+		if contentsBytes, err = executil.Command(lsbReleaseCommand, "-i").Output(); err != nil {
 			log.GetLogger().Debugf(errorOccurredMessage, lsbReleaseCommand, err)
 			return
 		}
@@ -191,7 +191,7 @@ func getPlatformDetails() (name string, version string, err error) {
 		log.GetLogger().Debugf("platform name %v", name)
 
 		// platform version
-		if contentsBytes, err = exec.Command(lsbReleaseCommand, "-r").Output(); err != nil {
+		if contentsBytes, err = executil.Command(lsbReleaseCommand, "-r").Output(); err != nil {
 			log.GetLogger().Debugf(errorOccurredMessage, lsbReleaseCommand, err)
 			return
 		}

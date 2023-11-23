@@ -2,6 +2,7 @@
 // Use of this source code is governed by a zlib-style
 // license that can be found in the LICENSE file.
 
+//go:build linux || darwin || solaris || aix || freebsd
 // +build linux darwin solaris aix freebsd
 
 package service
@@ -14,6 +15,8 @@ import (
 	"log/syslog"
 	"os/exec"
 	"syscall"
+
+	"github.com/aliyun/aliyun_assist_client/common/executil"
 )
 
 func newSysLogger(name string, errs chan<- error) (Logger, error) {
@@ -65,7 +68,7 @@ func runWithOutput(command string, arguments ...string) (int, string, error) {
 }
 
 func runCommand(command string, readStdout bool, arguments ...string) (int, string, error) {
-	cmd := exec.Command(command, arguments...)
+	cmd := executil.Command(command, arguments...)
 
 	var output string
 	var stdout io.ReadCloser

@@ -4,14 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
+	"github.com/aliyun/aliyun_assist_client/agent/inventory/model"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/util/stringutil"
-
-	"github.com/aliyun/aliyun_assist_client/agent/inventory/model"
+	"github.com/aliyun/aliyun_assist_client/common/executil"
 
 	"github.com/google/uuid"
 )
@@ -44,7 +43,7 @@ func randomString(length int) string {
 var cmdExecutor = executeCommand
 
 func executeCommand(command string, args ...string) ([]byte, error) {
-	return exec.Command(command, args...).CombinedOutput()
+	return executil.Command(command, args...).CombinedOutput()
 }
 
 // executePowershellCommands executes commands in Powershell to get registry values.

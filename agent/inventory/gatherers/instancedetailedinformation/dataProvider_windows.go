@@ -1,3 +1,4 @@
+//go:build windows
 // +build windows
 
 package instancedetailedinformation
@@ -5,12 +6,11 @@ package instancedetailedinformation
 import (
 	"encoding/json"
 	"fmt"
-	"os/exec"
-
 	"strings"
 
 	"github.com/aliyun/aliyun_assist_client/agent/inventory/model"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/common/executil"
 )
 
 const (
@@ -50,7 +50,7 @@ SELECT-OBJECT ServicePackMajorVersion,BuildNumber | % { Write-Output @"
 var cmdExecutor = executeCommand
 
 func executeCommand(command string, args ...string) ([]byte, error) {
-	return exec.Command(command, args...).CombinedOutput()
+	return executil.Command(command, args...).CombinedOutput()
 }
 
 // collectPlatformDependentInstanceData collects data from the system.

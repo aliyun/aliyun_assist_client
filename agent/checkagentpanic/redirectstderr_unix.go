@@ -17,7 +17,7 @@ import (
 func RedirectStderr() error { return nil }
 
 const (
-	checkPoint              = "Check panic"
+	checkPoint = "Agent check point"
 )
 
 func CheckAgentPanic() error {

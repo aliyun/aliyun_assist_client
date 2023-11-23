@@ -16,6 +16,15 @@ var Logdir string
 
 type Fields = log.Fields
 
+// DefaultCommonFields returns preset fields for each log message. All default
+// common fields MUST be prefixed by an underscore to avoid conflict with fields
+// added later.
+func DefaultCommonFields() log.Fields {
+	return log.Fields{
+		"_pid": os.Getpid(),
+	}
+}
+
 func InitLog(filename string, logpath string, ignoreRotationError bool) {
 	if logpath == "" {
 		path, _ := os.Executable()
@@ -36,7 +45,9 @@ func InitLog(filename string, logpath string, ignoreRotationError bool) {
 	}
 
 	Log = log.New()
-	Log.SetFormatter(&CustomLogrusTextFormatter{})
+	Log.SetFormatter(&CustomLogrusTextFormatter{
+		CommonFields: DefaultCommonFields(),
+	})
 	Log.SetOutput(writer)
 	Log.SetLevel(defaultLevel)
 }

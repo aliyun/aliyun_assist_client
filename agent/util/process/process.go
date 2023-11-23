@@ -11,9 +11,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
-
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/common/executil"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 )
 
 const (
@@ -28,7 +28,7 @@ type WaitProcessResult struct {
 	err          error
 }
 
-type CmdOption func (*exec.Cmd) error
+type CmdOption func(*exec.Cmd) error
 
 type ProcessCmd struct {
 	canceledChan chan bool
@@ -41,7 +41,7 @@ type ProcessCmd struct {
 	commandOptions []CmdOption
 }
 
-func NewProcessCmd(options... CmdOption) *ProcessCmd {
+func NewProcessCmd(options ...CmdOption) *ProcessCmd {
 	p := &ProcessCmd{
 		commandOptions: options,
 	}
@@ -80,7 +80,7 @@ func (p *ProcessCmd) SetEnv(env []string) {
 }
 
 func (p *ProcessCmd) SyncRunSimple(commandName string, commandArguments []string, timeOut int) error {
-	p.command = exec.Command(commandName, commandArguments...)
+	p.command = executil.Command(commandName, commandArguments...)
 	logger := log.GetLogger().WithFields(logrus.Fields{
 		"command": p.command.Args,
 		"timeout": timeOut,
@@ -128,7 +128,7 @@ func (p *ProcessCmd) SyncRun(
 	status = Success
 	exitCode = 0
 
-	p.command = exec.Command(commandName, commandArguments...)
+	p.command = executil.Command(commandName, commandArguments...)
 	p.command.Stdout = stdoutWriter
 	p.command.Stderr = stderrWriter
 	p.command.Stdin = stdinReader
@@ -184,7 +184,7 @@ func (p *ProcessCmd) SyncRun(
 			exitCode = 1
 			return exitCode, Fail, waitProcessResult.err
 		}
-	case <- timeoutChannel:
+	case <-timeoutChannel:
 		log.GetLogger().Errorln("Timeout in run command.", commandName)
 		exitCode = 1
 		status = Timeout
@@ -208,7 +208,7 @@ func (p *ProcessCmd) Pid() int {
 
 func GetUserCredentials(sessionUser string) (uint32, uint32, []uint32, error) {
 	uidCmdArgs := append([]string{"-c"}, fmt.Sprintf("id -u %s", sessionUser))
-	cmd := exec.Command("sh", uidCmdArgs...)
+	cmd := executil.Command("sh", uidCmdArgs...)
 	out, err := cmd.Output()
 	if err != nil {
 		log.GetLogger().Errorf("Failed to retrieve uid for %s: %v", sessionUser, err)
@@ -222,7 +222,7 @@ func GetUserCredentials(sessionUser string) (uint32, uint32, []uint32, error) {
 	}
 
 	gidCmdArgs := append([]string{"-c"}, fmt.Sprintf("id -g %s", sessionUser))
-	cmd = exec.Command("sh", gidCmdArgs...)
+	cmd = executil.Command("sh", gidCmdArgs...)
 	out, err = cmd.Output()
 	if err != nil {
 		log.GetLogger().Errorf("Failed to retrieve gid for %s: %v", sessionUser, err)
@@ -237,7 +237,7 @@ func GetUserCredentials(sessionUser string) (uint32, uint32, []uint32, error) {
 
 	// Get the list of associated groups
 	groupNamesCmdArgs := append([]string{"-c"}, fmt.Sprintf("id %s", sessionUser))
-	cmd = exec.Command("sh", groupNamesCmdArgs...)
+	cmd = executil.Command("sh", groupNamesCmdArgs...)
 	out, err = cmd.Output()
 	if err != nil {
 		log.GetLogger().Errorf("Failed to retrieve groups for %s: %v", sessionUser, err)

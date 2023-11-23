@@ -3,10 +3,10 @@ package service
 import (
 	"encoding/json"
 	"fmt"
-	"os/exec"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/util/stringutil"
+	"github.com/aliyun/aliyun_assist_client/common/executil"
 
 	"github.com/aliyun/aliyun_assist_client/agent/inventory/model"
 
@@ -54,7 +54,7 @@ func mark(s string) string {
 var cmdExecutor = executeCommand
 
 func executeCommand(command string, args ...string) ([]byte, error) {
-	return exec.Command(command, args...).CombinedOutput()
+	return executil.Command(command, args...).CombinedOutput()
 }
 
 func executePowershellCommands(command, args string) (output []byte, err error) {

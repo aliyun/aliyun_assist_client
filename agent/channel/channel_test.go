@@ -49,7 +49,7 @@ func TestGshellChannel(t *testing.T) {
 			return httpmock.NewStringResponse(200, string(resp)), nil
 		})
 
-	path,_ := util.GetHybridPath()
+	path,_ := pathutil.GetHybridPath()
 	path +=  "/instance-id"
 	if util.CheckFileIsExist(path) {
 		os.Remove(path)
@@ -94,7 +94,7 @@ func TestWSChannel(t *testing.T) {
 	channel := NewWebsocketChannel(OnRecvMsg)
 	channel.IsSupported()
 
-	path, _ := util.GetHybridPath()
+	path, _ := pathutil.GetHybridPath()
 	machine_path := path + "/machine-id"
 	instance_path := path + "/instance-id"
 	util.WriteStringToFile(machine_path, "machine-id")

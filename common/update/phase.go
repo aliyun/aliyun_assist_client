@@ -17,6 +17,7 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/util/process"
 	"github.com/aliyun/aliyun_assist_client/agent/util/versionutil"
 	"github.com/aliyun/aliyun_assist_client/agent/version"
+	"github.com/aliyun/aliyun_assist_client/common/executil"
 	"github.com/aliyun/aliyun_assist_client/common/zipfile"
 )
 
@@ -29,7 +30,7 @@ func ExtractVersionStringFromURL(url string) (string, error) {
 	if len(parts) < 2 {
 		return "", errors.New("invalid url:" + url)
 	}
-	names := strings.Split(parts[len(parts) - 1], "_")
+	names := strings.Split(parts[len(parts)-1], "_")
 	if len(names) != 2 {
 		return "", errors.New("invalid url:" + url)
 	}
@@ -37,11 +38,9 @@ func ExtractVersionStringFromURL(url string) (string, error) {
 	return version, nil
 }
 
-
 func DownloadPackage(url string, savePath string, timeout time.Duration) error {
 	return util.HttpDownloadWithTimeout(url, savePath, timeout)
 }
-
 
 func CompareFileMD5(filePath string, expectedMD5 string) error {
 	computedMD5, err := util.ComputeMd5(filePath)
@@ -55,16 +54,13 @@ func CompareFileMD5(filePath string, expectedMD5 string) error {
 	return nil
 }
 
-
 func ExtractPackage(filePath string, destination string) error {
 	return zipfile.Unzip(filePath, destination)
 }
 
-
 func RemoveUpdatePackage(tempSavePath string) error {
 	return os.Remove(tempSavePath)
 }
-
 
 func ExecuteUpdateScript(updateScriptPath string) error {
 	if runtime.GOOS != "windows" {
@@ -77,9 +73,9 @@ func ExecuteUpdateScript(updateScriptPath string) error {
 	// TODO: Refactor code below as utility function
 	var cmd *exec.Cmd
 	if util.G_IsWindows {
-		cmd = exec.Command("cmd", "/c", updateScriptPath)
+		cmd = executil.Command("cmd", "/c", updateScriptPath)
 	} else {
-		cmd = exec.Command("sh", "-c", updateScriptPath)
+		cmd = executil.Command("sh", "-c", updateScriptPath)
 	}
 	var combinedBuffer process.SafeBuffer
 	cmd.Stdout = &combinedBuffer

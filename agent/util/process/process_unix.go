@@ -10,7 +10,9 @@ import (
 	"syscall"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/common/executil"
 )
+
 const sudoersFileReadWriteMode = 0640
 const sudoersFileReadOnlyMode = 0440
 
@@ -21,7 +23,7 @@ func (p *ProcessCmd) prepareProcess() error {
 	if p.command.SysProcAttr == nil {
 		p.command.SysProcAttr = &syscall.SysProcAttr{
 			Setpgid: true,
-			Pgid: 0,
+			Pgid:    0,
 		}
 	}
 
@@ -33,7 +35,7 @@ func (p *ProcessCmd) prepareProcess() error {
 	} else {
 		// append specific envs to osEnv, the value of repetitive key will be covered
 		env = os.Environ()
-		for i:=0; i<len(p.command.Env); i++ {
+		for i := 0; i < len(p.command.Env); i++ {
 			env = append(env, p.command.Env[i])
 		}
 	}
@@ -56,7 +58,7 @@ func (p *ProcessCmd) prepareProcess() error {
 
 func DoesUserExist(username string) (bool, error) {
 	shellCmdArgs := append(ShellPluginCommandArgs, fmt.Sprintf("id %s", username))
-	cmd := exec.Command(ShellPluginCommandName, shellCmdArgs...)
+	cmd := executil.Command(ShellPluginCommandName, shellCmdArgs...)
 	if err := cmd.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			// The program has exited with an exit code != 0
@@ -68,7 +70,7 @@ func DoesUserExist(username string) (bool, error) {
 }
 
 func CreateLocalAdminUser(defaultRunAsUserName string) (err error) {
-    err = nil
+	err = nil
 	userExists, _ := DoesUserExist(defaultRunAsUserName)
 
 	if userExists {
@@ -84,10 +86,10 @@ func CreateLocalAdminUser(defaultRunAsUserName string) (err error) {
 	return err
 }
 
-func  createLocalUser(defaultRunAsUserName string) error {
+func createLocalUser(defaultRunAsUserName string) error {
 
 	commandArgs := append(ShellPluginCommandArgs, fmt.Sprintf(createUserCommandFormater, defaultRunAsUserName))
-	cmd := exec.Command(ShellPluginCommandName, commandArgs...)
+	cmd := executil.Command(ShellPluginCommandName, commandArgs...)
 	if err := cmd.Run(); err != nil {
 		log.GetLogger().Errorf("Failed to create %s: %v", defaultRunAsUserName, err)
 		return err
@@ -97,7 +99,7 @@ func  createLocalUser(defaultRunAsUserName string) error {
 }
 
 // createSudoersFileIfNotPresent will create the sudoers file if not present.
-func  createSudoersFileIfNotPresent(defaultRunAsUserName string) error {
+func createSudoersFileIfNotPresent(defaultRunAsUserName string) error {
 
 	// Return if the file exists
 	if _, err := os.Stat(sudoersFile); err == nil {
@@ -123,7 +125,7 @@ func  createSudoersFileIfNotPresent(defaultRunAsUserName string) error {
 
 // changeModeOfSudoersFile will change the sudoersFile mode to 0440 (read only).
 // This file is created with mode 0640 using os.OpenFile() so needs to be updated to read only with chmod.
-func  changeModeOfSudoersFile() error {
+func changeModeOfSudoersFile() error {
 	fileMode := os.FileMode(sudoersFileReadOnlyMode)
 	if err := os.Chmod(sudoersFile, fileMode); err != nil {
 		log.GetLogger().Errorf("Failed to change mode of %s to %d: %v", sudoersFile, sudoersFileReadOnlyMode, err)
@@ -133,7 +135,7 @@ func  changeModeOfSudoersFile() error {
 	return nil
 }
 
-func (p *ProcessCmd)  addCredential () error {
+func (p *ProcessCmd) addCredential() error {
 	log.GetLogger().Infoln("addCredential")
 	uid, gid, groups, err := GetUserCredentials(p.user_name)
 	if err != nil {
@@ -148,10 +150,10 @@ func (p *ProcessCmd)  addCredential () error {
 	return nil
 }
 
-func (p *ProcessCmd)  removeCredential () error {
+func (p *ProcessCmd) removeCredential() error {
 	return nil
 }
 
-func IsUserValid (userName string, password string) error {
+func IsUserValid(userName string, password string) error {
 	return nil
 }

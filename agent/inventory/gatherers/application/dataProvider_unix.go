@@ -1,3 +1,4 @@
+//go:build darwin || freebsd || linux || netbsd || openbsd
 // +build darwin freebsd linux netbsd openbsd
 
 package application
@@ -5,14 +6,13 @@ package application
 import (
 	"encoding/json"
 	"fmt"
-	"os/exec"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
-
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
+	"github.com/aliyun/aliyun_assist_client/common/executil"
 
 	"github.com/aliyun/aliyun_assist_client/agent/inventory/model"
 	"github.com/google/uuid"
@@ -57,7 +57,7 @@ func mark(s string) string {
 var cmdExecutor = executeCommand
 
 func executeCommand(command string, args ...string) ([]byte, error) {
-	return exec.Command(command, args...).Output()
+	return executil.Command(command, args...).Output()
 }
 
 func platformInfoProvider() (name string, err error) {

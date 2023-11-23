@@ -1,18 +1,21 @@
+//go:build linux || freebsd
 // +build linux freebsd
 
 package util
 
 import (
-	"os/exec"
-	"syscall"
 	"bytes"
-	"strings"
 	"errors"
+	"os/exec"
+	"strings"
+	"syscall"
+
+	"github.com/aliyun/aliyun_assist_client/common/executil"
 )
 
 func ExeCmdNoWait(cmd string) (error, int) {
 	var command *exec.Cmd
-	command = exec.Command("sh", "-c", cmd)
+	command = executil.Command("sh", "-c", cmd)
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	err := command.Start()
 	if nil != err {
@@ -21,10 +24,9 @@ func ExeCmdNoWait(cmd string) (error, int) {
 	return nil, command.Process.Pid
 }
 
-
 func ExeCmd(cmd string) (error, string, string) {
 	var command *exec.Cmd
-	command = exec.Command("sh", "-c", cmd)
+	command = executil.Command("sh", "-c", cmd)
 	var outInfo bytes.Buffer
 	var errInfo bytes.Buffer
 	command.Stdout = &outInfo

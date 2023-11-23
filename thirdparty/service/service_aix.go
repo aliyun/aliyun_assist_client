@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"os/exec"
 	"os/signal"
 	"regexp"
 	"strconv"
@@ -16,6 +15,8 @@ import (
 	"syscall"
 	"text/template"
 	"time"
+
+	"github.com/aliyun/aliyun_assist_client/common/executil"
 )
 
 const maxPathSize = 32 * 1024
@@ -44,12 +45,12 @@ func (aixSystem) New(i Interface, c *Config) (Service, error) {
 
 func getPidOfSvcMaster() int {
 	pat := regexp.MustCompile(`\s+root\s+(\d+)\s+\d+\s+\d+\s+\w+\s+\d+\s+\S+\s+[0-9:]+\s+/usr/sbin/srcmstr`)
-	cmd := exec.Command("ps", "-ef")
+	cmd := executil.Command("ps", "-ef")
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	pid := 0
 	if err := cmd.Run(); err == nil {
-		matches := pat.FindAllStringSubmatch(out.String(),-1)
+		matches := pat.FindAllStringSubmatch(out.String(), -1)
 		for _, match := range matches {
 			pid, _ = strconv.Atoi(match[1])
 			break

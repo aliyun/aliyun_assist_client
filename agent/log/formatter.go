@@ -6,5 +6,6 @@ import (
 
 type CustomLogrusTextFormatter struct {
 	LogrusTextFormatter logrus.TextFormatter
-	Fileds              logrus.Fields
+
+	CommonFields        logrus.Fields
 }

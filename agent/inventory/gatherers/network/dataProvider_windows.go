@@ -1,3 +1,4 @@
+//go:build windows
 // +build windows
 
 package network
@@ -5,15 +6,13 @@ package network
 import (
 	"encoding/json"
 	"fmt"
-	"os/exec"
 	"regexp"
 	"strings"
 
-	"github.com/aliyun/aliyun_assist_client/agent/log"
-
 	"github.com/aliyun/aliyun_assist_client/agent/inventory/model"
-
+	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/util/jsonutil"
+	"github.com/aliyun/aliyun_assist_client/common/executil"
 )
 
 var validIPV4Address *regexp.Regexp
@@ -86,7 +85,7 @@ type NwInterface struct {
 var cmdExecutor = executeCommand
 
 func executeCommand(command string, args ...string) ([]byte, error) {
-	return exec.Command(command, args...).CombinedOutput()
+	return executil.Command(command, args...).CombinedOutput()
 }
 
 func convertToNetworkData(nwInterface NwInterface) (basicNwData model.NetworkData) {

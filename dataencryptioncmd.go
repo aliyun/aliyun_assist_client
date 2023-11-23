@@ -7,12 +7,12 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/aliyun/aliyun_assist_client/thirdparty/aliyun-cli/cli"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/aliyun-cli/i18n"
+
 	"github.com/aliyun/aliyun_assist_client/agent/cryptdata"
 	"github.com/aliyun/aliyun_assist_client/agent/ipc/client"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
-	"github.com/aliyun/aliyun_assist_client/thirdparty/aliyun-cli/cli"
-	"github.com/aliyun/aliyun_assist_client/thirdparty/aliyun-cli/i18n"
-	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 )
 
 const (
@@ -180,11 +180,12 @@ func runDataEncryptionCmd(ctx *cli.Context, args []string) error {
 	// IF write log failed, do nothing
 	log.GetLogger().SetErrorCallback(func(error){})
 	// Add field SubCmd to make log entries separated from the main process's
+	commonFields := log.DefaultCommonFields()
+	commonFields["SubCmd"] = DataEncryptSubCmd
 	log.GetLogger().SetFormatter(&log.CustomLogrusTextFormatter{
-		Fileds: logrus.Fields{
-			"SubCmd": DataEncryptSubCmd,
-		},
+		CommonFields: commonFields,
 	})
+
 	timeout := 60
 	if keyPairTimeout != "" {
 		if t, err := strconv.Atoi(keyPairTimeout); err != nil || t <= 0 {

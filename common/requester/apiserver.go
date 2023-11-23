@@ -51,44 +51,20 @@ func GetServerDomain(logger logrus.FieldLogger) (string, error) {
 	return unsafeSelectProviderForServerDomain(logger)
 }
 
+// GetExtraHTTPHeaders would provide effective extra HTTP headers only when API
+// server is determined
 func GetExtraHTTPHeaders(logger logrus.FieldLogger) (map[string]string, error) {
-	extraHeaders, err := func () (map[string]string, error) {
-		_apiServerProviderLock.RLock()
-		defer _apiServerProviderLock.RUnlock()
-		if _selectedAPIServerProvider == nil {
-			return nil, ErrNotProvided
-		}
-
-		extraHeaders, err := _selectedAPIServerProvider.ExtraHTTPHeaders(logger)
-		if err != nil {
-			logger.WithError(err).Warningf("Previously selected API server provider %s does not work for extra HTTP headers", _selectedAPIServerProvider.Name())
-		}
-		return extraHeaders, err
-	}()
-	if err == nil {
-		return extraHeaders, nil
-	}
-
-	_apiServerProviderLock.Lock()
-	defer _apiServerProviderLock.Unlock()
-	if _selectedAPIServerProvider != nil {
-		extraHeaders, err := _selectedAPIServerProvider.ExtraHTTPHeaders(logger)
-		if err == nil {
-			return extraHeaders, nil
-		}
-
-		logger.WithError(err).Warningf("Newly selected API server provider %s does not work for extra HTTP headers yet", _selectedAPIServerProvider.Name())
-	}
-
-	_, err = unsafeSelectProviderForServerDomain(logger)
-	if err != nil {
-		return nil, err
-	}
-	if _selectedAPIServerProvider != nil {
-		return _selectedAPIServerProvider.ExtraHTTPHeaders(logger)
-	} else {
+	_apiServerProviderLock.RLock()
+	defer _apiServerProviderLock.RUnlock()
+	if _selectedAPIServerProvider == nil {
 		return nil, ErrNotProvided
 	}
+
+	extraHeaders, err := _selectedAPIServerProvider.ExtraHTTPHeaders(logger)
+	if err != nil {
+		logger.WithError(err).Warningf("Previously selected API server provider %s does not work for extra HTTP headers", _selectedAPIServerProvider.Name())
+	}
+	return extraHeaders, err
 }
 
 // unsafeSelectProviderForServerDomain MUST be called with protection under

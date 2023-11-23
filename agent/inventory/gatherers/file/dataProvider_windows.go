@@ -1,3 +1,4 @@
+//go:build windows
 // +build windows
 
 package file
@@ -5,13 +6,13 @@ package file
 import (
 	"encoding/json"
 	"fmt"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/stringutil"
+	"github.com/aliyun/aliyun_assist_client/common/executil"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 
@@ -89,10 +90,10 @@ var cmdExecutor = executeCommand
 var writeFileText = writeFile
 
 func executeCommand(command string, args ...string) ([]byte, error) {
-	return exec.Command(command, args...).CombinedOutput()
+	return executil.Command(command, args...).CombinedOutput()
 }
 
-//expand function expands windows environment variables
+// expand function expands windows environment variables
 func expand(s string, mapping func(string) string) (newStr string, err error) {
 	newStr, err = stringutil.ReplaceMarkedFields(s, "%", "%", mapping)
 	if err != nil {
@@ -181,7 +182,7 @@ func getPowershellCmd(paths []string) (cmd string, err error) {
 	return
 }
 
-//getMetaData creates powershell script for getting file metadata and executes the script
+// getMetaData creates powershell script for getting file metadata and executes the script
 func getMetaDataForFiles(paths []string) (fileInfo []model.FileData, err error) {
 	var cmd string
 	cmd, err = getPowershellCmd(paths)
