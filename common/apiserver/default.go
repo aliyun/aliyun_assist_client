@@ -15,7 +15,6 @@ var (
 	}
 
 	defaultAPIServerProviders = []requester.APIServerProvider{
-		_envProvider,
 		_hybridModeProvider,
 		_generalProvider,
 	}

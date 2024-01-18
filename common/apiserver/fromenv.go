@@ -34,16 +34,3 @@ func (*EnvironmentVariableProvider) CACertificate(logger logrus.FieldLogger) ([]
 
 	return pemCerts, nil
 }
-
-func (*EnvironmentVariableProvider) ServerDomain(logger logrus.FieldLogger) (string, error) {
-	domain := os.Getenv("ALIYUN_ASSIST_SERVER_HOST")
-	if domain == "" {
-		return "", requester.ErrNotProvided
-	}
-
-	return domain, nil
-}
-
-func (*EnvironmentVariableProvider) ExtraHTTPHeaders(logger logrus.FieldLogger) (map[string]string, error) {
-	return nil, nil
-}
