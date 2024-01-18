@@ -38,6 +38,11 @@ func (*HybridModeProvider) Name() string {
 }
 
 func (p *HybridModeProvider) ServerDomain(logger logrus.FieldLogger) (string, error) {
+	if domain := os.Getenv("ALIYUN_ASSIST_SERVER_HOST"); domain != "" {
+		logger.Info("Get host from env ALIYUN_ASSIST_SERVER_HOST: ", domain)
+		return domain, nil
+	}
+
 	regionId, err := p.RegionId(logger)
 	if regionId == "" || err != nil {
 		return "", requester.ErrNotProvided

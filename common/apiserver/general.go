@@ -70,6 +70,12 @@ func (*GeneralProvider) CACertificate(logger logrus.FieldLogger) ([]byte, error)
 }
 
 func (p *GeneralProvider) ServerDomain(logger logrus.FieldLogger) (string, error) {
+	// 0. Retrieve domain from env
+	if domain := os.Getenv("ALIYUN_ASSIST_SERVER_HOST"); domain != "" {
+		logger.Info("Get host from env ALIYUN_ASSIST_SERVER_HOST: ", domain)
+		return domain, nil
+	}
+	
 	// 1. Read region id cached in file if exists
 	regionId := getRegionIdInFile()
 	if regionId != "" {
