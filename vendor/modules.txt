@@ -8,6 +8,10 @@ github.com/Microsoft/go-winio/pkg/guid
 # github.com/StackExchange/wmi v0.0.0-20210224194228-fe8f1750fd46
 ## explicit
 github.com/StackExchange/wmi
+# github.com/agiledragon/gomonkey/v2 v2.11.0
+## explicit; go 1.14
+github.com/agiledragon/gomonkey/v2
+github.com/agiledragon/gomonkey/v2/creflect
 # github.com/aliyun/alibaba-cloud-sdk-go v1.61.1491
 ## explicit; go 1.13
 github.com/aliyun/alibaba-cloud-sdk-go/sdk
@@ -34,7 +38,7 @@ github.com/creack/pty
 # github.com/davecgh/go-spew v1.1.1
 ## explicit
 github.com/davecgh/go-spew/spew
-# github.com/docker/distribution v2.8.1+incompatible
+# github.com/docker/distribution v2.8.2+incompatible
 ## explicit
 github.com/docker/distribution/digestset
 github.com/docker/distribution/reference
@@ -256,10 +260,10 @@ go.etcd.io/bbolt
 # go.uber.org/atomic v1.11.0
 ## explicit; go 1.18
 go.uber.org/atomic
-# golang.org/x/crypto v0.11.0
+# golang.org/x/crypto v0.14.0
 ## explicit; go 1.17
 golang.org/x/crypto/ssh/terminal
-# golang.org/x/net v0.12.0
+# golang.org/x/net v0.17.0
 ## explicit; go 1.17
 golang.org/x/net/html
 golang.org/x/net/html/atom
@@ -276,9 +280,8 @@ golang.org/x/net/trace
 # golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 ## explicit
 golang.org/x/sync/semaphore
-# golang.org/x/sys v0.10.0
+# golang.org/x/sys v0.13.0
 ## explicit; go 1.17
-golang.org/x/sys/internal/unsafeheader
 golang.org/x/sys/plan9
 golang.org/x/sys/unix
 golang.org/x/sys/windows
@@ -286,10 +289,10 @@ golang.org/x/sys/windows/registry
 golang.org/x/sys/windows/svc
 golang.org/x/sys/windows/svc/eventlog
 golang.org/x/sys/windows/svc/mgr
-# golang.org/x/term v0.10.0
+# golang.org/x/term v0.13.0
 ## explicit; go 1.17
 golang.org/x/term
-# golang.org/x/text v0.11.0
+# golang.org/x/text v0.13.0
 ## explicit; go 1.17
 golang.org/x/text/encoding
 golang.org/x/text/encoding/charmap

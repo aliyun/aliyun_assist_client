@@ -19,24 +19,25 @@ type OutputInfo struct {
 }
 
 type RunTaskInfo struct {
-	InstanceId      string `json:"instanceId"`
-	CommandType     string `json:"type"`
-	TaskId          string `json:"taskID"`
-	CommandId       string `json:"commandId"`
-	EnableParameter bool   `json:"enableParameter"`
-	TimeOut         string `json:"timeOut"`
-	CommandName     string `json:"commandName"`
-	Content         string `json:"commandContent"`
-	WorkingDir      string `json:"workingDirectory"`
-	Args            string `json:"args"`
-	Cronat          string `json:"cron"`
-	Username        string `json:"username"`
-	Password        string `json:"windowsPasswordName"`
-	CreationTime    int64 `json:"creationTime"`
-	ContainerId     string `json:"containerId"`
-	ContainerName   string `json:"containerName"`
+	InstanceId        string            `json:"instanceId"`
+	CommandType       string            `json:"type"`
+	TaskId            string            `json:"taskID"`
+	CommandId         string            `json:"commandId"`
+	EnableParameter   bool              `json:"enableParameter"`
+	TimeOut           string            `json:"timeOut"`
+	CommandName       string            `json:"commandName"`
+	InvokeVersion     int               `json:"invokeVersion"`
+	Content           string            `json:"commandContent"`
+	WorkingDir        string            `json:"workingDirectory"`
+	Args              string            `json:"args"`
+	Cronat            string            `json:"cron"`
+	Username          string            `json:"username"`
+	Password          string            `json:"windowsPasswordName"`
+	CreationTime      int64             `json:"creationTime"`
+	ContainerId       string            `json:"containerId"`
+	ContainerName     string            `json:"containerName"`
 	BuiltinParameters map[string]string `json:"builtInParameter"`
 
-	Output          OutputInfo
-	Repeat          RunTaskRepeatType
+	Output OutputInfo
+	Repeat RunTaskRepeatType
 }

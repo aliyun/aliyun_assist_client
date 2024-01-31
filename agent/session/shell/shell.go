@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"os"
 	"time"
 	"unicode/utf8"
 
@@ -56,8 +55,9 @@ func NewShellPlugin(id string, cmdContent string, username string, passwordName 
 }
 
 
-func (p *ShellPlugin) Execute(dataChannel channel.ISessionChannel, cancelFlag util.CancelFlag) string {
+func (p *ShellPlugin) Execute(dataChannel channel.ISessionChannel, cancelFlag util.CancelFlag) (errorCode string, pluginErr error) {
 	p.dataChannel = dataChannel
+	errorCode = Ok
 
 	defer func() {
 		log.GetLogger().Infoln("stop in run ShellPlugin")
@@ -67,20 +67,24 @@ func (p *ShellPlugin) Execute(dataChannel channel.ISessionChannel, cancelFlag ut
 
 		if err := recover(); err != nil {
 			log.GetLogger().Errorf("Error occurred while executing plugin %s: \n%v", p.id, err)
-			os.Exit(1)
+			errorCode = Unknown_error
+			if v, ok := err.(error); ok {
+				pluginErr = v
+			} else {
+				pluginErr = fmt.Errorf(fmt.Sprint(err))
+			}
 		}
 	}()
 	log.GetLogger().Infoln("start pty")
-	var err error
-	err = StartPty(p)
-	if err != nil {
-		errorString := fmt.Errorf("Unable to start shell: %s", err)
+	pluginErr = StartPty(p)
+	if pluginErr != nil {
+		errorString := fmt.Sprintf("Unable to start shell: %s", pluginErr)
 		log.GetLogger().Errorln(errorString)
-		return Open_pty_failed
+		errorCode = Open_pty_failed
+		return
 	}
 	log.GetLogger().Infoln("start pty success")
 	cancelled := make(chan bool, 1)
-	errorCode := Ok
 	go func() {
 		cancelState := cancelFlag.Wait()
 		if cancelFlag.State() == util.Canceled{
@@ -116,7 +120,7 @@ func (p *ShellPlugin) Execute(dataChannel channel.ISessionChannel, cancelFlag ut
 		p.waitPid()
 	}
 
-	return errorCode
+	return
 }
 
 func (p *ShellPlugin) writePump() (errorCode string) {

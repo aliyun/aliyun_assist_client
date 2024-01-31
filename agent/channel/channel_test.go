@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -50,13 +51,13 @@ func TestGshellChannel(t *testing.T) {
 		})
 
 	path,_ := pathutil.GetHybridPath()
-	path +=  "/instance-id"
+	path = filepath.Join(path, "instance-id")
 	if util.CheckFileIsExist(path) {
 		os.Remove(path)
 	}
 
 	tempfile, _ := pathutil.GetCurrentPath()
-	tempfile += "temp"
+	tempfile = filepath.Join(tempfile, "temp")
 	err := util.WriteStringToFile(tempfile, mockRegion)
 	// _, err := os.Create(tempfile)
 	if err != nil {
@@ -95,8 +96,8 @@ func TestWSChannel(t *testing.T) {
 	channel.IsSupported()
 
 	path, _ := pathutil.GetHybridPath()
-	machine_path := path + "/machine-id"
-	instance_path := path + "/instance-id"
+	machine_path := filepath.Join(path, "machine-id")
+	instance_path := filepath.Join(path, "instance-id")
 	util.WriteStringToFile(machine_path, "machine-id")
 	util.WriteStringToFile(instance_path, "instance-id")
 	defer func() {

@@ -9,3 +9,12 @@ func LocalToUTF8(local string) string {
 
 	return local
 }
+
+func UTF8ToLocal(utf8String string) string {
+	if GetDefaultLang() != 0x409 {
+		tmp, _ := Utf8ToGbk([]byte(utf8String))
+		return string(tmp)
+	}
+
+	return utf8String
+}

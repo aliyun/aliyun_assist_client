@@ -17,6 +17,7 @@ type ContainerCommandOptions struct {
 	ContainerId   string
 	ContainerName string // may be filled when only container id specified
 	CommandType   string
+	InvokeVersion int
 	// CommandContent is not needed here
 	Timeout int
 	// Additional execution attributes supported by docker

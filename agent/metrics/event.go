@@ -26,6 +26,7 @@ const (
 	EVENT_SESSION_FAILED                     MetricsEventID = "agent.session.failed"
 	EVENT_PERF_CPU_OVERLOAD                  MetricsEventID = "agent.pref.cup.overload"
 	EVENT_PERF_MEM_OVERLOAD                  MetricsEventID = "agent.pref.mem.overload"
+	EVENT_PERF_SAMPLE                        MetricsEventID = "agent.pref.sample"
 	EVENT_BASE_STARTUP                       MetricsEventID = "agent.startup"
 	EVENT_BASE_SHUTDOWN_FAILED               MetricsEventID = "agent.shutdown.failed"
 	EVENT_BASE_VIRTIO                        MetricsEventID = "agent.virtio"
@@ -306,6 +307,18 @@ func GetMemOverloadEvent(keywords ...string) *MetricsEvent {
 		Category:    EVENT_CATEGORY_PERF,
 		SubCategory: EVENT_SUBCATEGORY_PERF_MEM,
 		EventLevel:  EVENT_LEVEL_ERROR,
+		EventTime:   time.Now().UnixNano() / 1e6,
+		Common:      getCommonInfoStr(),
+		KeyWords:    genKeyWordsStr(keywords...),
+	}
+	return event
+}
+
+func GetPerfSampleEvent(keywords ...string) *MetricsEvent {
+	event := &MetricsEvent{
+		EventId:     EVENT_PERF_SAMPLE,
+		Category:    EVENT_CATEGORY_PERF,
+		EventLevel:  EVENT_LEVEL_INFO,
 		EventTime:   time.Now().UnixNano() / 1e6,
 		Common:      getCommonInfoStr(),
 		KeyWords:    genKeyWordsStr(keywords...),

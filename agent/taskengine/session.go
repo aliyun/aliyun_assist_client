@@ -15,8 +15,6 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 )
 
-const portTaskType = "PortForwardTask"
-
 type SessionTask struct {
 	taskId       string
 	sessionId    string
@@ -78,10 +76,7 @@ func ReportSessionResult(taskID string, status string) {
 }
 
 func (sessionTask *SessionTask) isPortForwardTask() bool {
-	if sessionTask.portNumber != "" {
-		return true
-	}
-	return false
+	return sessionTask.portNumber != "" 
 }
 
 func (sessionTask *SessionTask) runTask() (string, error) {
@@ -117,14 +112,14 @@ func (sessionTask *SessionTask) runTask() (string, error) {
 
 	if err != nil {
 		log.GetLogger().Errorln("NewSessionChannel failed", err)
-		return shell.Init_channel_failed, errors.New("NewSessionChannel failed")
+		return shell.Init_channel_failed, fmt.Errorf("NewSessionChannel failed: %v", err)
 	}
 	sessionTask.sessionChannel = session_channel
 
 	err = session_channel.Open()
 	if err != nil {
 		log.GetLogger().Errorln("NewSessionChannel failed", err)
-		return shell.Open_channel_failed, errors.New("NewSessionChannel failed")
+		return shell.Open_channel_failed, fmt.Errorf("NewSessionChannel failed: %v", err)
 	}
 
 	done := make(chan int, 1)
@@ -134,10 +129,10 @@ func (sessionTask *SessionTask) runTask() (string, error) {
 		time.Sleep(1 * time.Second)
 		if sessionTask.isPortForwardTask() {
 			log.GetLogger().Infoln("run portPlugin")
-			error_code = sessionTask.portPlugin.Execute(session_channel, sessionTask.cancelFlag)
+			error_code, err = sessionTask.portPlugin.Execute(session_channel, sessionTask.cancelFlag)
 		} else {
 			log.GetLogger().Infoln("run shellPlugin")
-			error_code = sessionTask.shellPlugin.Execute(session_channel, sessionTask.cancelFlag)
+			error_code, err = sessionTask.shellPlugin.Execute(session_channel, sessionTask.cancelFlag)
 		}
 
 		done <- 1
@@ -151,7 +146,7 @@ func (sessionTask *SessionTask) runTask() (string, error) {
 		error_code = shell.Timeout
 	}
 
-	return error_code, nil
+	return error_code, err
 }
 
 func DoSessionTask(tasks []models.SessionTaskInfo) {

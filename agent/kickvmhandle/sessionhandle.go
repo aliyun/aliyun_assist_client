@@ -40,7 +40,7 @@ func startSession(params []string) error {
 			log.GetLogger().Errorln("params invalid", params)
 			return
 		}
-		taskengine.Fetch(true, params[0], taskengine.SessionTaskType, false)
+		taskengine.Fetch(true, params[0], taskengine.SessionTaskType)
 	}()
 	return nil
 }

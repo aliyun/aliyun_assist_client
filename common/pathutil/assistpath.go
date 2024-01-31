@@ -1,13 +1,14 @@
 package pathutil
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
-var scriptPath = ""
+var (
+	scriptPath = ""
+	logPath = ""
+)
 
 func MakeSurePath(path string) error {
 	return os.MkdirAll(path, os.ModePerm)
@@ -27,14 +28,7 @@ func GetCurrentPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	i := strings.LastIndex(path, "/")
-	if i < 0 {
-		i = strings.LastIndex(path, "\\")
-	}
-	if i < 0 {
-		return "", errors.New(`error: Can't find "/" or "\".`)
-	}
-	return string(path[0 : i+1]), nil
+	return filepath.Dir(path), nil
 }
 
 func SetScriptPath(path string) {
@@ -48,8 +42,32 @@ func GetScriptPath() (string, error) {
 	var cur string
 	var err error
 	cur, err = GetCurrentPath()
+	if err != nil {
+		return "", err
+	}
 
-	path := cur + "../work/" + "script"
+	path := filepath.Join(filepath.Dir(cur), "work", "script")
+	err = MakeSurePath(path)
+	return path, err
+}
+
+func SetLogPath(path string) {
+	logPath = path
+	MakeSurePath(logPath)
+}
+
+func GetLogPath() (string, error) {
+	if logPath != "" {
+		return logPath, nil
+	}
+	var cur string
+	var err error
+	cur, err = GetCurrentPath()
+	if err != nil {
+		return "", err
+	}
+
+	path := filepath.Join(cur, "log")
 	err = MakeSurePath(path)
 	return path, err
 }
@@ -58,8 +76,11 @@ func GetHybridPath() (string, error) {
 	var cur string
 	var err error
 	cur, err = GetCurrentPath()
+	if err != nil {
+		return "", err
+	}
 
-	path := cur + "../hybrid"
+	path := filepath.Join(filepath.Dir(cur), "hybrid")
 	err = MakeSurePath(path)
 	return path, err
 }
@@ -127,7 +148,7 @@ func GetCachePath() (string, error) {
 		return "", err
 	}
 
-	path := filepath.Join(cur, "..", "cache")
+	path := filepath.Join(filepath.Dir(cur), "cache")
 	MakeSurePath((path))
 	return path, err
 }
@@ -137,8 +158,7 @@ func GetPluginPath() (string , error) {
 	if err != nil {
 		return "", err
 	}
-	// Use filepath.Join() to clean the parent directory element `..` in path
-	path := filepath.Join(cur, "..", "plugin")
+	path := filepath.Join(filepath.Dir(cur), "plugin")
 	err = MakeSurePath(path)
 	return path, err
 }

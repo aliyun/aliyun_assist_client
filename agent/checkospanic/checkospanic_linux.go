@@ -1,6 +1,11 @@
 package checkospanic
 
 import (
+	"bufio"
+	"bytes"
+	"compress/flate"
+	"encoding/base64"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -14,18 +19,42 @@ import (
 )
 
 const (
-	kdumpPath       = "/var/crash"
-	kdumpConfigPath = "/etc/kdump.conf"
-	vmcoreDmesgFile = "vmcore-dmesg.txt"
+	kdumpPath            = "/var/crash"
+	kdumpConfigPath      = "/etc/kdump.conf"
+	vmcoreDmesgFile      = "vmcore-dmesg.txt"
+
+	maxLinesBeforePanicInfo  = 200
+	maxLinesAfterPanicInfo   = 300
 )
 
 var (
 	// 127.0.0.1-2023-07-05-20:51:21 or <hostname>-2023-07-05-20:51:21
 	vmcorePathRegex      = regexp.MustCompile(`^(?:[\w.-]+)-(\d{4}-\d{2}-\d{2}-\d{2}:\d{2}:\d{2})$`)
-	kernelPanicInfoRegex = regexp.MustCompile(`^(Unable to handle kernel|BUG: unable to handle kernel|Kernel BUG at|kernel BUG at|Bad mode in|Oops|Kernel panic)`)
-	
-	startupTimestampRegex = regexp.MustCompile(`\[\s*\d+\.\d+\]`)
-	readableTimestampRegex = regexp.MustCompile(`\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}(\.\d+)?((\+|\-)\d+)?`)
+
+	rePanicInfoMatch      = regexp.MustCompile(`(?:\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}[+-]\d{4})?(?:\[\s*\d+\.\d+\])?\s*([^\n]+)`)
+	reRIPMatch            = regexp.MustCompile(`RIP.*?([\w-.]+\+0x\w+)/0x`)
+	reLinuxCallTraceMatch = regexp.MustCompile(`(\[[\d. ]+]\s+)*(<\w+> )*(\[(<\w+>)?] )?(\? )?([\w-.]+\+0x\w+)/0x`) // which comes from dmesg
+
+	panicMsgs = []string{
+		"SysRq : Crash",
+		"SysRq : Trigger a crash",
+		"SysRq : Netdump",
+		"general protection fault: ",
+		"double fault: ",
+		"divide error: ",
+		"stack segment: ",
+		"Oops: ",
+		"Kernel BUG at",
+		"kernel BUG at",
+		"BUG: unable to handle page fault for address",
+		"BUG: unable to handle kernel ",
+		"Unable to handle kernel paging request",
+		"Unable to handle kernel NULL pointer dereference",
+		"Kernel panic: ",
+		"Kernel panic - ",
+		"[Hardware Error]: ",
+		"Bad mode in ",
+	}
 )
 
 func ReportLastOsPanic() {
@@ -43,75 +72,89 @@ func ReportLastOsPanic() {
 		logger.Error("vmcore dmesg file not exist", vmcoreDmesgPath)
 		return
 	}
-	if content, err := os.ReadFile(vmcoreDmesgPath); err != nil {
-		logger.WithFields(logrus.Fields{
-			"file": vmcoreDmesgPath,
-			"err":  err,
-		}).Error("read vmcore dmesg file failed")
+	logger = logger.WithField("file", vmcoreDmesgPath)
+	var kernelPanicInfo, rip, callTrace string
+	rip, callTrace, kernelPanicInfo, rawContent, err := ParseVmcore(logger, vmcoreDmesgPath)
+	if err != nil {
+		logger.Error("parse vmcore dmesg file failed: ", err)
 		return
-	} else {
-		var kernelPanicInfo, rip, callTrace string
-		rip, callTrace, kernelPanicInfo = ParseVmcore(string(content))
-		metrics.GetLinuxGuestOSPanicEvent(
-			"rip", rip,
-			"callTrace", callTrace,
-			"kernelPanicInfo", kernelPanicInfo,
-			"crashTime", latestTime.Format("2006-01-02 15:04:05"),
-			"vmcoreDir", vmcoreDir,
-		).ReportEvent()
-		logger.Info("the latest vmcore file has reported")
 	}
+	compressedContent, err := compressFlate(rawContent)
+	if err != nil {
+		tip := fmt.Sprint("compress raw content failed: ", err)
+		logger.Error(tip)
+	}
+	metrics.GetLinuxGuestOSPanicEvent(
+		"rip", rip,
+		"callTrace", callTrace,
+		"kernelPanicInfo", kernelPanicInfo,
+		"crashTime", latestTime.Format("2006-01-02 15:04:05"),
+		"vmcoreDir", vmcoreDir,
+		"rawContent", compressedContent,
+	).ReportEvent()
+	logger.Info("the latest vmcore file has reported")
 }
 
 // ParseVmcore parse fileds `Call Trace` `RIP` `Kernel Panic` from vmcore-dmesg.txt
-func ParseVmcore(content string) (rip, callTrace, panicInfo string) {
-	var callTraceLines []string
-	var callTraceIdx int
-	inCallTrace := false
-	lines := strings.Split(string(content), "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if len(line) == 0 {
-			continue
+func ParseVmcore(logger logrus.FieldLogger, vmcoreDmesgPath string) (rip, callTrace, panicInfo, rawContent string, err error) {
+	var (
+		callTraceLines []string
+
+		rawContentBeforPanicInfo []string
+		rawContentAfterPanicInfo []string
+	)
+	var vmcoreFile *os.File
+	vmcoreFile, err = os.Open(vmcoreDmesgPath)
+	if err != nil {
+		logger.Error("open vmcore dmesg file failed: ", err)
+		return
+	}
+	defer vmcoreFile.Close()
+
+	scanner := bufio.NewScanner(vmcoreFile)
+	scanner.Split(bufio.ScanLines)
+	panicInfo, rawContentBeforPanicInfo = parsePanicInfo(scanner, maxLinesBeforePanicInfo)
+	if panicInfo == "" {
+		err = fmt.Errorf("panic info not found")
+		return
+	}
+	// found panicInfo, go on to find rip and call trace
+	var inCallTrace bool
+	var done int = 2 // two items need find: callTrace and rip
+	for done != 0 && scanner.Scan() {
+		line := scanner.Text()
+		if len(rawContentAfterPanicInfo) < maxLinesAfterPanicInfo {
+			rawContentAfterPanicInfo = append(rawContentAfterPanicInfo, line)
 		}
-		if strings.HasPrefix(line, "[") {
-			idx := strings.Index(line, "]")
-			if idx != -1 && idx < len(line)-1 {
-				line = line[idx+1:]
+		if strings.Contains(strings.ToLower(line), "call trace:") {
+			if inCallTrace {
+				break
 			}
-		} else if startupTimestampRegex.MatchString(line) {
-			idxes := startupTimestampRegex.FindStringIndex(line)
-			line = line[idxes[1]:]
-		} else if readableTimestampRegex.MatchString(line) {
-			idxes := readableTimestampRegex.FindStringIndex(line)
-			line = line[idxes[1]:]
-		} else {
+			inCallTrace = true
 			continue
 		}
 
 		if inCallTrace {
-			if len(line) > callTraceIdx && line[callTraceIdx] == ' ' {
+			if reLinuxCallTraceMatch.MatchString(line) {
 				callTraceLines = append(callTraceLines, line)
-				continue
 			} else {
-				inCallTrace = false
+				done--
 			}
 		}
 
-		if len(callTraceLines) == 0 && strings.HasPrefix(strings.TrimSpace(strings.ToLower(line)), "call trace:") {
-			callTraceLines = append(callTraceLines, "Call Trace:")
-			inCallTrace = true
-			callTraceIdx = strings.Index(strings.ToLower(line), "call trace:")
-			continue
-		}
-		line = strings.TrimSpace(line)
-		if panicInfo == "" && kernelPanicInfoRegex.MatchString(line) {
-			panicInfo = line
-		} else if rip == "" && strings.HasPrefix(line, "RIP:") {
-			rip = line
+		if rip != "" && reRIPMatch.MatchString(line) {
+			rip = reRIPMatch.FindStringSubmatch(line)[1]
+			done--
 		}
 	}
+	for len(rawContentAfterPanicInfo) < maxLinesAfterPanicInfo && scanner.Scan() {
+		rawContentAfterPanicInfo = append(rawContentAfterPanicInfo, scanner.Text())
+	}
 	callTrace = strings.Join(callTraceLines, "\n")
+	rawContent = strings.Join(rawContentBeforPanicInfo, "\n")
+	if len(rawContentAfterPanicInfo) > 0 {
+		rawContent = rawContent + "\n" + strings.Join(rawContentAfterPanicInfo, "\n")
+	}
 	return
 }
 
@@ -171,5 +214,54 @@ func FindLocalVmcoreDmesg(logger logrus.FieldLogger) (vmcoreDmesgPath, latestDir
 		return
 	}
 	vmcoreDmesgPath = filepath.Join(kdumpDirTemp, latestDir, vmcoreDmesgFile)
+	return
+}
+
+// compress input by flate algorithm, and encode by base64
+func compressFlate(input string) (string, error) {
+	if len(input) == 0 {
+		return "", nil
+	}
+	buf := new(bytes.Buffer)
+	flateWriter, err := flate.NewWriter(buf, flate.BestCompression)
+	if err != nil {
+		return "", err
+	}
+	defer flateWriter.Close()
+	flateWriter.Write([]byte(input))
+	flateWriter.Flush()
+	return base64.StdEncoding.EncodeToString(buf.Bytes()), nil
+}
+
+// Find the first panicInfo log and return the contents of the n logs before it
+func parsePanicInfo(scanner *bufio.Scanner, n int) (panicInfo string, content []string) {
+	ringbuf := make(chan string, n)
+	var found bool
+	for !found && scanner.Scan() {
+		line := scanner.Text()
+		select {
+		case ringbuf<-line:
+		default:
+			<-ringbuf
+			ringbuf<-line
+		}
+		for _, panicMsg := range panicMsgs {
+			if strings.Contains(line, panicMsg) {
+				panicInfo = rePanicInfoMatch.FindStringSubmatch(line)[1] //获取关键信息
+				found = true
+				break
+			}
+		}
+	}
+	content = make([]string, 0, n)
+	var done bool
+	for !done {
+		select {
+		case line := <-ringbuf:
+			content = append(content, line)
+		default:
+			done = true
+		}
+	}
 	return
 }

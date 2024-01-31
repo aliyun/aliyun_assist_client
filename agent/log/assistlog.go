@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 	rotatelogs "github.com/aliyun/aliyun_assist_client/thirdparty/file-rotatelogs"
 	log "github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 	"github.com/pkg/errors"
@@ -12,7 +13,6 @@ import (
 
 var Log *log.Logger
 var defaultLevel log.Level = log.InfoLevel
-var Logdir string
 
 type Fields = log.Fields
 
@@ -26,18 +26,16 @@ func DefaultCommonFields() log.Fields {
 }
 
 func InitLog(filename string, logpath string, ignoreRotationError bool) {
-	if logpath == "" {
-		path, _ := os.Executable()
-		Logdir, _ = filepath.Abs(filepath.Dir(path))
-	} else {
-		Logdir = logpath
+	if logpath != "" {
+		pathutil.SetLogPath(filepath.Join(logpath, "log"))
 	}
+	logdir, _ := pathutil.GetLogPath()
 
 	writer, err := rotatelogs.New(
-		Logdir+"/log/"+filename+".%Y%m%d",
+		filepath.Join(logdir, filename+".%Y%m%d"),
 		rotatelogs.WithMaxAge(time.Duration(24*30)*time.Hour),    //最长保留30天
 		rotatelogs.WithRotationTime(time.Duration(24)*time.Hour), //每天进行一次日志切割
-		rotatelogs.WithLinkName(Logdir+"/log/"+filename),         // 为日志文件创建一个名字不变的链接
+		rotatelogs.WithLinkName(filepath.Join(logdir, filename)),         // 为日志文件创建一个名字不变的链接
 		rotatelogs.IgnoreRotationError(ignoreRotationError),
 	)
 	if err != nil {

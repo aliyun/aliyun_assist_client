@@ -38,6 +38,11 @@ func (*HybridModeProvider) Name() string {
 }
 
 func (p *HybridModeProvider) ServerDomain(logger logrus.FieldLogger) (string, error) {
+	if domain := os.Getenv("ALIYUN_ASSIST_SERVER_HOST"); domain != "" {
+		logger.Info("Get host from env ALIYUN_ASSIST_SERVER_HOST: ", domain)
+		return domain, nil
+	}
+
 	regionId, err := p.RegionId(logger)
 	if regionId == "" || err != nil {
 		return "", requester.ErrNotProvided
@@ -64,7 +69,6 @@ func (*HybridModeProvider) ExtraHTTPHeaders(logger logrus.FieldLogger) (map[stri
 	if !IsHybrid() {
 		return nil, requester.ErrNotProvided
 	}
-
 	u4 := uuid.New()
 	str_request_id := u4.String()
 
@@ -75,13 +79,13 @@ func (*HybridModeProvider) ExtraHTTPHeaders(logger logrus.FieldLogger) (map[stri
 	var path string
 	path, _ = pathutil.GetHybridPath()
 
-	content, _ := os.ReadFile(path + "/instance-id")
+	content, _ := os.ReadFile(filepath.Join(path, "instance-id"))
 	instance_id = string(content)
 
 	mid, _ := machineid.GetMachineID()
 
 	input := instance_id + mid + str_timestamp + str_request_id
-	pri_key, _ := os.ReadFile(path + "/pri-key")
+	pri_key, _ := os.ReadFile(filepath.Join(path, "pri-key"))
 	output := rsaSign(logger, input, string(pri_key))
 	logger.Infoln(input, output)
 

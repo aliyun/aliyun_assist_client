@@ -1,9 +1,12 @@
 package update
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -13,6 +16,7 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/process"
 	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 	libupdate "github.com/aliyun/aliyun_assist_client/common/update"
@@ -24,8 +28,9 @@ const (
 )
 
 var (
-	ErrPreparationTimeout = errors.New("Updating preparation phase timeout")
-	ErrUpdatorNotFound    = errors.New("Updator is required but not found")
+	ErrPreparationTimeout   = errors.New("Updating preparation phase timeout")
+	ErrUpdatorNotFound      = errors.New("Updator is required but not found")
+	ErrUpdatorNotExecutable = errors.New("Updator is not executable")
 
 	errFailurePlaceholder = errors.New("Failed to execute update script via updator but no error returned")
 	errTimeoutPlaceholder = errors.New("Executing update script via updator timeout")
@@ -127,6 +132,13 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 		extrainfo = fmt.Sprintf("updatorPath=%s", updatorPath)
 		return wrapErr
 	}
+	if !util.CheckFileIsExecutable(updatorPath) {
+		wrapErr := fmt.Errorf("%w: %s is not executable", ErrUpdatorNotExecutable, updatorPath)
+		log.GetLogger().WithError(wrapErr).Errorln("Updating has been disabled due to updator is not executable")
+		errmsg = wrapErr.Error()
+		extrainfo = fmt.Sprintf("updatorPath=%s", updatorPath)
+		return wrapErr
+	}
 
 	// WARNING: Loose timeout limit: only breaks preparation phase after action
 	// finished
@@ -180,6 +192,22 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 	// finished
 	if preparationTimedOut(startTime, preparationTimeout) {
 		errmsg = fmt.Sprintf("after FetchUpdateInfo timeout: %s", ErrPreparationTimeout.Error())
+		extrainfo = fmt.Sprintf("preparationTimeout=%s", preparationTimeout.String())
+		return ErrPreparationTimeout
+	}
+
+	// Check if target version's directory existed locally
+	updateScriptPath, err := checkLocalDirectory(updateInfo)
+	if err != nil {
+		log.GetLogger().WithError(err).Errorf("Check local directory failed")
+	} else {
+		return executeUpdateScript(updateScriptPath)
+	}
+
+	// WARNING: Loose timeout limit: only breaks preparation phase after action
+	// finished
+	if preparationTimedOut(startTime, preparationTimeout) {
+		errmsg = fmt.Sprintf("after checkLocalDirectory timeout: %s", ErrPreparationTimeout.Error())
 		extrainfo = fmt.Sprintf("preparationTimeout=%s", preparationTimeout.String())
 		return ErrPreparationTimeout
 	}
@@ -255,7 +283,7 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 	// Actions contained in below function may occupy much CPU, so criticalActionRunning
 	// flag is set to indicate perfmon module and would be unset automatically
 	// when function ends.
-	updateScriptPath, err := func() (string, error) {
+	updateScriptPath, err = func() (string, error) {
 		_cpuIntensiveActionRunning.Set()
 		defer _cpuIntensiveActionRunning.Clear()
 
@@ -405,62 +433,162 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 
 	log.GetLogger().Infof("Update script of new version is %s", updateScriptPath)
 
+	
+	return executeUpdateScript(updateScriptPath)
+}
+
+func executeUpdateScript(updateScriptPath string) error {
 	// Actions contained in below function may occupy much CPU, so
 	// criticalActionRunning flag is set to indicate perfmon module and unset
 	// automatically when function ends.
 	// NOTE: I know function below contains too much code, HOWEVER under manual
 	// test it does breaks updating procedure and crash process. Some day would
 	// be better solution for such situation.
-	return func() error {
-		_cpuIntensiveActionRunning.Set()
-		defer _cpuIntensiveActionRunning.Clear()
+	_cpuIntensiveActionRunning.Set()
+	defer _cpuIntensiveActionRunning.Clear()
 
-		// 9. Wait for existing tasks to finish
-		for guardExitLoop := false; !guardExitLoop; {
-			// defer keyword works in function scope, so closure function is neccessary
-			guardExitLoop = func() bool {
-				// Check any running tasks. Sleep 5 seconds and restart loop if exist
-				if taskengine.FetchingTaskCounter.Load() > 0 ||
-					taskengine.GetTaskFactory().IsAnyNonPeriodicTaskRunning() {
-					time.Sleep(time.Duration(5) * time.Second)
-					return false
-				}
-
-				// No running tasks: set criticalActionRunning indicator to
-				// refuse kick_vm later, and acquire lock to prevent concurrent
-				// fetching tasks
-				_criticalActionRunning.Set()
-				defer _criticalActionRunning.Clear()
-				if !taskengine.FetchingTaskLock.TryLock() {
-					time.Sleep(time.Duration(5) * time.Second)
-					return false
-				}
-				defer taskengine.FetchingTaskLock.Unlock()
-
-				// Sleep 5 seconds before double check in case fecthing tasks finished just now
+	// Wait for existing tasks to finish
+	for guardExitLoop := false; !guardExitLoop; {
+		// defer keyword works in function scope, so closure function is neccessary
+		guardExitLoop = func() bool {
+			// Check any running tasks. Sleep 5 seconds and restart loop if exist
+			if taskengine.FetchingTaskCounter.Load() > 0 ||
+				taskengine.GetTaskFactory().IsAnyNonPeriodicTaskRunning() {
 				time.Sleep(time.Duration(5) * time.Second)
-				// Double check any running tasks
-				if taskengine.FetchingTaskCounter.Load() > 0 ||
-					taskengine.GetTaskFactory().IsAnyNonPeriodicTaskRunning() {
-					// Above updatingMutexGuard should be auto released when function returns
-					return false
-				}
+				return false
+			}
 
-				// ENSURE: Mutex lock acquired and no running tasks
-				// NOTE: No strict timeout should be set for updating script
-				// execution, preventing updating script is killed after stopping
-				// service action is issued, which would cause agent of new version
-				// cannot be started correctly.
-				ExecuteUpdateScriptRunner(updateScriptPath)
-				// Agent process would be killed and code below would never be executed
-				return true
-			}()
-		}
+			// No running tasks: set criticalActionRunning indicator to
+			// refuse kick_vm later, and acquire lock to prevent concurrent
+			// fetching tasks
+			_criticalActionRunning.Set()
+			defer _criticalActionRunning.Clear()
+			if !taskengine.FetchingTaskLock.TryLock() {
+				time.Sleep(time.Duration(5) * time.Second)
+				return false
+			}
+			defer taskengine.FetchingTaskLock.Unlock()
 
-		return nil
-	}()
+			// Sleep 5 seconds before double check in case fecthing tasks finished just now
+			time.Sleep(time.Duration(5) * time.Second)
+			// Double check any running tasks
+			if taskengine.FetchingTaskCounter.Load() > 0 ||
+				taskengine.GetTaskFactory().IsAnyNonPeriodicTaskRunning() {
+				// Above updatingMutexGuard should be auto released when function returns
+				return false
+			}
+
+			// ENSURE: Mutex lock acquired and no running tasks
+			// NOTE: No strict timeout should be set for updating script
+			// execution, preventing updating script is killed after stopping
+			// service action is issued, which would cause agent of new version
+			// cannot be started correctly.
+			ExecuteUpdateScriptRunner(updateScriptPath)
+			// Agent process would be killed and code below would never be executed
+			return true
+		}()
+	}
+
+	return nil
 }
 
 func preparationTimedOut(startTime time.Time, preparationTimeout time.Duration) bool {
 	return preparationTimeout > 0 && time.Now().Sub(startTime) >= preparationTimeout
+}
+
+func checkLocalDirectory(updateInfo *libupdate.UpdateCheckResp) (updateScriptPath string, err error) {
+	logger := log.GetLogger().WithField("phase", "CheckLocalDirectory")
+	targetVersion, err := libupdate.ExtractVersionStringFromURL(updateInfo.UpdateInfo.URL)
+	if err != nil {
+		logger.WithFields(logrus.Fields{
+			"updateInfo": updateInfo,
+			"packageURL": updateInfo.UpdateInfo.URL,
+		}).WithError(err).Errorln("Failed to extract package version from URL")
+		return "", err
+	}
+	logger = logger.WithField("target", targetVersion)
+	installDir := libupdate.GetInstallDir()
+	entries, err := os.ReadDir(installDir)
+	if err != nil {
+		logger.WithFields(logrus.Fields{
+			"installDir": installDir,
+		}).WithError(err).Errorln("Failed to read install dir")
+		return "", err
+	}
+	var foundDir bool
+	for _, entry := range entries {
+		if entry.IsDir() && entry.Name() == targetVersion {
+			foundDir = true
+			break
+		}
+	}
+	if !foundDir {
+		logger.WithFields(logrus.Fields{
+			"installDir": installDir,
+		}).Errorln("Not found target directory")
+		err = fmt.Errorf("not found")
+		return "", err
+	}
+	targetDir := filepath.Join(installDir, targetVersion)
+	updateScriptPath, err = checkHashFile(logger, targetDir)
+	if err != nil {
+		return
+	}
+	if osutil.GetOsType() != osutil.OSWin {
+		versionFile := filepath.Join(installDir, "version")
+		err = os.WriteFile(versionFile, []byte(targetVersion), 0600)
+		if err != nil {
+			logger.WithFields(logrus.Fields{
+				"versionFile": versionFile,
+			}).WithError(err).Error("Write new version to version file failed")
+		}
+	}
+	return
+}
+
+func checkHashFile(logger logrus.FieldLogger, versionDir string) (updateScriptPath string, err error) {
+	logger = logger.WithField("versionDir", versionDir)
+	hashFile := filepath.Join(versionDir, "config", "hash_file")
+	hashFileCorrupted := filepath.Join(versionDir, "config", "hash_file_corrupted")
+	defer func() {
+		if err != nil {
+			// this directory is corrupted
+			os.Rename(hashFile, hashFileCorrupted)
+		}
+	}()
+	content, err := os.ReadFile(hashFile)
+	if err != nil {
+		logger.WithField("hashFile", hashFile).WithError(err).Error("Read hash file failed")
+		return
+	}
+	decoded, err := base64.StdEncoding.DecodeString(string(content))
+	if err != nil {
+		logger.WithField("hashFile", hashFile).WithError(err).Error("Decode hash file failed")
+		return
+	}
+	hashMap := make(map[string]string)
+	err = json.Unmarshal(decoded, &hashMap)
+	if err != nil {
+		logger.WithField("hashFile", hashFile).WithError(err).Error("Unmarshal hash file failed")
+		return
+	}
+	var updateScriptFound bool
+	updateScript := libupdate.GetUpdateScript()
+	for fileName := range hashMap {
+		if err = libupdate.CompareFileMD5(filepath.Join(versionDir, fileName), hashMap[fileName]); err != nil {
+			logger.WithField("fileName", fileName).WithError(err).Error("MD5 failed")
+			return
+		}
+		if !updateScriptFound && fileName == updateScript {
+			updateScriptFound = true
+		}
+	}
+	if updateScriptFound {
+		updateScriptPath = filepath.Join(versionDir, updateScript)
+		logger.Info("Check hash file success")
+	} else {
+		logger.WithField("updateScript", updateScript).Error("Not found")
+		err = fmt.Errorf("updateScript not found")
+	}
+	return
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"path/filepath"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/session/channel"
@@ -40,7 +41,7 @@ func StartPty(plugin *ShellPlugin)( err error) {
 	}
 	log.GetLogger().Infoln("finalCmd ", finalCmd)
 	exe_path,_ := pathutil.GetCurrentPath()
-	winptyDllFilePath := exe_path + "Plugin/SessionManager/winpty.dll"
+	winptyDllFilePath := filepath.Join(exe_path, "Plugin", "SessionManager", "winpty.dll")
 	var pty *winpty.WinPTY
 	if plugin.username == "" {
 		pty, err = winpty.Start(winptyDllFilePath, finalCmd, defaultConsoleCol, defaultConsoleRow, winpty.DEFAULT_WINPTY_FLAGS)

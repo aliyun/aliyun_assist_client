@@ -16,16 +16,18 @@ import (
 
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 
+	"github.com/aliyun/aliyun_assist_client/agent/flagging"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/container"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/host"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/models"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/parameters"
+	"github.com/aliyun/aliyun_assist_client/agent/taskengine/scriptmanager"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/taskerrors"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
-	"github.com/aliyun/aliyun_assist_client/agent/util/langutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/process"
 	"github.com/aliyun/aliyun_assist_client/agent/util/timetool"
+	"github.com/aliyun/aliyun_assist_client/common/langutil"
 )
 
 const (
@@ -62,21 +64,23 @@ func NewTask(taskInfo models.RunTaskInfo, scheduleLocation *time.Location, onFin
 	var processor models.TaskProcessor
 	if taskInfo.ContainerId != "" || taskInfo.ContainerName != "" {
 		processor = container.DetectContainerProcessor(&container.ContainerCommandOptions{
-			TaskId:        taskInfo.TaskId,
-			ContainerId:   taskInfo.ContainerId,
-			ContainerName: taskInfo.ContainerName,
-			CommandType:   taskInfo.CommandType,
-			Timeout:       timeout,
+			TaskId:            taskInfo.TaskId,
+			InvokeVersion: taskInfo.InvokeVersion,
+			ContainerId:       taskInfo.ContainerId,
+			ContainerName:     taskInfo.ContainerName,
+			CommandType:       taskInfo.CommandType,
+			Timeout:           timeout,
 
 			WorkingDirectory: taskInfo.WorkingDir,
 			Username:         taskInfo.Username,
 		})
 	} else {
 		processor = &host.HostProcessor{
-			TaskId:      taskInfo.TaskId,
-			CommandType: taskInfo.CommandType,
-			Repeat:      taskInfo.Repeat,
-			Timeout:     timeout,
+			TaskId:            taskInfo.TaskId,
+			InvokeVersion: taskInfo.InvokeVersion,
+			CommandType:       taskInfo.CommandType,
+			Repeat:            taskInfo.Repeat,
+			Timeout:           timeout,
 
 			CommandName:         taskInfo.CommandName,
 			WorkingDirectory:    taskInfo.WorkingDir,
@@ -118,6 +122,7 @@ func (task *Task) PreCheck(reportVerified bool) error {
 	// Reuse specified logger across whole task pre-checking phase
 	taskLogger := log.GetLogger().WithFields(logrus.Fields{
 		"TaskId": task.taskInfo.TaskId,
+		"InvokeVersion": task.taskInfo.InvokeVersion,
 		"Phase":  "Pre-checking",
 	})
 
@@ -163,6 +168,7 @@ func (task *Task) Run() (taskerrors.ErrorCode, error) {
 	// Reuse specified logger across whole task running phase
 	taskLogger := log.GetLogger().WithFields(logrus.Fields{
 		"TaskId": task.taskInfo.TaskId,
+		"InvokeVersion": task.taskInfo.InvokeVersion,
 		"Phase":  "Running",
 	})
 	taskLogger.Info("Run task")
@@ -199,15 +205,18 @@ func (task *Task) Run() (taskerrors.ErrorCode, error) {
 			return 0, errors.New("ReplaceAllParameterStore error")
 		}
 	}
-	if task.taskInfo.CommandType == "RunBatScript" {
+
+	switch task.taskInfo.CommandType {
+	case "RunBatScript":
 		content = "@echo off\r\n" + content
-	}
-	if G_IsWindows {
-		if langutil.GetDefaultLang() != 0x409 {
-			tmp, _ := langutil.Utf8ToGbk([]byte(content))
-			content = string(tmp)
+
+		fallthrough
+	case "RunPowerShellScript":
+		if !flagging.IsNormalizingCRLFDisabled() {
+			content = scriptmanager.NormalizeCRLF(content)
 		}
 	}
+	content = langutil.UTF8ToLocal(content)
 
 	if err := task.processer.Prepare(content); err != nil {
 		taskLogger.WithError(err).Errorln("Failed to prepare command process")
@@ -269,14 +278,14 @@ func (task *Task) Run() (taskerrors.ErrorCode, error) {
 			case <-ticker.C:
 				if atomic.LoadUint32(&task.data_sended) > defaultQuotoPre {
 					tryRead(&stdouterrWrite, &task.output)
-					if reported := task.sendRunningOutput("", lastReportOutputTime); reported{
+					if reported := task.sendRunningOutput("", lastReportOutputTime); reported {
 						lastReportOutputTime = time.Now()
 					}
 					taskLogger.Infof("Running output sent: %d bytes, just report running no output sent", atomic.LoadUint32(&task.data_sended))
 				} else {
 					var running_output bytes.Buffer
 					tryRead(&stdouterrWrite, &running_output)
-					if reported := task.sendRunningOutput(running_output.String(), lastReportOutputTime); reported{
+					if reported := task.sendRunningOutput(running_output.String(), lastReportOutputTime); reported {
 						lastReportOutputTime = time.Now()
 					}
 					atomic.AddUint32(&task.data_sended, uint32(running_output.Len()))
@@ -338,6 +347,7 @@ func (task *Task) Run() (taskerrors.ErrorCode, error) {
 	}
 	endTaskLogger := log.GetLogger().WithFields(logrus.Fields{
 		"TaskId": task.taskInfo.TaskId,
+		"InvokeVersion": task.taskInfo.InvokeVersion,
 		"Phase":  "Ending",
 	})
 	endTaskLogger.Info("Sent final output and state")
@@ -358,7 +368,8 @@ func (task *Task) Run() (taskerrors.ErrorCode, error) {
 }
 
 func (task *Task) sendTaskVerified() {
-	queryParams := fmt.Sprintf("?taskId=%s", task.taskInfo.TaskId)
+	queryParams := fmt.Sprintf("?taskId=%s&invokeVersion=%d",
+		task.taskInfo.TaskId, task.taskInfo.InvokeVersion)
 	url := util.GetVerifiedTaskService() + queryParams
 	util.HttpPost(url, "", "text")
 }
@@ -368,7 +379,8 @@ func (task *Task) sendTaskStart() {
 		return
 	}
 	url := util.GetRunningOutputService()
-	url += "?taskId=" + task.taskInfo.TaskId + "&start=" + strconv.FormatInt(task.monotonicStartTimestamp, 10)
+	url += fmt.Sprintf("?taskId=%s&invokeVersion=%d&start=%s", 
+		task.taskInfo.TaskId, task.taskInfo.InvokeVersion, strconv.FormatInt(task.monotonicStartTimestamp, 10))
 	url += task.wallClockQueryParams()
 	url += task.processer.ExtraLubanParams()
 
@@ -376,16 +388,11 @@ func (task *Task) sendTaskStart() {
 }
 
 func (task *Task) SendInvalidTask(param string, value string) {
-	reportInvalidTask(task.taskInfo.TaskId, param, value)
+	reportInvalidTask(task.taskInfo.TaskId, task.taskInfo.InvokeVersion, param, value)
 }
 
 func (task *Task) sendOutput(status string, output string) {
-	if G_IsWindows {
-		if langutil.GetDefaultLang() != 0x409 {
-			tmp, _ := langutil.GbkToUtf8([]byte(output))
-			output = string(tmp)
-		}
-	}
+	output = langutil.LocalToUTF8(output)
 
 	var url string
 	if status == "finished" {
@@ -393,9 +400,8 @@ func (task *Task) sendOutput(status string, output string) {
 	} else if status == "timeout" {
 		url = util.GetTimeoutOutputService()
 	} else if status == "canceled" {
-		sendStoppedOutput(task.taskInfo.TaskId, task.monotonicStartTimestamp,
-			task.monotonicEndTimestamp, task.exit_code, task.droped, output,
-			stopReasonKilled)
+		sendStoppedOutput(task.taskInfo.TaskId, task.taskInfo.InvokeVersion,
+			task.monotonicStartTimestamp, task.monotonicEndTimestamp, task.exit_code, task.droped, output, stopReasonKilled)
 		return
 	} else if status == "failed" {
 		url = util.GetErrorOutputService()
@@ -403,8 +409,9 @@ func (task *Task) sendOutput(status string, output string) {
 		return
 	}
 
-	url += "?taskId=" + task.taskInfo.TaskId + "&start=" + strconv.FormatInt(task.monotonicStartTimestamp, 10)
-	url += "&end=" + strconv.FormatInt(task.monotonicEndTimestamp, 10) + "&exitCode=" + strconv.Itoa(task.exit_code) + "&dropped=" + strconv.Itoa(task.droped)
+	url += fmt.Sprintf("?taskId=%s&invokeVersion=%d&start=%s&end=%s&exitCode=%s&dropped=%s", 
+		task.taskInfo.TaskId, task.taskInfo.InvokeVersion, strconv.FormatInt(task.monotonicStartTimestamp, 10), 
+		strconv.FormatInt(task.monotonicEndTimestamp, 10), strconv.Itoa(task.exit_code), strconv.Itoa(task.droped))
 	url += task.wallClockQueryParams()
 	url += task.processer.ExtraLubanParams()
 
@@ -424,19 +431,16 @@ func (task *Task) sendOutput(status string, output string) {
 func (task *Task) SendError(output string, errCode fmt.Stringer, errDesc string) {
 	safelyTruncatedErrDesc := langutil.SafeTruncateStringInBytes(errDesc, 255)
 	escapedErrDesc := url.QueryEscape(safelyTruncatedErrDesc)
-	queryString := fmt.Sprintf("?taskId=%s&start=%d&end=%d&exitCode=%d&dropped=%d&errCode=%s&errDesc=%s",
-		task.taskInfo.TaskId, task.monotonicStartTimestamp, task.monotonicEndTimestamp, task.exit_code,
-		task.droped, errCode.String(), escapedErrDesc)
+	queryString := fmt.Sprintf("?taskId=%s&invokeVersion=%d&start=%d&end=%d&exitCode=%d&dropped=%d&errCode=%s&errDesc=%s",
+		task.taskInfo.TaskId, task.taskInfo.InvokeVersion, task.monotonicStartTimestamp,
+		task.monotonicEndTimestamp, task.exit_code, task.droped, errCode.String(), escapedErrDesc)
 	queryString += task.wallClockQueryParams()
 	queryString += task.processer.ExtraLubanParams()
 
 	requestURL := util.GetErrorOutputService() + queryString
 
-	if len(output) > 0 && G_IsWindows {
-		if langutil.GetDefaultLang() != 0x409 {
-			tmp, _ := langutil.GbkToUtf8([]byte(output))
-			output = string(tmp)
-		}
+	if len(output) > 0 {
+		output = langutil.LocalToUTF8(output)
 	}
 
 	_, err := util.HttpPost(requestURL, output, "text")
@@ -446,9 +450,13 @@ func (task *Task) SendError(output string, errCode fmt.Stringer, errDesc string)
 	}
 }
 
-func (task *Task) Cancel() {
+// Cancel the task invocation. If quietly is false, notify server the task is canceled.
+func (task *Task) Cancel(quietly bool) {
 	task.cancelMut.Lock()
 	defer task.cancelMut.Unlock()
+	if task.canceled {
+		return
+	}
 	task.canceled = true
 	// Consistent with C++ version, end time of canceled task is set to the time
 	// of cancel operation
@@ -458,7 +466,9 @@ func (task *Task) Cancel() {
 	} else {
 		task.monotonicEndTimestamp = timetool.ToAccurateTime(timetool.ToStableElapsedTime(task.endTime, task.startTime).Local())
 	}
-	task.sendOutput("canceled", task.getReportString(task.output))
+	if !quietly {
+		task.sendOutput("canceled", task.getReportString(task.output))
+	}
 	task.processer.Cancel()
 }
 
@@ -484,15 +494,12 @@ func (task *Task) sendRunningOutput(data string, lastReportTime time.Time) bool 
 		return false
 	}
 	url := util.GetRunningOutputService()
-	url += "?taskId=" + task.taskInfo.TaskId + "&start=" + strconv.FormatInt(task.monotonicStartTimestamp, 10)
+	url += fmt.Sprintf("?taskId=%s&invokeVersion=%d&start=%s", 
+		task.taskInfo.TaskId, task.taskInfo.InvokeVersion, strconv.FormatInt(task.monotonicStartTimestamp, 10))
 	url += task.wallClockQueryParams()
 	url += task.processer.ExtraLubanParams()
-	if G_IsWindows {
-		if langutil.GetDefaultLang() != 0x409 {
-			tmp, _ := langutil.GbkToUtf8([]byte(data))
-			data = string(tmp)
-		}
-	}
+
+	data = langutil.LocalToUTF8(data)
 	util.HttpPost(url, data, "text")
 	return true
 }

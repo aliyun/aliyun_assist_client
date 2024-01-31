@@ -1,10 +1,11 @@
-//go:build linux || freebsd
-// +build linux freebsd
+//go:build darwin || freebsd || linux
+// +build darwin freebsd linux
 
 package util
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"os/exec"
 	"strings"
@@ -25,18 +26,18 @@ func ExeCmdNoWait(cmd string) (error, int) {
 }
 
 func ExeCmd(cmd string) (error, string, string) {
-	var command *exec.Cmd
-	command = executil.Command("sh", "-c", cmd)
+	return ExeCmdWithContext(context.Background(), cmd)
+}
+
+// Execute a command with timeout limit
+func ExeCmdWithContext(ctx context.Context, cmd string) (error, string, string) {
 	var outInfo bytes.Buffer
 	var errInfo bytes.Buffer
+	command := executil.CommandWithContext(ctx, "sh", "-c", cmd)
 	command.Stdout = &outInfo
 	command.Stderr = &errInfo
 	err := command.Run()
-	if nil != err {
-		return err, outInfo.String(), errInfo.String()
-	}
-
-	return nil, outInfo.String(), errInfo.String()
+	return err, outInfo.String(), errInfo.String()
 }
 
 func IsSystemdLinux() bool {

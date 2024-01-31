@@ -26,7 +26,7 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/heartbeat"
 	"github.com/aliyun/aliyun_assist_client/agent/hybrid"
 	"github.com/aliyun/aliyun_assist_client/agent/install"
-	"github.com/aliyun/aliyun_assist_client/agent/ipc/server"
+	ipcserver "github.com/aliyun/aliyun_assist_client/agent/ipc/server"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	"github.com/aliyun/aliyun_assist_client/agent/perfmon"
@@ -264,6 +264,7 @@ func (p *program) run() {
 	if err := SingleAppLock.CheckLock(); err != nil && err == single.ErrAlreadyRunning {
 		log.GetLogger().Fatal("another instance of the app is already running, exiting")
 	}
+	checkagentpanic.RedirectStdouterr()
 	G_Running = true
 	G_StopEvent = make(chan struct{})
 	channel.TryStartGshellChannel()
@@ -306,7 +307,7 @@ func (p *program) run() {
 	}()
 
 	// Check last panic and report it
-	checkagentpanic.CheckAgentPanic()
+	wrapgo.CallWithPanicHandler(checkagentpanic.CheckAgentPanic, clientreport.LogAndReportIgnorePanic)
 
 	// Check in main goroutine and update as soon as possible, which use stricter
 	// timeout limitation. NOTE: The preparation phase timeout parameter should
@@ -332,6 +333,10 @@ func (p *program) run() {
 		return
 	}
 
+	if disabled, err := flagging.DetectNormalizingCRLFDisabled(); disabled {
+		log.GetLogger().WithError(err).Warning("CRLF-normalization has been disabled due to configuration")
+	}
+
 	channel.StartChannelMgr()
 
 	if err := heartbeat.InitHeartbeatTimer(); err != nil {
@@ -339,23 +344,14 @@ func (p *program) run() {
 		return
 	}
 
+	// Start ipc server and init cryptdata package before fetching tasks, 
+	// because they may be relied on by tasks.
+	ipcserver.StartService()
+	cryptdata.Init()
+
 	// TODO: First heart-beat may fail and be failed to indicate agent is ready.
 	// Retrying should be tried here.
 	heartbeat.PingwithRetries(3)
-
-	if err := statemanager.InitStateManagerTimer(); err != nil {
-		log.GetLogger().Errorln("Failed to initialize statemanager: " + err.Error())
-	}
-
-	pluginmanager.InitPluginCheckTimer()
-	cryptdata.Init()
-
-	if err := checkkdump.CheckKdumpTimer(); err != nil {
-		log.GetLogger().Errorln("Failed to StartKdumpCheckTimer: ", err)
-	} else {
-		log.GetLogger().Infoln("Start StartKdumpCheckTimer")
-	}
-	server.StartService()
 
 	// Finally, fetching tasks could be allowed and agent starts to run normally.
 	taskengine.EnableFetchingTask()
@@ -363,14 +359,11 @@ func (p *program) run() {
 	// And also log to stdout, which would be written to systemd-journal as well
 	// as console via systemd
 	fmt.Println("Started successfully")
-	err := checkvirt.StartVirtIoVersionReport()
-	if err != nil {
-		log.GetLogger().Errorln("Failed to StartVirtIoVersionReport: " + err.Error())
-	} else {
-		log.GetLogger().Infoln("Start StartVirtIoVersionReport success")
-	}
-	// Periodic tasks are retrieved only once at startup
-	wrapgo.GoWithDefaultPanicHandler(func() {
+
+	// Periodic tasks are retrieved only once at startup.
+	// The interval between startup fetch task and the first heart-beat should 
+	// be minimized as much as possible.
+	wrapgo.CallWithDefaultPanicHandler(func() {
 		isColdstart, err := flagging.IsColdstart()
 		if err != nil {
 			log.GetLogger().WithError(err).Errorln("Error encountered when detecting cold-start flag")
@@ -384,17 +377,43 @@ func (p *program) run() {
 				"osName", osutil.GetVersion(),
 			).ReportEvent()
 		}
-
-		taskengine.Fetch(false, "", taskengine.NormalTaskType, isColdstart)
+		if !taskengine.IsStartupFetched() {
+			taskengine.Fetch(false, "", taskengine.NormalTaskType)
+		} else {
+			log.GetLogger().Infoln("Startup tasks has been fetched together with kick_off tasks")
+		}
 	})
-	// Report last os panic if panic record found
-	if isColdstart, err := flagging.IsColdstart(); err != nil || isColdstart {
-		wrapgo.GoWithDefaultPanicHandler(checkospanic.ReportLastOsPanic)
-	}
 
-	time.Sleep(time.Duration(3*60) * time.Second)
-	log.GetLogger().Infoln("Start PerfMon ......")
-	perfmon.StartSelfKillMon()
+	// Execute operations that are not time sensitive finally, minimize the interval between critical
+	// steps like fetch startup task and the first heart-beat.
+	wrapgo.CallWithDefaultPanicHandler(func() {
+		// Report last os panic if panic record found
+		if isColdstart, err := flagging.IsColdstart(); err != nil || isColdstart {
+			wrapgo.GoWithDefaultPanicHandler(checkospanic.ReportLastOsPanic)
+		}	
+
+		// Initialize non-critical periodic items, failure of initialization will not interrupt agent. 
+		if err := statemanager.InitStateManagerTimer(); err != nil {
+			log.GetLogger().Errorln("Failed to initialize statemanager: " + err.Error())
+		}
+		pluginmanager.InitPluginCheckTimer()
+		if err := checkkdump.CheckKdumpTimer(); err != nil {
+			log.GetLogger().Errorln("Failed to StartKdumpCheckTimer: ", err)
+		} else {
+			log.GetLogger().Infoln("Start StartKdumpCheckTimer")
+		}
+		err := checkvirt.StartVirtIoVersionReport()
+		if err != nil {
+			log.GetLogger().Errorln("Failed to StartVirtIoVersionReport: " + err.Error())
+		} else {
+			log.GetLogger().Infoln("Start StartVirtIoVersionReport success")
+		}
+
+		// Start self kill monitor
+		time.Sleep(time.Duration(3*60) * time.Second)
+		log.GetLogger().Infoln("Start PerfMon ......")
+		perfmon.StartSelfKillMon()
+	})
 }
 
 func (p *program) Stop(s service.Service) error {
@@ -441,11 +460,6 @@ func parseOptions(ctx *cli.Context) Options {
 func runRootCommand(ctx *cli.Context, args []string) error {
 	options := parseOptions(ctx)
 	log.InitLog("aliyun_assist_main.log", options.LogPath, false)
-	// In windows, redirect stderr to panic.txt in log directory
-	// RedirectStderr need be call after log.InitLog
-	if err := checkagentpanic.RedirectStderr(); err != nil {
-		log.GetLogger().Error("RedirectStderr failed: ", err)
-	}
 	// Redirect logging messages from kubernetes CRI client via klog to logrus
 	// used by ourselves
 	klog.SetLogger(logrusr.New(log.GetLogger()).WithName("klog"))

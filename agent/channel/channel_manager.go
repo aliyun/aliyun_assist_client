@@ -241,7 +241,7 @@ func OnRecvMsg(Msg string, ChannelType int) string {
 		}
 		if Msg == "kick_vm" {
 			go func() {
-				taskengine.Fetch(true, "", taskengine.NormalTaskType, false)			}()
+				taskengine.Fetch(true, "", taskengine.NormalTaskType)			}()
 			return "accept:" + Msg
 		} else if strings.Contains(Msg, "kick_vm agent deregister") {
 			hybrid.UnRegister(true)
@@ -295,7 +295,7 @@ func OnRecvMsg(Msg string, ChannelType int) string {
 		}
 		if gshellCmd.Arguments.Cmd == "kick_vm" {
 			go func() {
-				taskengine.Fetch(true, "", taskengine.NormalTaskType, false)			}()
+				taskengine.Fetch(true, "", taskengine.NormalTaskType)			}()
 			gshellCmdReply := GshellCmdReply{}
 			gshellCmdReply.Return.Result = 8
 			gshellCmdReply.Return.CmdOutput = "execute kick_vm success"
