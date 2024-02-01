@@ -6,21 +6,24 @@ import (
 
 var (
 	_envProvider = &EnvironmentVariableProvider{}
+	_externalExecutableProvider = &ExternalExecutableProvider{}
 	_hybridModeProvider = &HybridModeProvider{}
 	_generalProvider = &GeneralProvider{}
 
 	defaultRootCAProviders = []requester.CACertificateProvider{
 		_envProvider,
+		_externalExecutableProvider,
 		_generalProvider,
 	}
 
 	defaultAPIServerProviders = []requester.APIServerProvider{
-		_envProvider,
+		_externalExecutableProvider,
 		_hybridModeProvider,
 		_generalProvider,
 	}
 
 	defaultRegionIdProviders = []requester.RegionIdProvider{
+		_externalExecutableProvider,
 		_hybridModeProvider,
 		_generalProvider,
 	}

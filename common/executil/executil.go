@@ -1,6 +1,7 @@
 package executil
 
 import (
+	"context"
 	"errors"
 	"os/exec"
 )
@@ -19,6 +20,14 @@ func LookPath(file string) (res string, err error) {
 
 func Command(name string, arg ...string) *exec.Cmd {
 	cmd := exec.Command(name, arg...)
+	if errors.Is(cmd.Err, exec.ErrDot) {
+		cmd.Err = nil
+	}
+	return cmd
+}
+
+func CommandWithContext(ctx context.Context, name string, arg ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, name, arg...)
 	if errors.Is(cmd.Err, exec.ErrDot) {
 		cmd.Err = nil
 	}

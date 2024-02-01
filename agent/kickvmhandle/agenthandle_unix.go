@@ -1,8 +1,10 @@
+//go:build linux || freebsd
 // +build linux freebsd
 
 package kickvmhandle
 
 import (
+	"path/filepath"
 	"strings"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
@@ -32,7 +34,7 @@ func updateAgant(params []string) error {
 	if err != nil {
 		return err
 	}
-	path += "aliyun_assist_update"
+	path = filepath.Join(path, "aliyun_assist_update")
 	processer.SyncRunSimple(path, strings.Split("--check_update", " "), 10)
 	return nil
 }

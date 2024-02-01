@@ -17,7 +17,7 @@ type APIServerProvider interface {
 type CACertificateProvider interface {
 	Name() string
 
-	CACertificate(logger logrus.FieldLogger) (pemCerts []byte, err error)
+	CACertificate(logger logrus.FieldLogger, refresh bool) (pemCerts []byte, err error)
 }
 
 type RegionIdProvider interface {

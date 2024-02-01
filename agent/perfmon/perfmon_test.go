@@ -43,7 +43,7 @@ func TestStartPerfmon(t *testing.T) {
 	assert.Equal(t, t_cpu_overlaod_count > 12, true)
 	t_cpu_overlaod_count = 0
 	t_mem_overlaod_count = 0
-	t_perf = StartPerfmon(os.Getpid(), 1, func(cpusage float64, memory uint64, threads uint64) {
+	t_perf = StartPerfmon(os.Getpid(), 1, func(cpusage float64, memory uint64) {
 		if cpusage >= CPU_LIMIT {
 			t_cpu_overlaod_count += 1
 		}

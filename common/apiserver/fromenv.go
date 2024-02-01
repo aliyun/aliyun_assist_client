@@ -16,7 +16,7 @@ func (*EnvironmentVariableProvider) Name() string {
 	return "EnvironmentVariableProvider"
 }
 
-func (*EnvironmentVariableProvider) CACertificate(logger logrus.FieldLogger) ([]byte, error) {
+func (*EnvironmentVariableProvider) CACertificate(logger logrus.FieldLogger, refresh bool) ([]byte, error) {
 	certPath := os.Getenv("ALIYUN_ASSIST_CERT_PATH")
 	if certPath == "" {
 		return nil, requester.ErrNotProvided
@@ -33,17 +33,4 @@ func (*EnvironmentVariableProvider) CACertificate(logger logrus.FieldLogger) ([]
 	}
 
 	return pemCerts, nil
-}
-
-func (*EnvironmentVariableProvider) ServerDomain(logger logrus.FieldLogger) (string, error) {
-	domain := os.Getenv("ALIYUN_ASSIST_SERVER_HOST")
-	if domain == "" {
-		return "", requester.ErrNotProvided
-	}
-
-	return domain, nil
-}
-
-func (*EnvironmentVariableProvider) ExtraHTTPHeaders(logger logrus.FieldLogger) (map[string]string, error) {
-	return nil, nil
 }

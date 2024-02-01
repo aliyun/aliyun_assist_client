@@ -5,22 +5,21 @@ package checkagentpanic
 import (
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
-	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
+	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 	"os"
 	"path/filepath"
 	"strings"
 	"syscall"
-	"time"
+)
+
+const (
+	stdoutFileName = "aliyun-service-out.txt"
+	stderrFileName = "aliyun-service-err.txt"
 )
 
 var (
 	kernel32         = syscall.MustLoadDLL("kernel32.dll")
 	procSetStdHandle = kernel32.MustFindProc("SetStdHandle")
-)
-
-var (
-	lastPanicInfo      string
-	lastPanicTimestamp time.Time
 )
 
 func setStdHandle(stdhandle int32, handle syscall.Handle) error {
@@ -34,49 +33,55 @@ func setStdHandle(stdhandle int32, handle syscall.Handle) error {
 	return nil
 }
 
-// RedirectStderr must be call after log.InitLog
-func RedirectStderr() error {
-	// read last panic output
-	panicFile := filepath.Join(log.Logdir, "log", "panic.txt")
-	content, err := os.ReadFile(panicFile)
+// RedirectStdouterr redirect os.Stdout and os.Stderr to aliyun-service-err.txt
+// and aliyun-service-out.txt in log directory.
+func RedirectStdouterr() {
+	stdouterrDir, err := pathutil.GetLogPath()
 	if err != nil {
-		log.GetLogger().WithField("path", panicFile).Error("read last panic file failed: ", err)
-	} else {
-		lastPanicInfo = string(content)
-		finfo, err := os.Stat(panicFile)
+		log.GetLogger().Errorf("Get log directory %s for stdout/stderr file failed: ", stdouterrDir)
+		return
+	}
+	stdoutFile := filepath.Join(stdouterrDir, stdoutFileName)
+	stderrFile := filepath.Join(stdouterrDir, stderrFileName)
+
+	lastPanicInfo = searchPanicInfoFromFile(stderrFile)
+	if len(lastPanicInfo) > 0 {
+		finfo, err := os.Stat(stderrFile)
 		if err != nil {
-			log.GetLogger().WithField("path", panicFile).Error("get fileInfo of last panic file failed: ", err)
-		} else {
-			winFileAttr := finfo.Sys().(*syscall.Win32FileAttributeData)
-			lastPanicTimestamp = time.Unix(0, winFileAttr.LastWriteTime.Nanoseconds())
-			log.GetLogger().WithFields(logrus.Fields{
-				"path": panicFile,
-				"time": lastPanicTimestamp,
-			}).Info("get modified time of last panic file")
+			log.GetLogger().Errorf("Get stderr file[%s] info failed: %v", stderrFile, err)
 		}
+		lastPanicTimestamp = finfo.ModTime()
 	}
-	f, err := os.OpenFile(panicFile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.ModePerm)
-	if err != nil {
-		return err
+
+	if stderrF, err := os.OpenFile(stderrFile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.ModePerm); err != nil {
+		log.GetLogger().Errorf("Open file %s failed: %v", stderrFile, err)
+	} else if err = setStdHandle(syscall.STD_ERROR_HANDLE, syscall.Handle(stderrF.Fd())); err != nil {
+		stderrF.Close()
+		log.GetLogger().Errorf("Set STD_ERROR_HANDLE failed: %v", err)
+	} else {
+		os.Stderr = stderrF
+		log.GetLogger().Infof("Redirect stderr to file: %s", stderrFile)
 	}
-	// defer close(f)
-	err = setStdHandle(syscall.STD_ERROR_HANDLE, syscall.Handle(f.Fd()))
-	if err != nil {
-		return err
+
+	if stdoutF, err := os.OpenFile(stdoutFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, os.ModePerm); err != nil {
+		log.GetLogger().Errorf("Open file %s failed: %v", stdoutFile, err)
+	} else if err = setStdHandle(syscall.STD_OUTPUT_HANDLE, syscall.Handle(stdoutF.Fd())); err != nil {
+		stdoutF.Close()
+		log.GetLogger().Errorf("Set STD_OUTPUT_HANDLE failed: %v", err)
+	} else {
+		os.Stdout = stdoutF
+		log.GetLogger().Infof("Redirect stdout to file: %s", stdoutFile)
 	}
-	os.Stderr = f
-	return nil
 }
 
-func CheckAgentPanic() error {
+func CheckAgentPanic() {
 	lastPanicInfo = strings.TrimSpace(lastPanicInfo)
 	if len(lastPanicInfo) == 0 {
 		log.GetLogger().Info("Last agent panic Info is empty")
-		return nil
+		return
 	}
 	metrics.GetAgentLastPanicEvent(
 		"panicInfo", lastPanicInfo,
 		"panicTime", lastPanicTimestamp.Format("2006-01-02 15:04:05"),
 	).ReportEvent()
-	return nil
 }

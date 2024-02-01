@@ -97,7 +97,7 @@ func TestFetch(t *testing.T) {
 				})
 				defer guard.Unpatch()
 			}
-			if got := Fetch(tt.args.from_kick, tt.args.taskId, tt.args.taskType, tt.args.isColdstart); got != tt.want {
+			if got := Fetch(tt.args.from_kick, tt.args.taskId, tt.args.taskType); got != tt.want {
 				t.Errorf("Fetch() = %v, want %v", got, tt.want)
 			}
 		})

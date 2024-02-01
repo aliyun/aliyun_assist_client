@@ -23,7 +23,7 @@ func runFileTask(params []string) error {
 		return errors.New("params error")
 	}
 	go func() {
-		taskengine.Fetch(true, params[0], taskengine.NormalTaskType, false)
+		taskengine.Fetch(true, params[0], taskengine.NormalTaskType)
 	}()
 	return nil
 }
@@ -35,7 +35,7 @@ func stopFileTask(params []string) error {
 	}
 
 	go func() {
-		taskengine.Fetch(true, params[0], taskengine.NormalTaskType, false)
+		taskengine.Fetch(true, params[0], taskengine.NormalTaskType)
 	}()
 	return nil
 }

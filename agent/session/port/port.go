@@ -18,6 +18,7 @@ const (
 	Open_port_failed = "Open_port_failed"
 	Read_port_failed = "Read_port_failed"
 	IO_socket_error  = "IO_port_failed"
+	Unknown_error    = "Unknown_error"
 )
 
 const (
@@ -69,7 +70,7 @@ func (p *PortPlugin) Stop() {
 	}
 }
 
-func (p *PortPlugin) Execute(dataChannel channel.ISessionChannel, cancelFlag util.CancelFlag) string {
+func (p *PortPlugin) Execute(dataChannel channel.ISessionChannel, cancelFlag util.CancelFlag) (errorCode string, pluginErr error) {
 	p.dataChannel = dataChannel
 
 	defer func() {
@@ -80,19 +81,25 @@ func (p *PortPlugin) Execute(dataChannel channel.ISessionChannel, cancelFlag uti
 			log.GetLogger().Errorf("Error occurred while executing port plugin %s: \n%v", p.id, err)
 			// Panic in session port plugin SHOULD NOT disturb the whole agent
 			// process
+			errorCode = Unknown_error
+			if v, ok := err.(error); ok {
+				pluginErr = v
+			} else {
+				pluginErr = fmt.Errorf(fmt.Sprint(err))
+			}
 		}
 	}()
 	log.GetLogger().Infoln("start port")
-	var err error
-	if p.conn, err = net.Dial("tcp", fmt.Sprintf("%s:%d", p.targetHost, p.portNumber)); err != nil {
-		errorString := fmt.Errorf("Unable to start port: %s", err)
+	if p.conn, pluginErr = net.Dial("tcp", fmt.Sprintf("%s:%d", p.targetHost, p.portNumber)); pluginErr != nil {
+		errorString := fmt.Errorf("Unable to start port: %s", pluginErr)
 		log.GetLogger().Errorln(errorString)
-		return Open_port_failed
+		errorCode = Open_port_failed
+		return
 	}
 
 	log.GetLogger().Infoln("start port success")
 	cancelled := make(chan bool, 1)
-	errorCode := Ok
+	errorCode = Ok
 	go func() {
 		cancelState := cancelFlag.Wait()
 		if cancelFlag.State() == util.Canceled {
@@ -122,7 +129,7 @@ func (p *PortPlugin) Execute(dataChannel channel.ISessionChannel, cancelFlag uti
 		errorCode = exitCode
 	}
 
-	return errorCode
+	return
 }
 
 func (p *PortPlugin) writePump() (errorCode string) {

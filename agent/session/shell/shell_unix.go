@@ -50,7 +50,7 @@ func StartPty(plugin *ShellPlugin) (err error) {
 	} else {
 		cmdArgs, err := shlex.Split(plugin.cmdContent)
 		if err != nil {
-			return fmt.Errorf("split command content failed: ", err)
+			return fmt.Errorf("split command content failed: %v", err)
 		}
 		plugin.cmd = executil.Command(cmdArgs[0], cmdArgs[1:]...)
 	}

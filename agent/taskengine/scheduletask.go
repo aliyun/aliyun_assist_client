@@ -15,6 +15,7 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/models"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/timermanager"
 	"github.com/aliyun/aliyun_assist_client/agent/util/atomicutil"
+	"github.com/aliyun/aliyun_assist_client/agent/flagging"
 )
 
 const (
@@ -44,6 +45,9 @@ var (
 
 	_periodicTaskSchedules     map[string]*PeriodicTaskSchedule
 	_periodicTaskSchedulesLock sync.Mutex
+
+	// Indicating whether startup fetch(reason=startup) has been done
+	_startupFetched atomic.Bool
 )
 
 func init() {
@@ -62,7 +66,11 @@ func isEnabledFetchingTask() bool {
 	return state != 0
 }
 
-func Fetch(from_kick bool, taskId string, taskType int, isColdstart bool) int {
+func IsStartupFetched() bool {
+	return _startupFetched.Load()
+}
+
+func Fetch(from_kick bool, taskId string, taskType int) int {
 	// Fetching task should be allowed before all core components of agent have
 	// been correctly initialized. This critical indicator would be set at the
 	// end of program.run method
@@ -99,11 +107,19 @@ func Fetch(from_kick bool, taskId string, taskType int, isColdstart bool) int {
 	defer FetchingTaskCounter.Add(-1)
 
 	var task_size int
-	if from_kick {
-		task_size = fetchTasks(FetchOnKickoff, taskId, taskType, false)
-	} else {
-		task_size = fetchTasks(FetchOnStartup, taskId, taskType, isColdstart)
+	var isColdstart bool
+	fetchReason := FetchOnKickoff
+	if taskType == NormalTaskType && taskId == "" && !_startupFetched.Swap(true) {
+		fetchReason = FetchOnStartup
+		// `isColdstart` only make sense for FetchOnStartup
+		isColdstart, _ = flagging.IsColdstart()
+		if from_kick {
+			log.GetLogger().WithFields(logrus.Fields{
+				"from_kick": from_kick,
+			}).Infoln("Merge the fetch operations for the kick_off task and the startup task.")
+		}
 	}
+	task_size = fetchTasks(fetchReason, taskId, taskType, isColdstart)
 
 	for i := 0; i < 1 && from_kick && task_size == 0; i++ {
 		time.Sleep(time.Duration(3) * time.Second)
@@ -134,22 +150,42 @@ func fetchTasks(reason FetchReason, taskId string, taskType int, isColdstart boo
 
 func dispatchRunTask(taskInfo models.RunTaskInfo) {
 	fetchLogger := log.GetLogger().WithFields(logrus.Fields{
-		"TaskId": taskInfo.TaskId,
-		"Phase":  "Fetched",
+		"TaskId":        taskInfo.TaskId,
+		"InvokeVersion": taskInfo.InvokeVersion,
+		"Phase":         "Fetched",
 	})
 	fetchLogger.Info("Fetched to be run")
 
 	taskFactory := GetTaskFactory()
-	// Tasks should not be duplicately handled
-	if taskFactory.ContainsTaskByName(taskInfo.TaskId) {
-		fetchLogger.Warning("Ignored duplicately fetched task")
-		return
+	var existedTask *Task
+	if existedTask, _ = taskFactory.GetTask(taskInfo.TaskId); existedTask == nil {
+		existedTask = getPeriodicTask(taskInfo.TaskId)
+	}
+	if existedTask != nil {
+		if existedTask.taskInfo.InvokeVersion != taskInfo.InvokeVersion {
+			// Task existed but with different InvokeVersion needs rehandle
+			fetchLogger.Infof("Existed task with InvokeVersion[%d] needs rehandle",
+				existedTask.taskInfo.InvokeVersion)
+			switch taskInfo.Repeat {
+			case models.RunTaskCron, models.RunTaskRate, models.RunTaskAt:
+				fetchLogger.Infof("Cancel periodic task with invocaVersion[%d] quietly", existedTask.taskInfo.InvokeVersion)
+				cancelPeriodicTask(existedTask.taskInfo, true)
+			default:
+				fetchLogger.Warning("Existed task is not Period. New task is duplicately fetched, ignore it")
+				return
+			}
+		} else {
+			// Tasks should not be duplicately handled
+			fetchLogger.Warning("Ignored duplicately fetched task")
+			return
+		}
 	}
 
 	// Reuse specified logger across task scheduling phase
 	scheduleLogger := log.GetLogger().WithFields(logrus.Fields{
-		"TaskId": taskInfo.TaskId,
-		"Phase":  "Scheduling",
+		"TaskId":        taskInfo.TaskId,
+		"InvokeVersion": taskInfo.InvokeVersion,
+		"Phase":         "Scheduling",
 	})
 	switch taskInfo.Repeat {
 	case models.RunTaskOnce, models.RunTaskNextRebootOnly, models.RunTaskEveryReboot:
@@ -167,6 +203,7 @@ func dispatchRunTask(taskInfo models.RunTaskInfo) {
 			if code != 0 || err != nil {
 				metrics.GetTaskFailedEvent(
 					"taskid", t.taskInfo.TaskId,
+					"InvokeVersion", strconv.Itoa(t.taskInfo.InvokeVersion),
 					"errormsg", err.Error(),
 					"reason", strconv.Itoa(int(code)),
 				).ReportEvent()
@@ -194,13 +231,15 @@ func dispatchRunTask(taskInfo models.RunTaskInfo) {
 
 func dispatchStopTask(taskInfo models.RunTaskInfo) {
 	log.GetLogger().WithFields(logrus.Fields{
-		"TaskId": taskInfo.TaskId,
-		"Phase":  "Fetched",
+		"TaskId":        taskInfo.TaskId,
+		"InvokeVersion": taskInfo.InvokeVersion,
+		"Phase":         "Fetched",
 	}).Info("Fetched to be canceled")
 
 	cancelLogger := log.GetLogger().WithFields(logrus.Fields{
-		"TaskId": taskInfo.TaskId,
-		"Phase":  "Cancelling",
+		"TaskId":        taskInfo.TaskId,
+		"InvokeVersion": taskInfo.InvokeVersion,
+		"Phase":         "Cancelling",
 	})
 	taskFactory := GetTaskFactory()
 	switch taskInfo.Repeat {
@@ -208,17 +247,17 @@ func dispatchStopTask(taskInfo models.RunTaskInfo) {
 		scheduledTask, ok := taskFactory.GetTask(taskInfo.TaskId)
 		if ok {
 			cancelLogger.Info("Cancel task and invocation")
-			scheduledTask.Cancel()
+			scheduledTask.Cancel(false)
 			cancelLogger.Info("Canceled task and invocation")
 		} else {
-			response, err := sendStoppedOutput(taskInfo.TaskId, 0, 0, 0, 0, "", stopReasonKilled)
+			response, err := sendStoppedOutput(taskInfo.TaskId, taskInfo.InvokeVersion, 0, 0, 0, 0, "", stopReasonKilled)
 			cancelLogger.WithFields(logrus.Fields{
 				"response": response,
 			}).WithError(err).Warning("Force cancelling task not found due to finished or error")
 		}
 	case models.RunTaskCron, models.RunTaskRate, models.RunTaskAt:
 		// Periodic tasks are managed by _periodicTaskSchedules
-		err := cancelPeriodicTask(taskInfo)
+		err := cancelPeriodicTask(taskInfo, false)
 		if err != nil {
 			cancelLogger.WithFields(logrus.Fields{
 				"taskInfo": taskInfo,
@@ -235,8 +274,9 @@ func dispatchStopTask(taskInfo models.RunTaskInfo) {
 
 func dispatchTestTask(taskInfo models.RunTaskInfo) {
 	fetchLogger := log.GetLogger().WithFields(logrus.Fields{
-		"TaskId": taskInfo.TaskId,
-		"Phase":  "Fetched",
+		"TaskId":        taskInfo.TaskId,
+		"InvokeVersion": taskInfo.InvokeVersion,
+		"Phase":         "Fetched",
 	})
 	fetchLogger.Info("Fetched to be run")
 
@@ -249,8 +289,9 @@ func dispatchTestTask(taskInfo models.RunTaskInfo) {
 
 	// Reuse specified logger across task scheduling phase
 	scheduleLogger := log.GetLogger().WithFields(logrus.Fields{
-		"TaskId": taskInfo.TaskId,
-		"Phase":  "Scheduling",
+		"TaskId":        taskInfo.TaskId,
+		"InvokeVersion": taskInfo.InvokeVersion,
+		"Phase":         "Scheduling",
 	})
 	switch taskInfo.Repeat {
 	case models.RunTaskOnce, models.RunTaskCron, models.RunTaskNextRebootOnly, models.RunTaskEveryReboot, models.RunTaskRate, models.RunTaskAt:
@@ -272,8 +313,9 @@ func dispatchTestTask(taskInfo models.RunTaskInfo) {
 func (s *PeriodicTaskSchedule) startExclusiveInvocation() {
 	// Reuse specified logger across task scheduling phase
 	invocateLogger := log.GetLogger().WithFields(logrus.Fields{
-		"TaskId": s.reusableInvocation.taskInfo.TaskId,
-		"Phase":  "PeriodicInvocating",
+		"TaskId":        s.reusableInvocation.taskInfo.TaskId,
+		"InvokeVersion": s.reusableInvocation.taskInfo.InvokeVersion,
+		"Phase":         "PeriodicInvocating",
 	})
 
 	// NOTE: TaskPool has been closely wired with TaskFactory, thus:
@@ -293,6 +335,7 @@ func (s *PeriodicTaskSchedule) startExclusiveInvocation() {
 		if code != 0 || err != nil {
 			metrics.GetTaskFailedEvent(
 				"taskid", s.reusableInvocation.taskInfo.TaskId,
+				"InvokeVersion", strconv.Itoa(s.reusableInvocation.taskInfo.InvokeVersion),
 				"errormsg", err.Error(),
 				"reason", strconv.Itoa(int(code)),
 			).ReportEvent()
@@ -314,8 +357,9 @@ func schedulePeriodicTask(taskInfo models.RunTaskInfo) error {
 
 	// Reuse specified logger across task scheduling phase
 	scheduleLogger := log.GetLogger().WithFields(logrus.Fields{
-		"TaskId": taskInfo.TaskId,
-		"Phase":  "Scheduling",
+		"TaskId":        taskInfo.TaskId,
+		"InvokeVersion": taskInfo.InvokeVersion,
+		"Phase":         "Scheduling",
 	})
 
 	// 1. Check whether periodic task has been registered in local task storage,
@@ -364,9 +408,9 @@ func schedulePeriodicTask(taskInfo models.RunTaskInfo) error {
 		var reportErr error
 		if cronParameterErr, ok := err.(timermanager.CronParameterError); ok {
 			// Only report string constant code to luban
-			response, reportErr = reportInvalidTask(taskInfo.TaskId, invalidParamCron, cronParameterErr.Code())
+			response, reportErr = reportInvalidTask(taskInfo.TaskId, taskInfo.InvokeVersion, invalidParamCron, cronParameterErr.Code())
 		} else {
-			response, reportErr = reportInvalidTask(taskInfo.TaskId, invalidParamCron, err.Error())
+			response, reportErr = reportInvalidTask(taskInfo.TaskId, taskInfo.InvokeVersion, invalidParamCron, err.Error())
 		}
 		scheduleLogger.WithFields(logrus.Fields{
 			"expression": taskInfo.Cronat,
@@ -387,8 +431,9 @@ func schedulePeriodicTask(taskInfo models.RunTaskInfo) error {
 		scheduleLocation = cronScheduled.Location()
 		onFinish = func() {
 			onFinishLogger := log.GetLogger().WithFields(logrus.Fields{
-				"TaskId": taskInfo.TaskId,
-				"Phase":  "onFinishCallback",
+				"TaskId":        taskInfo.TaskId,
+				"InvokeVersion": taskInfo.InvokeVersion,
+				"Phase":         "onFinishCallback",
 			})
 
 			cronScheduled, ok := timer.Schedule.(*timermanager.CronScheduled)
@@ -399,7 +444,7 @@ func schedulePeriodicTask(taskInfo models.RunTaskInfo) error {
 			}
 
 			if cronScheduled.NoNextRun() {
-				response, err := sendStoppedOutput(taskInfo.TaskId, 0, 0, 0, 0, "", stopReasonCompleted)
+				response, err := sendStoppedOutput(taskInfo.TaskId, taskInfo.InvokeVersion, 0, 0, 0, 0, "", stopReasonCompleted)
 				onFinishLogger.WithFields(logrus.Fields{
 					"response": response,
 				}).WithError(err).Infoln("Sent completion event for cron task on last invocation finished")
@@ -428,7 +473,8 @@ func schedulePeriodicTask(taskInfo models.RunTaskInfo) error {
 	return nil
 }
 
-func cancelPeriodicTask(taskInfo models.RunTaskInfo) error {
+// Cancel periodic task. If quietly is false, notify server the task is canceled.
+func cancelPeriodicTask(taskInfo models.RunTaskInfo, quietly bool) error {
 	timerManager := timermanager.GetTimerManager()
 	if timerManager == nil {
 		return errors.New("Global TimerManager instance is not initialized")
@@ -438,14 +484,16 @@ func cancelPeriodicTask(taskInfo models.RunTaskInfo) error {
 	defer _periodicTaskSchedulesLock.Unlock()
 
 	cancelLogger := log.GetLogger().WithFields(logrus.Fields{
-		"TaskId": taskInfo.TaskId,
-		"Phase":  "Cancelling",
+		"TaskId":        taskInfo.TaskId,
+		"InvokeVersion": taskInfo.InvokeVersion,
+		"Quietly":       quietly,
+		"Phase":         "Cancelling",
 	})
 
 	// 1. Check whether task is registered in local storage
 	periodicTaskSchedule, ok := _periodicTaskSchedules[taskInfo.TaskId]
-	if !ok {
-		response, err := sendStoppedOutput(taskInfo.TaskId, 0, 0, 0, 0, "", stopReasonKilled)
+	if !ok && !quietly {
+		response, err := sendStoppedOutput(taskInfo.TaskId, taskInfo.InvokeVersion, 0, 0, 0, 0, "", stopReasonKilled)
 		cancelLogger.WithFields(logrus.Fields{
 			"response": response,
 		}).WithError(err).Warning("Force cancelling periodic task unregistered due to finished or previous errors")
@@ -465,14 +513,27 @@ func cancelPeriodicTask(taskInfo models.RunTaskInfo) error {
 	runningInvocation, ok := GetTaskFactory().GetTask(taskInfo.TaskId)
 	if ok {
 		cancelLogger.Infof("Cancel running invocation of periodic task")
-		runningInvocation.Cancel()
+		runningInvocation.Cancel(quietly)
 		cancelLogger.Infof("Canceled running invocation of periodic task")
 	} else {
 		cancelLogger.Infof("Not need to cancel running invocation of periodic task")
 		// Since no running
-		lastInvocation := periodicTaskSchedule.reusableInvocation
-		lastInvocation.sendOutput("canceled", lastInvocation.getReportString(lastInvocation.output))
-		cancelLogger.Infof("Sent canceled ACK with output of last invocation")
+		if !quietly {
+			lastInvocation := periodicTaskSchedule.reusableInvocation
+			lastInvocation.sendOutput("canceled", lastInvocation.getReportString(lastInvocation.output))
+			cancelLogger.Infof("Sent canceled ACK with output of last invocation")
+		}
+	}
+	return nil
+}
+
+func getPeriodicTask(taskName string) *Task {
+	_periodicTaskSchedulesLock.Lock()
+	defer _periodicTaskSchedulesLock.Unlock()
+
+	periodicTaskSchedule, ok := _periodicTaskSchedules[taskName]
+	if ok {
+		return periodicTaskSchedule.reusableInvocation
 	}
 	return nil
 }

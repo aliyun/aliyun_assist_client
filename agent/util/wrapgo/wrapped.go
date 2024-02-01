@@ -37,21 +37,29 @@ func CallDefaultPanicHandler(payload interface{}, stack []byte) {
 
 // GoWithPanicHandler initiate goroutine with panic handler
 func GoWithPanicHandler(f func(), handler PanicHandler) {
-	go func() {
-		defer func () {
-			if panicPayload := recover(); panicPayload != nil {
-				stacktrace := debug.Stack()
-				fmt.Fprintf(os.Stderr, "panic: %v", panicPayload)
-				fmt.Fprint(os.Stderr, string(stacktrace))
-				handler(panicPayload, stacktrace)
-			}
-		}()
+	go CallWithPanicHandler(f, handler)
+}
 
-		f()
+// CallWithPanicHandler call f with panic handler
+func CallWithPanicHandler(f func(), handler PanicHandler) {
+	defer func () {
+		if panicPayload := recover(); panicPayload != nil {
+			stacktrace := debug.Stack()
+			fmt.Fprintf(os.Stderr, "panic: %v", panicPayload)
+			fmt.Fprint(os.Stderr, string(stacktrace))
+			handler(panicPayload, stacktrace)
+		}
 	}()
+
+	f()
 }
 
 // GoWithDefaultPanicHandler initiate goroutine with default panic handler
 func GoWithDefaultPanicHandler(f func()) {
 	GoWithPanicHandler(f, _defaultPanicHandler)
+}
+
+// CallWithPanicHandler call f with panic handler
+func CallWithDefaultPanicHandler(f func()) {
+	CallWithPanicHandler(f, _defaultPanicHandler)
 }

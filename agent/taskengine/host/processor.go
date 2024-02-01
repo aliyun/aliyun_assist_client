@@ -25,10 +25,11 @@ import (
 type HostProcessor struct {
 	TaskId string
 	// Fundamental properties of command process
-	CommandType    string
-	CommandContent string
-	Repeat         models.RunTaskRepeatType
-	Timeout        int
+	CommandType       string
+	CommandContent    string
+	InvokeVersion 	  int
+	Repeat            models.RunTaskRepeatType
+	Timeout           int
 	// Additional attributes for command process in host
 	CommandName         string
 	WorkingDirectory    string
@@ -133,11 +134,15 @@ func (p *HostProcessor) Prepare(commandContent string) error {
 	}
 
 	if useScriptFile {
-		if p.CommandName == "" {
-			p.scriptFilePath = filepath.Join(scriptDir, p.TaskId+scriptFileExtension)
-		} else {
-			p.scriptFilePath = filepath.Join(scriptDir, fmt.Sprintf("%s-%s%s", p.CommandName, p.TaskId, scriptFileExtension))
+		iVersion := ""
+		commandName := ""
+		if p.InvokeVersion > 0 {
+			iVersion = fmt.Sprintf(".iv%d", p.InvokeVersion)
 		}
+		if len(p.CommandName) > 0 {
+			commandName = p.CommandName + "-"
+		}
+		p.scriptFilePath = filepath.Join(scriptDir, fmt.Sprintf("%s%s%s%s", commandName, p.TaskId, iVersion, scriptFileExtension))
 
 		if err := scriptmanager.SaveScriptFile(p.scriptFilePath, p.CommandContent); err != nil {
 			// NOTE: Only non-repeated tasks need to check whether command script

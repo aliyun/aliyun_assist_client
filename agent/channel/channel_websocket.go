@@ -2,6 +2,7 @@ package channel
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"net/http"
@@ -19,14 +20,23 @@ import (
 	"github.com/aliyun/aliyun_assist_client/common/requester"
 )
 
-const WEBSOCKET_SERVER = "/luban/notify_server"
-const MAX_RETRY_COUNT = 5
+const (
+	WEBSOCKET_SERVER = "/luban/notify_server"
+	MAX_RETRY_COUNT  = 5
+)
+
+var (
+	wssCoolDownCount = 1  // limit of continuous failed connection
+	wssCoolDownTime  = 60 // second
+)
 
 type WebSocketChannel struct {
 	*Channel
-	wskConn   *websocket.Conn
-	lock      sync.Mutex
-	writeLock sync.Mutex
+	wskConn                  *websocket.Conn
+	lock                     sync.Mutex
+	writeLock                sync.Mutex
+	consecutiveConnectFailed int
+	calmDownUntil            time.Time
 }
 
 func (c *WebSocketChannel) IsSupported() bool {
@@ -56,7 +66,13 @@ func (c *WebSocketChannel) StartChannel() error {
 			).ReportEvent()
 		}
 	}()
-
+	if c.consecutiveConnectFailed >= wssCoolDownCount {
+		if time.Now().Before(c.calmDownUntil) {
+			return errors.New("ws channel is calming down")
+		}
+		c.consecutiveConnectFailed = 0
+		log.GetLogger().Info("ws channel is not calm anymore")
+	}
 	host := util.GetServerHost()
 	if host == "" {
 		errmsg = "No available host"
@@ -65,46 +81,72 @@ func (c *WebSocketChannel) StartChannel() error {
 
 	url := "wss://" + host + WEBSOCKET_SERVER
 
+	logger := log.GetLogger().WithField("url", url)
 	header := http.Header{
 		requester.UserAgentHeader: []string{requester.UserAgentValue},
 	}
-	if extraHeaders, err := requester.GetExtraHTTPHeaders(log.GetLogger()); extraHeaders != nil {
+	if extraHeaders, err := requester.GetExtraHTTPHeaders(logger); extraHeaders != nil {
 		for k, v := range extraHeaders {
 			header.Add(k, v)
 		}
 	} else if err != nil {
-		log.GetLogger().WithError(err).Error("Failed to construct extra HTTP headers")
+		logger.WithError(err).Error("Failed to construct extra HTTP headers")
 	}
 
 	var MyDialer = &websocket.Dialer{
-		Proxy:            requester.GetProxyFunc(log.GetLogger()),
+		Proxy:            requester.GetProxyFunc(logger),
 		HandshakeTimeout: 45 * time.Second,
 		TLSClientConfig: &tls.Config{
-			RootCAs: requester.GetRootCAs(log.GetLogger()),
+			RootCAs: requester.GetRootCAs(logger),
 		},
 	}
-	conn, _, err := MyDialer.Dial(url, header)
-	log.GetLogger().Infoln(url)
-	if err != nil {
-		errmsg = fmt.Sprintf("dial ws channel errror:%s, url=%s", err.Error(), url)
-		log.GetLogger().Errorln(err)
-		return err
+	var dialErr error
+	var conn *websocket.Conn
+	conn, _, dialErr = MyDialer.Dial(url, header)
+	if dialErr != nil {
+		if errors.Is(dialErr, x509.UnknownAuthorityError{}) {
+			logger.WithError(dialErr).Error("certificate error, reload certificate and retry")
+			certPool := requester.PeekRefreshedRootCAs(logger)
+			MyDialer.TLSClientConfig.RootCAs = certPool
+			if conn, _, dialErr = MyDialer.Dial(url, header); dialErr != nil {
+				errmsg = fmt.Sprintf("dial ws channel errror:%s, url=%s", dialErr.Error(), url)
+			} else {
+				requester.UpdateRootCAs(logger, certPool)
+				logger.Info("certificate updated")
+			}
+		} else {
+			errmsg = fmt.Sprintf("dial ws channel errror:%s, url=%s", dialErr.Error(), url)
+		}
 	}
+	if dialErr != nil {
+		c.consecutiveConnectFailed += 1
+		if c.consecutiveConnectFailed >= wssCoolDownCount {
+			c.calmDownUntil = time.Now().Add(time.Second * time.Duration(wssCoolDownTime))
+			errmsg = fmt.Sprintf("dial ws channel errror:%s, url=%s, wss dial failed %d times "+
+				"consecutivly, need calm down %d second",
+				dialErr.Error(), url, c.consecutiveConnectFailed, wssCoolDownTime)
+		} else {
+			errmsg = fmt.Sprintf("dial ws channel errror:%s, url=%s", dialErr.Error(), url)
+		}
+		log.GetLogger().Errorln(dialErr)
+		return dialErr
+	}
+	c.consecutiveConnectFailed = 0
 	c.wskConn = conn
-	log.GetLogger().Infoln("Start websocket channel ok! url:", url)
+	logger.Infoln("Start websocket channel ok! url:", url)
 	c.Working.Set()
 	c.StartPings(time.Second * 60)
 	go func() {
 		defer func() {
 			if msg := recover(); msg != nil {
-				log.GetLogger().Errorf("WebsocketChannel  run panic: %v", msg)
-				log.GetLogger().Errorf("%s: %s", msg, debug.Stack())
+				logger.Errorf("WebsocketChannel  run panic: %v", msg)
+				logger.Errorf("%s: %s", msg, debug.Stack())
 			}
 		}()
 		retryCount := 0
 		for {
 			if !c.Working.IsSet() {
-				log.GetLogger().Infoln("websocket channel is closed")
+				logger.Infoln("websocket channel is closed")
 				break
 			}
 			messageType, message, err := c.wskConn.ReadMessage()
@@ -116,7 +158,7 @@ func (c *WebSocketChannel) StartChannel() error {
 					defer c.lock.Unlock()
 					c.wskConn.Close()
 					c.Working.Clear()
-					log.GetLogger().Errorf("Reach the retry limit for receive messages. Error: %v", err.Error())
+					logger.Errorf("Reach the retry limit for receive messages. Error: %v", err.Error())
 					report := clientreport.ClientReport{
 						ReportType: "switch_channel_in_wsk",
 						Info:       fmt.Sprintf("start:" + err.Error()),
@@ -125,16 +167,16 @@ func (c *WebSocketChannel) StartChannel() error {
 					go c.SwitchChannel()
 					break
 				}
-				log.GetLogger().Errorf(
+				logger.Errorf(
 					"An error happened when receiving the message. Retried times: %d, MessageType: %v, Error: %s",
 					retryCount,
 					messageType,
 					err.Error())
 			} else if messageType != websocket.TextMessage && messageType != websocket.BinaryMessage {
-				log.GetLogger().Errorf("Invalid message type %d. ", messageType)
+				logger.Errorf("Invalid message type %d. ", messageType)
 
 			} else {
-				log.GetLogger().Infof("wsk recv: %s", string(message))
+				logger.Infof("wsk recv: %s", string(message))
 
 				content := c.CallBack(string(message), ChannelWebsocketType)
 				if content != "" {

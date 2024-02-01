@@ -5,6 +5,7 @@ package kickvmhandle
 import (
 	"os"
 	"strings"
+	"path/filepath"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/util/process"
@@ -41,7 +42,7 @@ func updateAgant(params []string) error {
 	if err != nil {
 		return err
 	}
-	path += "aliyun_assist_update.exe"
+	path = filepath.Join(path, "aliyun_assist_update.exe")
 
 	processer.SyncRunSimple(path, strings.Split("--check_update", " "), 10)
 	return nil

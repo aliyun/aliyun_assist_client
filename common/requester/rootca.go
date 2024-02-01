@@ -24,6 +24,9 @@ func SetRootCAProviders(providers []CACertificateProvider) {
 }
 
 func GetRootCAs(logger logrus.FieldLogger) *x509.CertPool {
+	logger = logger.WithFields(logrus.Fields{
+		"action": "GetRootCAs",
+	})
 	_rootCAsLock.Lock()
 	defer _rootCAsLock.Unlock()
 	if _rootCAsInited {
@@ -36,7 +39,7 @@ func GetRootCAs(logger logrus.FieldLogger) *x509.CertPool {
 	var pemCerts []byte
 	var err error
 	for _, provider := range _rootCAProviders {
-		pemCerts, err = provider.CACertificate(logger)
+		pemCerts, err = provider.CACertificate(logger, false)
 		if err != nil {
 			logger.WithError(err).Errorf("Failed to get preferred Root CA certificate from %s", provider.Name())
 		} else {
@@ -59,4 +62,43 @@ func GetRootCAs(logger logrus.FieldLogger) *x509.CertPool {
 
 	_rootCAs = certPool
 	return _rootCAs
+}
+
+// PeekRefreshedRootCAs returns refreshed certs instead cached, and won't modify the certs cache
+func PeekRefreshedRootCAs(logger logrus.FieldLogger) *x509.CertPool {
+	logger = logger.WithField("action", "PeekRefreshedRootCAs")
+	var pemCerts []byte
+	var err error
+	for _, provider := range _rootCAProviders {
+		// In fact, parameter refresh is only valid for ExternalExecutableProvider.CACertificate, 
+		// other provider.CACertificate always do refresh
+		pemCerts, err = provider.CACertificate(logger, true)
+		if err != nil {
+			logger.WithError(err).Errorf("Failed to get preferred Root CA certificate from %s", provider.Name())
+		} else {
+			logger.Infof("Selected %s for preferred Root CA certificate", provider.Name())
+			break
+		}
+	}
+	if pemCerts == nil {
+		logger.Warning("No preferred Root CA certificate is provided. Only system CAs would be certified.")
+		return nil
+	}
+
+	certPool, err := x509.SystemCertPool()
+	if err != nil {
+		logger.Warning("No system CAs can be retrieved. Only provided Root CA certificate is used")
+		certPool = x509.NewCertPool()
+	} else {
+		certPool = certPool.Clone()
+	}
+	certPool.AppendCertsFromPEM(pemCerts)
+
+	return certPool
+}
+
+func UpdateRootCAs(logger logrus.FieldLogger, certPool *x509.CertPool) {
+	_rootCAsLock.Lock()
+	defer _rootCAsLock.Unlock()
+	_rootCAs = certPool
 }

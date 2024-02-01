@@ -2,6 +2,8 @@ package util
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -47,7 +49,10 @@ func HttpGet(url string) (error, string) {
 
 func HttpGetWithTimeout(url string, timeout time.Duration, noLog bool) (error, string) {
 	req := HttpRequest.Transport(GetHTTPTransport())
-
+	logger := log.GetLogger().WithFields(logrus.Fields{
+		"url": url,
+		"timeout": timeout.Seconds(),
+	})
 	// 设置超时时间，不设置时，默认30s
 	req.SetTimeout(timeout)
 
@@ -64,7 +69,25 @@ func HttpGetWithTimeout(url string, timeout time.Duration, noLog bool) (error, s
 	res, err := req.Get(url)
 	if err != nil {
 		log.GetLogger().Infoln(url, err)
-		return err, ""
+		if errors.Is(err, x509.UnknownAuthorityError{}) {
+			logger.Info("certificate error, reload certificates and retry")
+			// req.Transport recv a *http.Transport, pass a copy of requester._httpTransport to it to prevent 
+			// requester._httpTransport being modified
+			req.Transport(requester.PeekHTTPTransport(logger))
+			certPool := requester.PeekRefreshedRootCAs(logger)
+			req.SetTLSClient(&tls.Config{
+				RootCAs: certPool,
+			})
+			if res, err = req.Get(url); err == nil {
+				logger.Info("certificate updated")
+				requester.RefreshHTTPCas(logger, certPool)
+			} else {
+				log.GetLogger().Infoln(url, err)
+				return err, ""
+			}
+		} else {
+			return err, ""
+		}
 	}
 	defer res.Close()
 	content, _ := res.Content()
@@ -87,6 +110,10 @@ func HttpPost(url string, data string, contentType string) (string, error) {
 
 func HttpPostWithTimeout(url string, data string, contentType string, timeout time.Duration, noLog bool) (string, error) {
 	req := HttpRequest.Transport(GetHTTPTransport())
+	logger := log.GetLogger().WithFields(logrus.Fields{
+		"url": url,
+		"timeout": timeout.Seconds(),
+	})
 	// 设置超时时间，不设置时，默认30s
 	req.SetTimeout(timeout)
 
@@ -111,6 +138,29 @@ func HttpPostWithTimeout(url string, data string, contentType string, timeout ti
 	}
 
 	res, err := req.Post(url, data)
+
+	if err != nil {
+		log.GetLogger().Infoln(url, err)
+		if errors.Is(err, x509.UnknownAuthorityError{}) {
+			logger.Info("certificate error, reload certificates and retry")
+			// req.Transport recv a *http.Transport, pass a copy of requester._httpTransport to it to prevent 
+			// requester._httpTransport being modified
+			req.Transport(requester.PeekHTTPTransport(logger))
+			certPool := requester.PeekRefreshedRootCAs(logger)
+			req.SetTLSClient(&tls.Config{
+				RootCAs: certPool,
+			})
+			if res, err = req.Get(url); err == nil {
+				logger.Info("certificate updated")
+				requester.RefreshHTTPCas(logger, certPool)
+			} else {
+				log.GetLogger().Infoln(url, err)
+				return "", err
+			}
+		} else {
+			return "", err
+		}
+	}
 
 	defer res.Close()
 	content, _ := res.Content()

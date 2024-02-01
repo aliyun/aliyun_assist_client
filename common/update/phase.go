@@ -13,11 +13,11 @@ import (
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
-	"github.com/aliyun/aliyun_assist_client/agent/util/langutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/process"
 	"github.com/aliyun/aliyun_assist_client/agent/util/versionutil"
 	"github.com/aliyun/aliyun_assist_client/agent/version"
 	"github.com/aliyun/aliyun_assist_client/common/executil"
+	"github.com/aliyun/aliyun_assist_client/common/langutil"
 	"github.com/aliyun/aliyun_assist_client/common/zipfile"
 )
 

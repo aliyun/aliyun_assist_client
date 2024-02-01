@@ -2,14 +2,16 @@ package checkospanic
 
 import (
 	"bytes"
-	"github.com/aliyun/aliyun_assist_client/agent/log"
-	"github.com/aliyun/aliyun_assist_client/agent/metrics"
-	"github.com/aliyun/aliyun_assist_client/agent/util/langutil"
-	"github.com/aliyun/aliyun_assist_client/agent/util/process"
-	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
+
+	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/agent/metrics"
+	"github.com/aliyun/aliyun_assist_client/agent/util/process"
+	"github.com/aliyun/aliyun_assist_client/common/langutil"
 )
 
 const (

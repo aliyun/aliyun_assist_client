@@ -1,10 +1,11 @@
 module github.com/aliyun/aliyun_assist_client
 
-go 1.19
+go 1.20
 
 require (
 	bou.ke/monkey v1.0.2
 	github.com/Microsoft/go-winio v0.4.17
+	github.com/agiledragon/gomonkey/v2 v2.11.0
 	github.com/aliyun/alibaba-cloud-sdk-go v1.61.1491
 	github.com/containerd/console v1.0.3
 	github.com/creack/goselect v0.1.2
@@ -39,10 +40,11 @@ require (
 	github.com/yookoala/realpath v1.0.0
 	go.etcd.io/bbolt v1.3.7
 	go.uber.org/atomic v1.11.0
-	golang.org/x/crypto v0.11.0
-	golang.org/x/net v0.12.0
-	golang.org/x/sys v0.10.0
-	golang.org/x/text v0.11.0
+	golang.org/x/crypto v0.14.0
+	golang.org/x/net v0.17.0
+	golang.org/x/sys v0.13.0
+	golang.org/x/term v0.13.0
+	golang.org/x/text v0.13.0
 	google.golang.org/grpc v1.40.0
 	gopkg.in/ini.v1 v1.66.2
 	k8s.io/cri-api v0.24.3
@@ -54,7 +56,7 @@ require (
 require (
 	github.com/StackExchange/wmi v0.0.0-20210224194228-fe8f1750fd46 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/docker/distribution v2.8.1+incompatible // indirect
+	github.com/docker/distribution v2.8.2+incompatible // indirect
 	github.com/docker/go-connections v0.4.0 // indirect
 	github.com/docker/go-units v0.4.0 // indirect
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
@@ -75,7 +77,6 @@ require (
 	github.com/tklauser/numcpus v0.4.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.2 // indirect
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
-	golang.org/x/term v0.10.0 // indirect
 	google.golang.org/genproto v0.0.0-20220107163113-42d7afdf6368 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect

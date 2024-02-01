@@ -6,7 +6,9 @@ import (
 	"math/rand"
 	"net/url"
 	"os"
+	"regexp"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/tidwall/gjson"
@@ -17,6 +19,7 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/timetool"
+	"github.com/aliyun/aliyun_assist_client/agent/version"
 	"github.com/aliyun/aliyun_assist_client/common/apiserver"
 	"github.com/aliyun/aliyun_assist_client/common/machineid"
 	"github.com/aliyun/aliyun_assist_client/common/requester"
@@ -50,6 +53,13 @@ var (
 	_machineId string
 
 	_intervalRand *rand.Rand
+
+	// _fieldMissRegexp is used to match error messages for missing fields,
+	// like: "Required request parameter 'os_type' for method parameter type String is not present"
+	_fieldMissRegexp = regexp.MustCompile(`Required request parameter '(\w+)' for method parameter type (\w+) is not present`)
+	// if _useFullFields is true ping hear-beat with full fields,
+	// otherwise use the reduced fields
+	_useFullFields atomic.Bool
 )
 
 func init() {
@@ -67,23 +77,19 @@ func init() {
 	_intervalRand = rand.New(rand.NewSource(time.Now().UnixNano()))
 }
 
-func buildBootstrapPingParams() string {
-	virtType := "kvm" // osutil.GetVirtualType() is currently unavailable
-	osVersion := osutil.GetVersion()
-	azoneId := util.GetAzoneId()
-	isColdstart := false
-	if _isColdstart, err := flagging.IsColdstart(); err != nil {
-		log.GetLogger().WithError(err).Errorln("Error encountered when detecting cold-start flag")
-	} else {
-		isColdstart = _isColdstart
-	}
+func invokePingRequest(isHttpScheme bool, urlWithoutScheme string, willSwitchScheme bool) (response string, err error) {
+	defer func() {
+		errMsg := extractErrMsg(response)
+		if errMsg != "" {
+			log.GetLogger().Error("heart-beat: ", errMsg)
+			if miss, fieldName, fieldType := checkFieldsdMissErr(errMsg); miss {
+				_useFullFields.Store(true)
+				log.GetLogger().Errorf("heart-beat request miss field[%s:%s] ", fieldName, fieldType)
+				err = fmt.Errorf("request field missing")
+			}
+		}
+	}()
 
-	encodedOsVersion := url.QueryEscape(osVersion)
-	return fmt.Sprintf("&virt_type=%s&os_version=%s&az=%s&machineid=%s&cold_start=%t", virtType,
-		encodedOsVersion, azoneId, _machineId, isColdstart)
-}
-
-func invokePingRequest(isHttpScheme bool, urlWithoutScheme string, willSwitchScheme bool) (string, error) {
 	httpRequestURL := "http://" + urlWithoutScheme
 	httpsRequestURL := "https://" + urlWithoutScheme
 	var requestURL, switchedRequestUrl *string
@@ -94,7 +100,7 @@ func invokePingRequest(isHttpScheme bool, urlWithoutScheme string, willSwitchSch
 		requestURL = &httpsRequestURL
 		switchedRequestUrl = &httpRequestURL
 	}
-	err, response := util.HttpGet(*requestURL)
+	err, response = util.HttpGet(*requestURL)
 	if err != nil {
 		tmp_err, ok := err.(*requester.HttpErrorCode)
 		if !(ok && tmp_err.GetCode() < 500) {
@@ -116,7 +122,7 @@ func invokePingRequest(isHttpScheme bool, urlWithoutScheme string, willSwitchSch
 				//do retry
 				time.Sleep(3 * time.Second)
 				_retryCounter++
-				err, response := util.HttpGet(*requestURL)
+				err, response = util.HttpGet(*requestURL)
 				if err == nil {
 					// Keep use current scheme next time
 					if isHttpScheme {
@@ -145,7 +151,7 @@ func invokePingRequest(isHttpScheme bool, urlWithoutScheme string, willSwitchSch
 					}
 					log.GetLogger().WithFields(log.Fields{
 						"switchedRequestURL": *switchedRequestUrl,
-						"response":   response,
+						"response":           response,
 					}).WithError(err).Errorln("Retry failed with switched requestURL")
 				}
 			}
@@ -199,15 +205,52 @@ func extractNextInterval(content string) time.Duration {
 	return time.Duration(nextIntervalInMilliseconds) * time.Millisecond
 }
 
+func extractErrMsg(content string) string {
+	if !gjson.Valid(content) {
+		log.GetLogger().WithFields(log.Fields{
+			"response": content,
+		}).Errorln("Invalid json response")
+		return ""
+	}
+
+	json := gjson.Parse(content)
+	errMsgField := json.Get("errMsg")
+	if !errMsgField.Exists() {
+		return ""
+	}
+
+	errMsg, ok := errMsgField.Value().(string)
+	if !ok {
+		log.GetLogger().WithFields(log.Fields{
+			"response": content,
+		}).Errorln("Invalid errMsg value in json response")
+		return ""
+	}
+
+	return errMsg
+}
+
+func checkFieldsdMissErr(errMsg string) (matched bool, fieldName string, fieldType string) {
+	if _fieldMissRegexp.MatchString(errMsg) {
+		matched = true
+		items := _fieldMissRegexp.FindStringSubmatch(errMsg)
+		if len(items) != 3 {
+			return
+		}
+		fieldName = items[1]
+		fieldType = items[2]
+	}
+	return
+}
+
 func doPing() error {
-	uptime := osutil.GetUptimeOfMs()
-	timestamp := timetool.GetAccurateTime()
-	pid := os.Getpid()
-	processUptime := timetool.GetAccurateTime() - _processStartTime
-	acknowledgeCounter := _acknowledgeCounter
 	sendCounter := _sendCounter
-	querystring := fmt.Sprintf("?uptime=%d&timestamp=%d&pid=%d&process_uptime=%d&index=%d&seq_no=%d",
-		uptime, timestamp, pid, processUptime, acknowledgeCounter, sendCounter)
+	var querystring string
+	if _useFullFields.Load() {
+		querystring = buildFullFieldsPingParams(sendCounter)
+	} else {
+		querystring = buildPingParams(sendCounter)
+	}
 
 	// Use non-secure HTTP protocol by default to reduce performance impact from
 	// TLS in trustable network environment...
@@ -230,16 +273,12 @@ func doPing() error {
 		willSwitchScheme = false
 	}
 	urlWithoutScheme := util.GetPingService() + querystring
-	// Only first heart-beat need to carry extra params
-	if acknowledgeCounter == 0 {
-		urlWithoutScheme = urlWithoutScheme + buildBootstrapPingParams()
-	}
 
 	responseContent, err := invokePingRequest(isHttpScheme, urlWithoutScheme, willSwitchScheme)
 	if err != nil {
 		log.GetLogger().WithFields(log.Fields{
 			"requestURLWithourScheme": urlWithoutScheme,
-			"isHttpScheme": isHttpScheme,
+			"isHttpScheme":            isHttpScheme,
 		}).WithError(err).Errorln("Failed to invoke ping request")
 		return err
 	}
@@ -254,6 +293,70 @@ func doPing() error {
 	_heartbeatTimer.RefreshTimer()
 
 	return nil
+}
+
+// buildPingParams constructs simplified heartbeat request parameters
+func buildPingParams(sendCounter uint64) (querystring string) {
+	uptime := osutil.GetUptimeOfMs()
+	timestamp := timetool.GetAccurateTime()
+	pid := os.Getpid()
+	processUptime := timetool.GetAccurateTime() - _processStartTime
+	acknowledgeCounter := _acknowledgeCounter
+	querystring = fmt.Sprintf("?uptime=%d&timestamp=%d&pid=%d&process_uptime=%d&index=%d&seq_no=%d",
+		uptime, timestamp, pid, processUptime, acknowledgeCounter, sendCounter)
+
+	// Only first heart-beat need to carry extra params
+	if acknowledgeCounter == 0 {
+		isColdstart := false
+		if _isColdstart, err := flagging.IsColdstart(); err != nil {
+			log.GetLogger().WithError(err).Errorln("Error encountered when detecting cold-start flag")
+		} else {
+			isColdstart = _isColdstart
+		}
+
+		virtType := "kvm" // osutil.GetVirtualType() is currently unavailable
+		osVersion := osutil.GetVersion()
+		azoneId := util.GetAzoneId()
+
+		encodedOsVersion := url.QueryEscape(osVersion)
+		querystring += fmt.Sprintf("&virt_type=%s&os_version=%s&az=%s&machineid=%s&cold_start=%t", virtType,
+			encodedOsVersion, azoneId, _machineId, isColdstart)
+	}
+	return
+}
+
+// buildFullFieldsPingParams constructs a full set of heartbeat request 
+// parameters to be compatible with servers that do not recognize the simplified
+// heartbeat parameters.
+func buildFullFieldsPingParams(sendCounter uint64) (querystring string) {
+	uptime := osutil.GetUptimeOfMs()
+	timestamp := timetool.GetAccurateTime()
+	pid := os.Getpid()
+	processUptime := timetool.GetAccurateTime() - _processStartTime
+	acknowledgeCounter := _acknowledgeCounter
+	querystring = fmt.Sprintf("?uptime=%d&timestamp=%d&pid=%d&process_uptime=%d&index=%d&seq_no=%d",
+		uptime, timestamp, pid, processUptime, acknowledgeCounter, sendCounter)
+	
+	virtType := "kvm" // osutil.GetVirtualType() is currently unavailable
+	osType := osutil.GetOsType()
+	osVersion := url.QueryEscape(osutil.GetVersion())
+	azId := util.GetAzoneId()
+	querystring += fmt.Sprintf("&virt_type=%s&lang=golang&os_type=%s&os_version=%s&app_version=%s&az=%s",
+		virtType, osType, osVersion, version.AssistVersion, azId)
+
+
+	// Only first heart-beat need to carry extra params
+	if acknowledgeCounter == 0 {
+		isColdstart := false
+		if _isColdstart, err := flagging.IsColdstart(); err != nil {
+			log.GetLogger().WithError(err).Errorln("Error encountered when detecting cold-start flag")
+		} else {
+			isColdstart = _isColdstart
+		}
+		
+		querystring += fmt.Sprintf("&cold_start=%t", isColdstart)
+	}
+	return
 }
 
 func PingwithRetries(retryCount int) {

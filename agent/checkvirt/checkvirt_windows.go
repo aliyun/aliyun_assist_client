@@ -145,10 +145,11 @@ func doCheck() {
 	}
 	driversDir := path.Join(system32, "drivers")
 	driversVersionMap := map[string]WinVersion{
-		"viostor.sys": WinVersion{},
-		"netkvm.sys":  WinVersion{},
-		"vioser.sys":  WinVersion{},
-		"AliNVMe.sys": WinVersion{},
+		"viostor.sys":       WinVersion{},
+		"netkvm.sys":        WinVersion{},
+		"vioser.sys":        WinVersion{},
+		"AliNVMe.sys":       WinVersion{},
+		"AliWinUtilDrv.sys": WinVersion{},
 	}
 	for key, _ := range driversVersionMap {
 		ver, err := GetFileVersion(path.Join(driversDir, key))
@@ -162,11 +163,18 @@ func doCheck() {
 	netkvm := driversVersionMap["netkvm.sys"]
 	vioser := driversVersionMap["vioser.sys"]
 	AliNVMe := driversVersionMap["AliNVMe.sys"]
+	AliWinUtilDrv := driversVersionMap["AliWinUtilDrv.sys"]
+	vminit, err := GetFileVersion("C:\\ProgramData\\aliyun\\vminit\\vminit.exe")
+	if err != nil {
+		log.GetLogger().Infof("get vminit.exe version failed,err=%s", err.Error())
+	}
 	metrics.GetVirtioVersionEvent(
 		"viostor", fmt.Sprintf("%d.%d.%d.%d", viostor.Major, viostor.Minor, viostor.Patch, viostor.Build),
 		"netkvm", fmt.Sprintf("%d.%d.%d.%d", netkvm.Major, netkvm.Minor, netkvm.Patch, netkvm.Build),
 		"vioser", fmt.Sprintf("%d.%d.%d.%d", vioser.Major, vioser.Minor, vioser.Patch, vioser.Build),
 		"AliNVMe", fmt.Sprintf("%d.%d.%d.%d", AliNVMe.Major, AliNVMe.Minor, AliNVMe.Patch, AliNVMe.Build),
+		"AliWinUtilDrv", fmt.Sprintf("%d.%d.%d.%d", AliWinUtilDrv.Major, AliWinUtilDrv.Minor, AliWinUtilDrv.Patch, AliWinUtilDrv.Build),
+		"vminit", fmt.Sprintf("%d.%d.%d.%d", vminit.Major, vminit.Minor, vminit.Patch, vminit.Build),
 	).ReportEvent()
 }
 

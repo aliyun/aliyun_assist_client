@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"crypto/x509"
+	"crypto/tls"
 
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 	"github.com/kirinlabs/HttpRequest"
@@ -49,7 +51,7 @@ func (*GeneralProvider) Name() string {
 	return "GeneralProvider"
 }
 
-func (*GeneralProvider) CACertificate(logger logrus.FieldLogger) ([]byte, error) {
+func (*GeneralProvider) CACertificate(logger logrus.FieldLogger, refresh bool) ([]byte, error) {
 	currentVersionDir, err := pathutil.GetCurrentPath()
 	if err != nil {
 		return nil, err
@@ -70,6 +72,12 @@ func (*GeneralProvider) CACertificate(logger logrus.FieldLogger) ([]byte, error)
 }
 
 func (p *GeneralProvider) ServerDomain(logger logrus.FieldLogger) (string, error) {
+	// 0. Retrieve domain from env
+	if domain := os.Getenv("ALIYUN_ASSIST_SERVER_HOST"); domain != "" {
+		logger.Info("Get host from env ALIYUN_ASSIST_SERVER_HOST: ", domain)
+		return domain, nil
+	}
+
 	// 1. Read region id cached in file if exists
 	regionId := getRegionIdInFile()
 	if regionId != "" {
@@ -167,7 +175,7 @@ func (p *GeneralProvider) RegionId(logger logrus.FieldLogger) (string, error) {
 
 func getRegionIdInFile() string {
 	currentVersionDir, _ := pathutil.GetCurrentPath()
-	path := filepath.Join(currentVersionDir, "../region-id")
+	path := filepath.Join(filepath.Dir(currentVersionDir), "region-id")
 
 	if regionIdFile, err := os.Open(path); err == nil {
 		if raw, err2 := io.ReadAll(regionIdFile); err2 == nil {
@@ -179,7 +187,7 @@ func getRegionIdInFile() string {
 
 func saveRegionIdToFile(logger logrus.FieldLogger, regionId string) {
 	currentVersionDir, _ := pathutil.GetCurrentPath()
-	path := filepath.Join(currentVersionDir, "../region-id")
+	path := filepath.Join(filepath.Dir(currentVersionDir), "region-id")
 
 	err := os.WriteFile(path, []byte(regionId), os.FileMode(0o644))
 	if err != nil {
@@ -219,12 +227,27 @@ func httpGetWithoutExtraHeader(logger logrus.FieldLogger, url string) (string, e
 		requester.UserAgentHeader: requester.UserAgentValue,
 	})
 
+	logger = logger.WithField("url", url)
 	response, err := request.Get(url)
 	if err != nil {
-		logger.WithFields(logrus.Fields{
-			"url": url,
-		}).WithError(err).Error("Failed to send HTTP GET request")
-		return "", err
+		if errors.Is(err, x509.UnknownAuthorityError{}) {
+			logger.Info("certificate error, reload certificates and retry")
+			request.Transport(requester.PeekHTTPTransport(logger))
+			certPool := requester.PeekRefreshedRootCAs(logger)
+			request.SetTLSClient(&tls.Config{
+				RootCAs: certPool,
+			})
+			if response, err = request.Get(url); err == nil {
+				logger.Info("certificated updated")
+				requester.RefreshHTTPCas(logger, certPool)
+			} else {
+				logger.WithError(err).Error("Failed to send HTTP GET request")
+				return "", err
+			}
+		} else {
+			logger.WithError(err).Error("Failed to send HTTP GET request")
+			return "", err
+		}
 	}
 	defer response.Close()
 

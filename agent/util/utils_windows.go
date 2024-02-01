@@ -8,8 +8,8 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/aliyun/aliyun_assist_client/agent/util/langutil"
 	"github.com/aliyun/aliyun_assist_client/common/executil"
+	"github.com/aliyun/aliyun_assist_client/common/langutil"
 )
 
 func ExeCmdNoWait(cmd string) (error, int) {

@@ -2,6 +2,7 @@ package requester
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"net"
 	"net/http"
@@ -22,11 +23,14 @@ var (
 	UserAgentValue string = fmt.Sprintf("%s_%s/%s", runtime.GOOS, runtime.GOARCH, version.AssistVersion)
 
 	_httpTransport *http.Transport
+	_httpTransportLock sync.RWMutex
 	_initHTTPTransportOnce sync.Once
 )
 
 func GetHTTPTransport(logger logrus.FieldLogger) *http.Transport {
 	_initHTTPTransportOnce.Do(func() {
+		_httpTransportLock.Lock()
+		defer _httpTransportLock.Unlock()
 		_httpTransport = &http.Transport{
 			Proxy: GetProxyFunc(logger),
 			DialContext: (&net.Dialer{
@@ -49,6 +53,23 @@ func GetHTTPTransport(logger logrus.FieldLogger) *http.Transport {
 	})
 
 	return _httpTransport
+}
+
+func RefreshHTTPCas(logger logrus.FieldLogger, certPool *x509.CertPool) {
+	_httpTransportLock.Lock()
+	defer _httpTransportLock.Unlock()
+	_httpTransport.TLSClientConfig = &tls.Config{
+		RootCAs: certPool,
+	}
+	UpdateRootCAs(logger, certPool)
+}
+
+// PeekHTTPTransport: return a deep copy of _httpTransport. PeekHTTPTransport must be called after GetHTTPTransport
+func PeekHTTPTransport(logger logrus.FieldLogger) *http.Transport {
+	_httpTransportLock.RLock()
+	defer _httpTransportLock.RUnlock()
+	clonedHttpTransport := _httpTransport.Clone()
+	return clonedHttpTransport
 }
 
 type HttpErrorCode struct {
