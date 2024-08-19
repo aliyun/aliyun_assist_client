@@ -3,6 +3,7 @@ package util
 import (
 	"fmt"
 	"time"
+	"errors"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/oos"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
@@ -14,6 +15,13 @@ var (
 	cacheRamRoleErr error
 	lastUpdateTime time.Time
 )
+
+var (
+	ErrRoleNameFailed = errors.New("RoleNameFailed")
+	ErrParameterStoreNotAccessible = errors.New("ParameterStoreNotAccessible")
+	ErrParameterFailed = errors.New("ParameterFailed")
+)
+
 
 func GetRoleName() (string, error) {
 	url := "http://100.100.100.200/latest/meta-data/ram/security-credentials/"

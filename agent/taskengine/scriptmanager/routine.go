@@ -3,7 +3,7 @@ package scriptmanager
 import (
 	"errors"
 
-	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/common/fileutil"
 )
 
 var (
@@ -11,11 +11,11 @@ var (
 )
 
 func SaveScriptFile(savePath string, content string) error {
-	if ret := util.CheckFileIsExist(savePath); ret == true {
+	if ret := fileutil.CheckFileIsExist(savePath); ret == true {
 		return ErrScriptFileExists
 	}
 
-	if err := util.WriteStringToFile(savePath, content); err != nil {
+	if err := fileutil.WriteStringToFile(savePath, content); err != nil {
 		return err
 	}
 

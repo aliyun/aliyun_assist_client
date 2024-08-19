@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"syscall"
-	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/agent/util/errnoutil"
 )
 
 func errProcess(function string, exitCode int, err error, tip string) (int, string) {
@@ -17,7 +17,7 @@ func errProcess(function string, exitCode int, err error, tip string) (int, stri
 	}
 	var errno syscall.Errno
 	if errors.As(err, &errno) {
-		if errnoPhrase, ok := util.ErrnoPhrases[errno]; ok {
+		if errnoPhrase, ok := errnoutil.ErrnoPhrases[errno]; ok {
 			errorCode += "." + errnoPhrase
 		}
 	}

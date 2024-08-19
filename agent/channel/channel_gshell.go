@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/aliyun/aliyun_assist_client/agent/clientreport"
+	"github.com/aliyun/aliyun_assist_client/agent/hybrid/instance"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
-	"github.com/aliyun/aliyun_assist_client/common/apiserver"
 )
 
 const (
@@ -55,7 +55,7 @@ type gshellStatus struct {
 }
 
 func (c *GshellChannel) IsSupported() bool {
-	if apiserver.IsHybrid() {
+	if instance.IsHybrid() {
 		return false
 	}
 	if !c.Working.IsSet() {
@@ -189,18 +189,7 @@ func (c *GshellChannel) SwitchChannel() error {
 	err := G_ChannelMgr.SelectAvailableChannel(ChannelGshellType)
 	if err != nil {
 		for i := 0; i < 5; i++ {
-			if G_ChannelMgr.SelectAvailableChannel(ChannelNone) == nil {
-				metrics.GetChannelSwitchEvent(
-					"type", ChannelTypeStr(G_ChannelMgr.GetCurrentChannelType()),
-					"info", fmt.Sprintf("success: Current channel is %d", G_ChannelMgr.GetCurrentChannelType()),
-					"reportType", "switch_channel_in_gshell",
-				).ReportEvent()
-
-				report := clientreport.ClientReport{
-					ReportType: "switch_channel_in_gshell",
-					Info:       fmt.Sprintf("success: Current channel is %d", G_ChannelMgr.GetCurrentChannelType()),
-				}
-				clientreport.SendReport(report)
+			if err := G_ChannelMgr.SelectAvailableChannelAndReport(ChannelNone, "switch_channel_in_gshell", true); err == nil {
 				return nil
 			}
 			time.Sleep(time.Duration(5) * time.Second)
@@ -220,7 +209,7 @@ func (c *GshellChannel) SwitchChannel() error {
 		return nil
 	}
 	metrics.GetChannelSwitchEvent(
-		"type", "type", ChannelTypeStr(G_ChannelMgr.GetCurrentChannelType()),
+		"type", ChannelTypeStr(G_ChannelMgr.GetCurrentChannelType()),
 		"info", fmt.Sprintf("fail: no available channel"),
 		"reportType", "switch_channel_in_gshell",
 	).ReportEvent()

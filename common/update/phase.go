@@ -55,7 +55,7 @@ func CompareFileMD5(filePath string, expectedMD5 string) error {
 }
 
 func ExtractPackage(filePath string, destination string) error {
-	return zipfile.Unzip(filePath, destination)
+	return zipfile.Unzip(filePath, destination, true)
 }
 
 func RemoveUpdatePackage(tempSavePath string) error {

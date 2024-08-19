@@ -11,6 +11,7 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	"github.com/aliyun/aliyun_assist_client/agent/util/process"
+	"github.com/aliyun/aliyun_assist_client/agent/util/timetool"
 	"github.com/aliyun/aliyun_assist_client/common/langutil"
 )
 
@@ -43,10 +44,13 @@ func ReportLastOsPanic() {
 		logger.Info("the latest event record is 24 hours ago, ignore it")
 		return
 	}
+	_, _, timeZone := timetool.NowWithTimezoneName()
 	metrics.GetWindowsGuestOSPanicEvent(
 		"bugcheck", bugcheck,
 		"crashInfo", crashInfo,
 		"crashTime", crashTime.Format("2006-01-02 15:04:05"),
+		"crashTimeUTC", crashTime.UTC().Format("2006-01-02 15:04:05"),
+		"timeZone", timeZone,
 	).ReportEvent()
 	logger.Info("the latest event record has reported")
 }
@@ -99,7 +103,7 @@ func FindWerSystemErrorReportingEvent(logger logrus.FieldLogger) (bugcheck, cras
 		}
 		if strings.HasPrefix(line, "createTime:") {
 			timeStr := line[len("createTime:"):]
-			crashTime, err = time.Parse("1/2/2006 15:04:05", timeStr)
+			crashTime, err = time.ParseInLocation("1/2/2006 15:04:05", timeStr, time.Local)
 			if err != nil {
 				logger.WithFields(logrus.Fields{
 					"line": line,

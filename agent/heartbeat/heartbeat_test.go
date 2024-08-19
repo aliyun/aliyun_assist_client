@@ -16,13 +16,13 @@ import (
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/aliyun/aliyun_assist_client/agent/hybrid/instance"
+	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/timermanager"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
-	"github.com/aliyun/aliyun_assist_client/common/apiserver"
 	"github.com/aliyun/aliyun_assist_client/common/requester"
 	"github.com/aliyun/aliyun_assist_client/internal/testutil"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
-	"github.com/aliyun/aliyun_assist_client/agent/log"
 )
 
 func TestBuildPingRequest(t *testing.T) {
@@ -36,13 +36,13 @@ func TestBuildPingRequest(t *testing.T) {
 	const virtType = "kvm"
 	const osVersion = "Linux_#1 SMP Sun Jul 26 15:27:06 UTC 2020_x86_64"
 	const uptime = 7136000
-	const timestamp = 1595777226000
 	const pid = 7136
 	const processUptime = 409
 	const acknowledgeCounter = 2
 	const sendCounter = 2
 	const azoneId = "1q23213"
 	const isColdstart = false
+	timestamp := time.Now().Unix()
 
 	guard := gomonkey.ApplyFunc(util.GetServerHost, func() string {
 		return mockRegion + ".axt.aliyun.com"
@@ -53,7 +53,7 @@ func TestBuildPingRequest(t *testing.T) {
 	// 	sendCounter)
 	encodedOsVersion := url.QueryEscape(osVersion)
 	querystring := fmt.Sprintf("?uptime=%d&timestamp=%d&pid=%d&process_uptime=%d&index=%d&seq_no=%d&virt_type=%s&os_version=%s&az=%s&machineid=%s&cold_start=%t",
-		uptime, timestamp, pid, processUptime, acknowledgeCounter, sendCounter, virtType, encodedOsVersion, azoneId, _machineId, isColdstart)
+		uptime, uint64(timestamp), pid, processUptime, acknowledgeCounter, sendCounter, virtType, encodedOsVersion, azoneId, _machineId, isColdstart)
 	requestURL := "https://" + util.GetPingService() + querystring
 	fmt.Println(requestURL)
 
@@ -104,8 +104,8 @@ func generateFakePingRequest(mockRegion string) string {
 
 	var requestURL = url.URL{
 		// Scheme: "https",
-		Host:   fmt.Sprintf("%s.axt.aliyun.com", mockRegion),
-		Path:   "/luban/api/heart-beat",
+		Host: fmt.Sprintf("%s.axt.aliyun.com", mockRegion),
+		Path: "/luban/api/heart-beat",
 		RawQuery: url.Values{
 			"virt_type":      []string{virtType},
 			"os_type":        []string{osType},
@@ -167,7 +167,7 @@ func TestInvokePingRequest(t *testing.T) {
 	httpmock.RegisterResponder("GET",
 		fmt.Sprintf("https://%s.axt.aliyun.com/luban/api/heart-beat", mockRegion),
 		func(h *http.Request) (*http.Response, error) {
-			assert.Exactly(t, "https://" + mockRequestURLWithoutScheme, h.URL.String(), "Mock server should receive same request as generated")
+			assert.Exactly(t, "https://"+mockRequestURLWithoutScheme, h.URL.String(), "Mock server should receive same request as generated")
 			return httpmock.NewStringResponse(200, mockResponse), nil
 		})
 
@@ -198,7 +198,7 @@ func TestInvokePingRequestRetrying(t *testing.T) {
 	httpmock.RegisterResponder("GET",
 		fmt.Sprintf("https://%s.axt.aliyun.com/luban/api/heart-beat", mockRegion),
 		func(h *http.Request) (*http.Response, error) {
-			assert.Exactly(t, "https://" + mockRequestURLWithoutScheme, h.URL.String(), "Mock server should receive same request as generated")
+			assert.Exactly(t, "https://"+mockRequestURLWithoutScheme, h.URL.String(), "Mock server should receive same request as generated")
 
 			if atomic.AddUint32(&callCount, 1) < 2 {
 				return httpmock.NewStringResponse(503, mockErrorResponse), nil
@@ -239,7 +239,7 @@ func TestInvokePingRequestRetryingWithLimit(t *testing.T) {
 	httpmock.RegisterResponder("GET",
 		fmt.Sprintf("https://%s.axt.aliyun.com/luban/api/heart-beat", mockRegion),
 		func(h *http.Request) (*http.Response, error) {
-			assert.Exactly(t, "https://" + mockRequestURLWithoutScheme, h.URL.String(), "Mock server should receive same request as generated")
+			assert.Exactly(t, "https://"+mockRequestURLWithoutScheme, h.URL.String(), "Mock server should receive same request as generated")
 
 			if atomic.AddUint32(&callCount, 1) < 2 {
 				return httpmock.NewStringResponse(503, mockErrorResponse), nil
@@ -278,7 +278,7 @@ func TestInvokePingRequestNetworkError(t *testing.T) {
 
 	httpmock.RegisterResponder("GET",
 		fmt.Sprintf("https://%s.axt.aliyun.com/luban/api/heart-beat", mockRegion),
-		httpmock.NewStringResponder(503, "https://" + mockRequestURLWithoutScheme))
+		httpmock.NewStringResponder(503, "https://"+mockRequestURLWithoutScheme))
 
 	response, err := invokePingRequest(false, mockRequestURLWithoutScheme, false)
 
@@ -335,7 +335,7 @@ func TestInvokePingRequestTimeOut(t *testing.T) {
 	httpmock.RegisterResponder("GET",
 		fmt.Sprintf("https://%s.axt.aliyun.com/luban/api/heart-beat", mockRegion),
 		func(h *http.Request) (*http.Response, error) {
-			assert.Exactly(t, "https://" + mockRequestURLWithoutScheme, h.URL.String(), "Mock server should receive same request as generated")
+			assert.Exactly(t, "https://"+mockRequestURLWithoutScheme, h.URL.String(), "Mock server should receive same request as generated")
 			if atomic.AddUint32(&callCount, 1) < 2 {
 				time.Sleep(time.Second * 20)
 				return httpmock.NewStringResponse(404, mockErrorResponse), nil
@@ -348,6 +348,18 @@ func TestInvokePingRequestTimeOut(t *testing.T) {
 	assert.NoError(t, err, "invokePingRequest should not return error for this testcase")
 	assert.Exactly(t, mockSuccessfulResponse, response, "invokePingRequest should return mockResponse without error")
 }
+
+var (
+	// Test protocol switch between http and https
+	enableHttpx = func(scheme, mockRegion string) {
+		httpmock.RegisterResponder("GET", fmt.Sprintf("%s://%s.axt.aliyun.com/luban/api/heart-beat", scheme, mockRegion),
+			httpmock.NewStringResponder(200, "ok"))
+	}
+	disableHttpx = func(scheme, mockRegion string) {
+		httpmock.RegisterResponder("GET", fmt.Sprintf("%s://%s.axt.aliyun.com/luban/api/heart-beat", scheme, mockRegion),
+			httpmock.NewStringResponder(500, "not ok"))
+	}
+)
 
 func Test_doPing(t *testing.T) {
 	guard := gomonkey.ApplyFunc(requester.GetHTTPTransport, func(logrus.FieldLogger) *http.Transport {
@@ -422,22 +434,38 @@ func Test_doPing(t *testing.T) {
 			}
 		})
 	}
-	// Test protocol switch between http and https
-	enableHttpx := func(scheme string) {
-		httpmock.RegisterResponder("GET", fmt.Sprintf("%s://%s.axt.aliyun.com/luban/api/heart-beat", scheme, mockRegion),
-			httpmock.NewStringResponder(200, "ok"))
-	}
-	disableHttpx := func(scheme string) {
-		httpmock.RegisterResponder("GET", fmt.Sprintf("%s://%s.axt.aliyun.com/luban/api/heart-beat", scheme, mockRegion),
-			httpmock.NewStringResponder(500, "not ok"))
-	}
+}
+
+func Test_doPingSwitchProtocol(t *testing.T) {
+
+	guard := gomonkey.ApplyFunc(requester.GetHTTPTransport, func(logrus.FieldLogger) *http.Transport {
+		transport, _ := http.DefaultTransport.(*http.Transport)
+		return transport
+	})
+	defer guard.Reset()
+
+	// Mock instance.IsHybrid to make it must return the expect value
+	// Else the return value is uncertain
+	hybridGuard := gomonkey.ApplyFunc(instance.IsHybrid, func() bool { return false})
+	
+	httpmock.Activate()
+	defer httpmock.DeactivateAndReset()
+	util.NilRequest.Set()
+	defer util.NilRequest.Clear()
+	defer func() {
+		_retryCounter = 0
+	}()
+	const mockRegion = "cn-test100"
+	testutil.MockMetaServer(mockRegion)
+	timermanager.InitTimerManager()
+	InitHeartbeatTimer()
 	var err error
 
-	sleepGuard := gomonkey.ApplyFunc(time.Sleep, func(time.Duration){})
+	sleepGuard := gomonkey.ApplyFunc(time.Sleep, func(time.Duration) {})
 	defer sleepGuard.Reset()
 
-	disableHttpx("http")
-	disableHttpx("https")
+	disableHttpx("http", mockRegion)
+	disableHttpx("https", mockRegion)
 	_retryCounter = 0
 	err = doPing()
 	assert.EqualError(t, err, requester.NewHttpErrorCode(500).Error())
@@ -445,8 +473,8 @@ func Test_doPing(t *testing.T) {
 	// default protocol is http
 	log.GetLogger().Info("Test: default protocol is http")
 	_tryHttp = true
-	enableHttpx("http")
-	enableHttpx("https")
+	enableHttpx("http", mockRegion)
+	enableHttpx("https", mockRegion)
 	_retryCounter = 0
 	err = doPing()
 	assert.ErrorIs(t, err, nil)
@@ -454,23 +482,23 @@ func Test_doPing(t *testing.T) {
 
 	// if http not work, use https
 	log.GetLogger().Info("Test: if http not work, use https")
-	disableHttpx("http")
-	enableHttpx("https")
+	disableHttpx("http", mockRegion)
+	enableHttpx("https", mockRegion)
 	_retryCounter = 0
 	err = doPing()
 	assert.ErrorIs(t, err, nil)
-	assert.Equal(t, _tryHttp, false)
+	assert.Equal(t, false, _tryHttp)
 
 	// if switch protocol from http to https, keep use https until https not work
 	log.GetLogger().Info("Test: if switch protocol from http to https, keep use https until https not work")
-	enableHttpx("http")
-	enableHttpx("https")
+	enableHttpx("http", mockRegion)
+	enableHttpx("https", mockRegion)
 	_retryCounter = 0
 	err = doPing()
 	assert.ErrorIs(t, err, nil)
 	assert.Equal(t, _tryHttp, false)
-	enableHttpx("http")
-	disableHttpx("https")
+	enableHttpx("http", mockRegion)
+	disableHttpx("https", mockRegion)
 	_retryCounter = 0
 	err = doPing()
 	assert.ErrorIs(t, err, nil)
@@ -478,17 +506,17 @@ func Test_doPing(t *testing.T) {
 
 	// if http not work, use https and try http after 24 * 60 heart-beats
 	log.GetLogger().Info("Test: if http not work, use https and try http after 24 * 60 heart-beats")
-	disableHttpx("http")
-	enableHttpx("https")
+	disableHttpx("http", mockRegion)
+	enableHttpx("https", mockRegion)
 	_retryCounter = 0
 	doPing()
-	enableHttpx("http")
+	enableHttpx("http", mockRegion)
 	for i := 0; i < 23*60; i += 1 {
 		_retryCounter = 0
 		err = doPing()
 		_sendCounter++
 		assert.ErrorIs(t, err, nil)
-		assert.Equal(t, _tryHttp, false)
+		assert.Equal(t, false, _tryHttp)
 	}
 	for i := 0; i < 2*60; i += 1 {
 		_retryCounter = 0
@@ -506,19 +534,76 @@ func Test_doPing(t *testing.T) {
 	err = doPing()
 	assert.ErrorIs(t, err, nil)
 
+	hybridGuard.Reset()
+
 	// use https and do not switch to http in hybrid mode
 	log.GetLogger().Info("Test: use https and do not switch to http in hybrid mode")
-	hybridGuard := gomonkey.ApplyFunc(apiserver.IsHybrid, func() bool { return true})
+	hybridGuard = gomonkey.ApplyFunc(instance.IsHybrid, func() bool { return true})
 	defer hybridGuard.Reset()
-	for i := 0; i<25*60; i+=1 {
-		disableHttpx("https")
-		enableHttpx("http")
+	for i := 0; i < 25*60; i += 1 {
+		disableHttpx("https", mockRegion)
+		enableHttpx("http", mockRegion)
 		_retryCounter = 0
 		err = doPing()
 		assert.EqualError(t, err, requester.NewHttpErrorCode(500).Error())
 	}
-	enableHttpx("https")
+	enableHttpx("https", mockRegion)
 	_retryCounter = 0
 	err = doPing()
 	assert.ErrorIs(t, err, nil)
+}
+
+func TestRegisterActionWhenNetRecover(t *testing.T) {
+	guard := gomonkey.ApplyFunc(requester.GetHTTPTransport, func(logrus.FieldLogger) *http.Transport {
+		transport, _ := http.DefaultTransport.(*http.Transport)
+		return transport
+	})
+	defer guard.Reset()
+	httpmock.Activate()
+	defer httpmock.DeactivateAndReset()
+	util.NilRequest.Set()
+	defer util.NilRequest.Clear()
+	const mockRegion = "cn-test100"
+	testutil.MockMetaServer(mockRegion)
+	timermanager.InitTimerManager()
+	InitHeartbeatTimer()
+
+	enableNetwork := func() {
+		enableHttpx("https", mockRegion)
+		enableHttpx("http", mockRegion)
+	}
+	disableNetwork := func() {
+		disableHttpx("https", mockRegion)
+		disableHttpx("http", mockRegion)
+	}
+
+	_networkConnected.Store(false)
+	flag := 0
+	syncChan := make(chan int, 1)
+	action := func() {
+		flag += 1
+		syncChan<-1
+	}
+	var err error
+	RegisterActionWhenNetRecover(map[string]func(){
+		"AddFlag": action,
+	})
+	enableNetwork()
+	err = doPing()
+	// wait for _actionsWhenNetRecover
+	<-syncChan
+	assert.Equal(t, nil, err)
+	assert.Equal(t, 1, flag)
+	for i:=1; i<5; i++ {
+		disableNetwork()
+		err = doPing()
+		assert.NotEqual(t, nil, err)
+		assert.Equal(t, i, flag)
+		enableNetwork()
+		err = doPing()
+		// wait for _actionsWhenNetRecover
+		<-syncChan
+		assert.Equal(t, nil, err)
+		assert.Equal(t, i+1, flag)
+	}
 }

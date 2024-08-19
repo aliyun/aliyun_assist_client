@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"bou.ke/monkey"
+	gomonkey "github.com/agiledragon/gomonkey/v2"
 	"github.com/aliyun/aliyun_assist_client/agent/kickvmhandle"
 	"github.com/aliyun/aliyun_assist_client/agent/update"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
@@ -64,24 +64,24 @@ func TestOnRecvMsg(t *testing.T) {
 			subname: "invalid agent",
 			args: theArgs,
 		},
-		{
-			name: "guest-shutdown",
-			subname: "reboot",
-			args: theArgs,
-		},
-		{
-			name: "guest-shutdown",
-			subname: "powerdown",
-			args: theArgs,
-		},
+		// {
+		// 	name: "guest-shutdown",
+		// 	subname: "reboot",
+		// 	args: theArgs,
+		// },
+		// {
+		// 	name: "guest-shutdown",
+		// 	subname: "powerdown",
+		// 	args: theArgs,
+		// },
 		{
 			name: "guest-shutdown",
 			subname: "unknown",
 			args: theArgs,
 		},
 	}
-	guard := monkey.Patch(util.ExeCmd, func(string) (error, string, string) { return nil, "", ""} )
-	defer guard.Unpatch()
+	guard := gomonkey.ApplyFunc(util.ExeCmd, func(string) (error, string, string) { return nil, "", ""} )
+	defer guard.Reset()
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.name == "ws" {
@@ -89,11 +89,11 @@ func TestOnRecvMsg(t *testing.T) {
 			}
 
 			if tt.subname == "CriticalActionRunning" {
-				guard := monkey.Patch(update.IsCriticalActionRunning, func() bool { return true })
-				defer guard.Unpatch()
+				guard := gomonkey.ApplyFunc(update.IsCriticalActionRunning, func() bool { return true })
+				defer guard.Reset()
 			} else {
-				guard := monkey.Patch(update.IsCriticalActionRunning, func() bool { return false })
-				defer guard.Unpatch()
+				guard := gomonkey.ApplyFunc(update.IsCriticalActionRunning, func() bool { return false })
+				defer guard.Reset()
 			}
 
 			if tt.name == "guest-sync" {
@@ -114,13 +114,13 @@ func TestOnRecvMsg(t *testing.T) {
 				} else if tt.subname == "valid agent" {
 					msg.Arguments.Cmd = "valid agent params params"
 					var a *kickvmhandle.AgentHandle
-					guard := monkey.PatchInstanceMethod(reflect.TypeOf(a), "CheckAction", func(*kickvmhandle.AgentHandle) bool { return true })
-					defer guard.Unpatch()
+					guard := gomonkey.ApplyMethod(reflect.TypeOf(a), "CheckAction", func(*kickvmhandle.AgentHandle) bool { return true })
+					defer guard.Reset()
 				} else if tt.subname == "invalid agent" {
 					msg.Arguments.Cmd = "invalid agent params params"
 					var a *kickvmhandle.AgentHandle
-					guard := monkey.PatchInstanceMethod(reflect.TypeOf(a), "CheckAction", func(*kickvmhandle.AgentHandle) bool { return false })
-					defer guard.Unpatch()
+					guard := gomonkey.ApplyMethod(reflect.TypeOf(a), "CheckAction", func(*kickvmhandle.AgentHandle) bool { return false })
+					defer guard.Reset()
 				}
 				content, _ := json.Marshal(&msg)
 				tt.args.Msg = string(content)

@@ -8,30 +8,27 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
-	"errors"
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 	"github.com/google/uuid"
 
+	"github.com/aliyun/aliyun_assist_client/agent/hybrid/instance"
 	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/timetool"
-	"github.com/aliyun/aliyun_assist_client/common/machineid"
 	"github.com/aliyun/aliyun_assist_client/common/networkcategory"
-	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 	"github.com/aliyun/aliyun_assist_client/common/requester"
 )
 
 const (
-	InternetDomain     = ".axt.aliyuncs.com"
+	InternetDomain = ".axt.aliyuncs.com"
 )
 
-type HybridModeProvider struct {}
+type HybridModeProvider struct{}
 
 func (*HybridModeProvider) Name() string {
 	return "HybridModeProvider"
@@ -66,7 +63,7 @@ func (p *HybridModeProvider) ServerDomain(logger logrus.FieldLogger) (string, er
 }
 
 func (*HybridModeProvider) ExtraHTTPHeaders(logger logrus.FieldLogger) (map[string]string, error) {
-	if !IsHybrid() {
+	if !instance.IsHybrid() {
 		return nil, requester.ErrNotProvided
 	}
 	u4 := uuid.New()
@@ -75,25 +72,19 @@ func (*HybridModeProvider) ExtraHTTPHeaders(logger logrus.FieldLogger) (map[stri
 	timestamp := timetool.GetAccurateTime()
 	str_timestamp := strconv.FormatInt(timestamp, 10)
 
-	var instance_id string
-	var path string
-	path, _ = pathutil.GetHybridPath()
+	instanceId := instance.ReadInstanceId()
+	fingerprint := instance.ReadFingerprint()
+	priKey := instance.ReadPriKey()
 
-	content, _ := os.ReadFile(filepath.Join(path, "instance-id"))
-	instance_id = string(content)
-
-	mid, _ := machineid.GetMachineID()
-
-	input := instance_id + mid + str_timestamp + str_request_id
-	pri_key, _ := os.ReadFile(filepath.Join(path, "pri-key"))
-	output := rsaSign(logger, input, string(pri_key))
-	logger.Infoln(input, output)
+	input := instanceId + fingerprint + str_timestamp + str_request_id
+	output := rsaSign(logger, input, priKey)
+	logger.Infoln("Hybrid request:", input, output)
 
 	extraHeaders := map[string]string{
-		"x-acs-instance-id": instance_id,
-		"x-acs-timestamp": str_timestamp,
-		"x-acs-request-id": str_request_id,
-		"x-acs-signature": output,
+		"x-acs-instance-id": instanceId,
+		"x-acs-timestamp":   str_timestamp,
+		"x-acs-request-id":  str_request_id,
+		"x-acs-signature":   output,
 	}
 
 	internal_ip, err := osutil.ExternalIP()
@@ -105,39 +96,17 @@ func (*HybridModeProvider) ExtraHTTPHeaders(logger logrus.FieldLogger) (map[stri
 }
 
 func (*HybridModeProvider) RegionId(logger logrus.FieldLogger) (string, error) {
-	if !IsHybrid() {
+	if !instance.IsHybrid() {
 		return "", requester.ErrNotProvided
 	}
-
-	hybridDir, _ := pathutil.GetHybridPath()
-	path := filepath.Join(hybridDir, "region-id")
-
-	if regionIdFile, err := os.Open(path); err == nil {
-		if raw, err2 := io.ReadAll(regionIdFile); err2 == nil {
-			return strings.TrimSpace(strings.Trim(string(raw), "\r\t\n")), nil
-		}
+	if regionId := instance.ReadRegionId(); regionId != "" {
+		return regionId, nil
 	}
 	return "", requester.ErrNotProvided
 }
 
-func IsHybrid() bool {
-	hybridDir, _ := pathutil.GetHybridPath()
-	path := filepath.Join(hybridDir, "instance-id")
-
-	_, err := os.Stat(path)
-	return !errors.Is(err, os.ErrNotExist)
-}
-
 func getNetworkTypeInHybrid() string {
-	hybridDir, _ := pathutil.GetHybridPath()
-	path := filepath.Join(hybridDir, "network-mode")
-
-	if networkModeFile, err := os.Open(path); err == nil {
-		if raw, err2 := io.ReadAll(networkModeFile); err2 == nil {
-			return strings.TrimSpace(strings.Trim(string(raw), "\r\t\n"))
-		}
-	}
-	return ""
+	return instance.ReadNetworkMode()
 }
 
 func rsaSign(logger logrus.FieldLogger, data string, keyBytes string) string {

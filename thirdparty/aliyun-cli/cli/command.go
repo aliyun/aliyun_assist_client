@@ -39,6 +39,10 @@ type Command struct {
 	// Enable unknown flags
 	EnableUnknownFlag bool
 
+	// DisableFlagParsing disables the flag parsing.
+	// If this is true all flags will be passed to the command as arguments
+	DisableFlagParsing bool
+
 	// enable suggest distance,
 	// disable -1
 	// 0: default distance
@@ -148,71 +152,76 @@ func (c *Command) ExecuteComplete(ctx *Context, args []string) {
 }
 
 func (c *Command) executeInner(ctx *Context, args []string) error {
-	//
-	// fmt.Printf(">>> Execute Command: %s args=%v\n", c.Name, args)
-	parser := NewParser(args, ctx)
-
-	//
-	// get next arg
-	nextArg, _, err := parser.ReadNextArg()
-	if err != nil {
-		return err
-	}
-
-	//
-	// if next arg is help, run help
-	if nextArg == "help" {
-		ctx.help = true
-		return c.executeInner(ctx, parser.GetRemains())
-	}
-
-	//
-	// if next args is not empty, try find sub commands
-	if nextArg != "" {
+	var callArgs []string
+	if !c.DisableFlagParsing {
 		//
-		// if has sub command, run it
-		subCommand := c.GetSubCommand(nextArg)
-		if subCommand != nil {
-			ctx.EnterCommand(subCommand)
-			return subCommand.executeInner(ctx, parser.GetRemains())
+		// fmt.Printf(">>> Execute Command: %s args=%v\n", c.Name, args)
+		parser := NewParser(args, ctx)
+
+		//
+		// get next arg
+		nextArg, _, err := parser.ReadNextArg()
+		if err != nil {
+			return err
 		}
 
 		//
-		// no sub command and command.Run == nil
-		// raise error
-		if c.Run == nil {
-			// c.executeHelp(ctx, args, fmt.Errorf("unknown command: %s", nextArg))
-			return NewInvalidCommandError(nextArg, ctx)
+		// if next arg is help, run help
+		if nextArg == "help" {
+			ctx.help = true
+			return c.executeInner(ctx, parser.GetRemains())
 		}
-	}
 
-	// cmd is find by args, try run cmd.Run
-	// parse remain args
-	remainArgs, err := parser.ReadAll()
-	if err != nil {
-		return fmt.Errorf("parse failed %s", err)
-	}
+		//
+		// if next args is not empty, try find sub commands
+		if nextArg != "" {
+			//
+			// if has sub command, run it
+			subCommand := c.GetSubCommand(nextArg)
+			if subCommand != nil {
+				ctx.EnterCommand(subCommand)
+				return subCommand.executeInner(ctx, parser.GetRemains())
+			}
 
-	//
-	// check flags
-	err = ctx.CheckFlags()
-	if err != nil {
-		return err
-	}
+			//
+			// no sub command and command.Run == nil
+			// raise error
+			if c.Run == nil {
+				// c.executeHelp(ctx, args, fmt.Errorf("unknown command: %s", nextArg))
+				return NewInvalidCommandError(nextArg, ctx)
+			}
+		}
 
-	if HelpFlag(ctx.Flags()).IsAssigned() {
-		ctx.help = true
-	}
-	callArgs := make([]string, 0)
-	if nextArg != "" {
-		callArgs = append(callArgs, nextArg)
-	}
-	for _, s := range remainArgs {
-		if s != "help" {
-			callArgs = append(callArgs, s)
-		} else {
+		// cmd is find by args, try run cmd.Run
+		// parse remain args
+		remainArgs, err := parser.ReadAll()
+		if err != nil {
+			return fmt.Errorf("parse failed %s", err)
+		}
+
+		//
+		// check flags
+		err = ctx.CheckFlags()
+		if err != nil {
+			return err
+		}
+
+		if HelpFlag(ctx.Flags()).IsAssigned() {
 			ctx.help = true
 		}
+		callArgs = make([]string, 0)
+		if nextArg != "" {
+			callArgs = append(callArgs, nextArg)
+		}
+		for _, s := range remainArgs {
+			if s != "help" {
+				callArgs = append(callArgs, s)
+			} else {
+				ctx.help = true
+			}
+		}
+	} else {
+		callArgs = args
 	}
 
 	if ctx.completion != nil {

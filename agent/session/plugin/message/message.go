@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/log"
 )
 
 const (

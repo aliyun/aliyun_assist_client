@@ -11,13 +11,15 @@ import (
 
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
-
+	gomonkey "github.com/agiledragon/gomonkey/v2"
 	"github.com/aliyun/aliyun_assist_client/agent/inventory/model"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/util/jsonutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/timetool"
 	"github.com/aliyun/aliyun_assist_client/internal/testutil"
+	"github.com/aliyun/aliyun_assist_client/common/requester"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 )
 
 func TestChecksum(t *testing.T) {
@@ -102,7 +104,12 @@ func TestInventoryUploader(t *testing.T) {
 	optimizedInventoryItems, nonOptimizedInventoryItems, err = uploader.ConvertToOOSInventoryItems(items)
 	assert.Equal(t, err, nil)
 
-	
+	guard_transport := gomonkey.ApplyFunc(requester.GetHTTPTransport, func(logrus.FieldLogger) *http.Transport {
+		transport, _ := http.DefaultTransport.(*http.Transport)
+		return transport
+	})
+	defer guard_transport.Reset()
+
 	httpmock.Activate()
 	util.NilRequest.Set()
 	defer httpmock.DeactivateAndReset()
@@ -124,11 +131,11 @@ func TestInventoryUploader(t *testing.T) {
 		})
 
 	err = uploader.SendDataToOOS(instanceId, optimizedInventoryItems)
-	assert.Equal(t, err, nil)
+	assert.Equal(t, nil, err)
 	err = uploader.SendDataToOOS(instanceId, nonOptimizedInventoryItems)
-	assert.Equal(t, err, nil)
+	assert.Equal(t, nil, err)
 
 	_, err = uploader.GetDirtyOOSInventoryItems(items)
-	assert.Equal(t, err, nil)
+	assert.Equal(t, nil, err)
 	
 }

@@ -24,14 +24,10 @@ github.com/aliyun/alibaba-cloud-sdk-go/sdk/errors
 github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests
 github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses
 github.com/aliyun/alibaba-cloud-sdk-go/sdk/utils
-github.com/aliyun/alibaba-cloud-sdk-go/services/ecs
 github.com/aliyun/alibaba-cloud-sdk-go/services/oos
-# github.com/containerd/console v1.0.3
-## explicit; go 1.13
-github.com/containerd/console
-# github.com/creack/goselect v0.1.2
-## explicit; go 1.13
-github.com/creack/goselect
+# github.com/coreos/go-systemd/v22 v22.3.2
+## explicit; go 1.12
+github.com/coreos/go-systemd/v22/dbus
 # github.com/creack/pty v1.1.11
 ## explicit; go 1.13
 github.com/creack/pty
@@ -74,9 +70,6 @@ github.com/docker/go-units
 # github.com/fabiokung/shm v0.0.0-20150728212823-2852b0d79bae
 ## explicit
 github.com/fabiokung/shm
-# github.com/fsnotify/fsnotify v1.4.9
-## explicit; go 1.13
-github.com/fsnotify/fsnotify
 # github.com/go-logr/logr v1.2.3
 ## explicit; go 1.16
 github.com/go-logr/logr
@@ -84,6 +77,9 @@ github.com/go-logr/logr
 ## explicit; go 1.12
 github.com/go-ole/go-ole
 github.com/go-ole/go-ole/oleutil
+# github.com/godbus/dbus/v5 v5.0.6
+## explicit; go 1.12
+github.com/godbus/dbus/v5
 # github.com/gogo/protobuf v1.3.2
 ## explicit; go 1.15
 github.com/gogo/protobuf/gogoproto
@@ -126,9 +122,6 @@ github.com/json-iterator/go
 # github.com/kirinlabs/HttpRequest v1.1.1
 ## explicit
 github.com/kirinlabs/HttpRequest
-# github.com/kopoli/go-terminal-size v0.0.0-20170219200355-5c97524c8b54
-## explicit
-github.com/kopoli/go-terminal-size
 # github.com/lestrrat-go/strftime v1.0.4
 ## explicit; go 1.12
 github.com/lestrrat-go/strftime
@@ -138,56 +131,12 @@ github.com/lufia/plan9stats
 # github.com/marcsauter/single v0.0.0-20201009143647-9f8d81240be2
 ## explicit
 github.com/marcsauter/single
-# github.com/mattn/go-isatty v0.0.3
-## explicit
-github.com/mattn/go-isatty
 # github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd
 ## explicit
 github.com/modern-go/concurrent
 # github.com/modern-go/reflect2 v1.0.2
 ## explicit; go 1.12
 github.com/modern-go/reflect2
-# github.com/nxadm/tail v1.4.8
-## explicit; go 1.13
-github.com/nxadm/tail
-github.com/nxadm/tail/ratelimiter
-github.com/nxadm/tail/util
-github.com/nxadm/tail/watch
-github.com/nxadm/tail/winfile
-# github.com/onsi/ginkgo v1.16.5
-## explicit; go 1.16
-github.com/onsi/ginkgo
-github.com/onsi/ginkgo/config
-github.com/onsi/ginkgo/formatter
-github.com/onsi/ginkgo/internal/codelocation
-github.com/onsi/ginkgo/internal/containernode
-github.com/onsi/ginkgo/internal/failer
-github.com/onsi/ginkgo/internal/global
-github.com/onsi/ginkgo/internal/leafnodes
-github.com/onsi/ginkgo/internal/remote
-github.com/onsi/ginkgo/internal/spec
-github.com/onsi/ginkgo/internal/spec_iterator
-github.com/onsi/ginkgo/internal/specrunner
-github.com/onsi/ginkgo/internal/suite
-github.com/onsi/ginkgo/internal/testingtproxy
-github.com/onsi/ginkgo/internal/writer
-github.com/onsi/ginkgo/reporters
-github.com/onsi/ginkgo/reporters/stenographer
-github.com/onsi/ginkgo/reporters/stenographer/support/go-colorable
-github.com/onsi/ginkgo/reporters/stenographer/support/go-isatty
-github.com/onsi/ginkgo/types
-# github.com/onsi/gomega v1.19.0
-## explicit; go 1.18
-github.com/onsi/gomega
-github.com/onsi/gomega/format
-github.com/onsi/gomega/internal
-github.com/onsi/gomega/internal/gutil
-github.com/onsi/gomega/matchers
-github.com/onsi/gomega/matchers/support/goraph/bipartitegraph
-github.com/onsi/gomega/matchers/support/goraph/edge
-github.com/onsi/gomega/matchers/support/goraph/node
-github.com/onsi/gomega/matchers/support/goraph/util
-github.com/onsi/gomega/types
 # github.com/opencontainers/go-digest v1.0.0
 ## explicit; go 1.13
 github.com/opencontainers/go-digest
@@ -260,14 +209,8 @@ go.etcd.io/bbolt
 # go.uber.org/atomic v1.11.0
 ## explicit; go 1.18
 go.uber.org/atomic
-# golang.org/x/crypto v0.14.0
-## explicit; go 1.17
-golang.org/x/crypto/ssh/terminal
 # golang.org/x/net v0.17.0
 ## explicit; go 1.17
-golang.org/x/net/html
-golang.org/x/net/html/atom
-golang.org/x/net/html/charset
 golang.org/x/net/http/httpguts
 golang.org/x/net/http/httpproxy
 golang.org/x/net/http2
@@ -277,7 +220,7 @@ golang.org/x/net/internal/socks
 golang.org/x/net/internal/timeseries
 golang.org/x/net/proxy
 golang.org/x/net/trace
-# golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
+# golang.org/x/sync v0.1.0
 ## explicit
 golang.org/x/sync/semaphore
 # golang.org/x/sys v0.13.0
@@ -295,21 +238,9 @@ golang.org/x/term
 # golang.org/x/text v0.13.0
 ## explicit; go 1.17
 golang.org/x/text/encoding
-golang.org/x/text/encoding/charmap
-golang.org/x/text/encoding/htmlindex
 golang.org/x/text/encoding/internal
 golang.org/x/text/encoding/internal/identifier
-golang.org/x/text/encoding/japanese
-golang.org/x/text/encoding/korean
 golang.org/x/text/encoding/simplifiedchinese
-golang.org/x/text/encoding/traditionalchinese
-golang.org/x/text/encoding/unicode
-golang.org/x/text/internal/language
-golang.org/x/text/internal/language/compact
-golang.org/x/text/internal/tag
-golang.org/x/text/internal/utf8internal
-golang.org/x/text/language
-golang.org/x/text/runes
 golang.org/x/text/secure/bidirule
 golang.org/x/text/transform
 golang.org/x/text/unicode/bidi
@@ -399,12 +330,6 @@ google.golang.org/protobuf/types/known/timestamppb
 # gopkg.in/ini.v1 v1.66.2
 ## explicit
 gopkg.in/ini.v1
-# gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7
-## explicit
-gopkg.in/tomb.v1
-# gopkg.in/yaml.v2 v2.4.0
-## explicit; go 1.15
-gopkg.in/yaml.v2
 # gopkg.in/yaml.v3 v3.0.1
 ## explicit
 gopkg.in/yaml.v3

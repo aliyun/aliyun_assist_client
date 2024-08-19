@@ -17,9 +17,14 @@ import (
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/eventlog"
 	"golang.org/x/sys/windows/svc/mgr"
+	"go.uber.org/atomic"
 )
 
 const version = "windows-service"
+
+var (
+	StopOrShutdown atomic.String
+)
 
 type windowsService struct {
 	i Interface
@@ -177,6 +182,11 @@ loop:
 		case svc.Interrogate:
 			changes <- c.CurrentStatus
 		case svc.Stop, svc.Shutdown:
+			if c.Cmd == svc.Stop {
+				StopOrShutdown.Store("Stop")
+			} else {
+				StopOrShutdown.Store("Shutdown")
+			}
 			changes <- svc.Status{State: svc.StopPending}
 			if err := ws.i.Stop(ws); err != nil {
 				ws.setError(err)

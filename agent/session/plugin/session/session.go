@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,7 +16,6 @@ package session
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 	"io"
 	"net/http"
 	"os"
@@ -25,12 +24,16 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
-	"github.com/aliyun/aliyun_assist_client/agent/log"
-	client "github.com/aliyun/aliyun_assist_client/agent/session/plugin"
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
+
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/cli"
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/client"
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/config"
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/log"
+
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/i18n"
+
+	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
 )
 
 func NewSessionCommand() *cli.Command {
@@ -40,14 +43,15 @@ func NewSessionCommand() *cli.Command {
 		Short: i18n.T(
 			"use session manager devops aliyun ecs instance",
 			"使用session manager运维阿里云实例"),
-		Usage: "session --instance {instance_id}",
+		Usage: "session --instance {instance_id} [--user-name {user_name}]",
 		Run: func(ctx *cli.Context, args []string) error {
 			if len(args) > 0 {
 				return cli.NewInvalidCommandError(args[0], ctx)
 			}
 			instance_id, _ := config.InstanceFlag(ctx.Flags()).GetValue()
 			wss_url, _ := config.WssUrlFlag(ctx.Flags()).GetValue()
-			return doSession(ctx, instance_id, wss_url)
+			user_name, _ := config.UserNameFlag(ctx.Flags()).GetValue()
+			return doSession(ctx, instance_id, user_name, wss_url)
 		},
 	}
 
@@ -164,7 +168,7 @@ func CheckSessionEnabled(ctx *cli.Context) {
 
 }
 
-func doSession(ctx *cli.Context, instance_id string, wss_url string) error {
+func doSession(ctx *cli.Context, instance_id, user_name, wss_url string) error {
 	CheckSessionEnabled(ctx)
 	var websocket_url string
 	if instance_id != "" {
@@ -179,6 +183,7 @@ func doSession(ctx *cli.Context, instance_id string, wss_url string) error {
 		request.Scheme = "https"
 
 		request.InstanceId = &[]string{instance_id}
+		request.Username = user_name
 
 		response, err := client.StartTerminalSession(request)
 		if err != nil {

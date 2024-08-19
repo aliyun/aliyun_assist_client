@@ -23,7 +23,7 @@ var (
 
 func doCheck() {
 	// Periodic checking update uses loose timeout limitation
-	if err := SafeUpdate(time.Duration(60) * time.Second, time.Duration(30) * time.Second); err != nil {
+	if err := SafeUpdate(time.Duration(60) * time.Second, time.Duration(30) * time.Second, UpdateReasonPeriod); err != nil {
 		log.GetLogger().WithError(err).Errorln("Failed to check update periodically")
 	}
 }
@@ -58,4 +58,14 @@ func InitCheckUpdateTimer() error {
 		return errors.New("Update check timer has been initialized")
 	}
 	return errors.New("Update check timer has been initialized")
+}
+
+// TriggerUpgrade triggers doCheck() by call timer.SkipWaiting()
+func TriggerUpdateCheck() {
+	_checkTimerInitLock.Lock()
+	defer _checkTimerInitLock.Unlock()
+	if _checkTimer == nil {
+		return
+	}
+	_checkTimer.SkipWaiting()
 }

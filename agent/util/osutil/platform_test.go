@@ -25,10 +25,10 @@ func TestPlatformVersion(t *testing.T) {
 }
 
 
-func TestPlatformArchitect(t *testing.T) {
-	val, _ := PlatformArchitect()
-	assert.Equal(t, "x86_64", val)
-}
+// func TestPlatformArchitect(t *testing.T) {
+// 	val, _ := PlatformArchitect()
+// 	assert.Equal(t, "x86_64", val)
+// }
 
 func TestGetNormalizedPlatform(t *testing.T) {
 	val, _ := getNormalizedPlatform("linux")

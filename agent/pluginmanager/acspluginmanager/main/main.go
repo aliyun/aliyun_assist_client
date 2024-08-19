@@ -22,8 +22,8 @@ import (
 	pm "github.com/aliyun/aliyun_assist_client/agent/pluginmanager/acspluginmanager"
 	"github.com/aliyun/aliyun_assist_client/agent/pluginmanager/acspluginmanager/flag"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
-	"github.com/aliyun/aliyun_assist_client/common/envutil"
 	versioning "github.com/aliyun/aliyun_assist_client/agent/version"
+	"github.com/aliyun/aliyun_assist_client/common/envutil"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/aliyun-cli/cli"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/aliyun-cli/i18n"
 )

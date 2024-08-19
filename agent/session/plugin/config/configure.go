@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,13 +16,15 @@ package config
 import (
 	"bufio"
 	"fmt"
-	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/cli"
-	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/i18n"
 	"io"
 	"io/ioutil"
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/i18n"
+
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/cli"
 )
 
 var hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {

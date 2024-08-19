@@ -1,6 +1,7 @@
 package taskerrors
 
 import (
+	"errors"
 	"fmt"
 )
 
@@ -50,7 +51,7 @@ func NewWorkingDirectoryNotExistError(workingDir string) InvalidSettingError {
 		name: "workingDirectory",
 		shortMessage: "WorkingDirectoryNotExist",
 		message: fmt.Sprintf("WorkingDirectoryNotExist: %s", workingDir),
-		cause: nil,
+		cause: fmt.Errorf("%s does not exist", workingDir),
 	}
 }
 
@@ -59,7 +60,7 @@ func NewDefaultWorkingDirectoryNotAvailableError(message string) InvalidSettingE
 		name: "workingDirectory",
 		shortMessage: "DefaultWorkingDirectoryNotAvailable",
 		message: fmt.Sprintf("DefaultWorkingDirectoryNotAvailable: %s", message),
-		cause: nil,
+		cause: errors.New(message),
 	}
 }
 

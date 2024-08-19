@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
-	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/common/fileutil"
 	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 )
 
@@ -40,7 +40,7 @@ func LoadConfigCache() (r *ListInstanceStateConfigurationsResult, err error) {
 	if err != nil {
 		return 
 	}
-	if !util.CheckFileIsExist(path) {
+	if !fileutil.CheckFileIsExist(path) {
 		return
 	}
 	data, err := ioutil.ReadFile(path)
@@ -94,7 +94,7 @@ func LoadTemplateCache(name string, version string) (content []byte, err error) 
 	if err != nil {
 		return 
 	}
-	if !util.CheckFileIsExist(path) {
+	if !fileutil.CheckFileIsExist(path) {
 		return
 	}
 	return ioutil.ReadFile(path)

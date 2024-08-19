@@ -16,11 +16,13 @@ import (
 
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 
+	"github.com/aliyun/aliyun_assist_client/agent/commandermanager"
 	"github.com/aliyun/aliyun_assist_client/agent/flagging"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
-	"github.com/aliyun/aliyun_assist_client/agent/taskengine/container"
+	"github.com/aliyun/aliyun_assist_client/agent/taskengine/commander"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/host"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/models"
+	"github.com/aliyun/aliyun_assist_client/agent/taskengine/outputbuffer"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/parameters"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/scriptmanager"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/taskerrors"
@@ -36,11 +38,13 @@ const (
 )
 
 type FinishCallback func()
+type ReportErrorCallback func(taskId string, repeat models.RunTaskRepeatType, errorCode, status string) (isTaskErr bool)
 
 type Task struct {
 	taskInfo         models.RunTaskInfo
 	scheduleLocation *time.Location
 	onFinish         FinishCallback
+	onReportError 	 ReportErrorCallback
 
 	processer               models.TaskProcessor
 	startTime               time.Time
@@ -51,11 +55,14 @@ type Task struct {
 	canceled                bool
 	droped                  int
 	cancelMut               sync.Mutex
+
+	disableOutputRingbuffer bool
+	outputRingbuffer        outputbuffer.OutputBuffer
 	output                  bytes.Buffer
 	data_sended             uint32
 }
 
-func NewTask(taskInfo models.RunTaskInfo, scheduleLocation *time.Location, onFinish FinishCallback) *Task {
+func NewTask(taskInfo models.RunTaskInfo, scheduleLocation *time.Location, onFinish FinishCallback, onReportError ReportErrorCallback) (*Task, error) {
 	timeout, err := strconv.Atoi(taskInfo.TimeOut)
 	if err != nil {
 		timeout = 3600
@@ -63,42 +70,42 @@ func NewTask(taskInfo models.RunTaskInfo, scheduleLocation *time.Location, onFin
 
 	var processor models.TaskProcessor
 	if taskInfo.ContainerId != "" || taskInfo.ContainerName != "" {
-		processor = container.DetectContainerProcessor(&container.ContainerCommandOptions{
-			TaskId:            taskInfo.TaskId,
-			InvokeVersion: taskInfo.InvokeVersion,
-			ContainerId:       taskInfo.ContainerId,
-			ContainerName:     taskInfo.ContainerName,
-			CommandType:       taskInfo.CommandType,
-			Timeout:           timeout,
-
-			WorkingDirectory: taskInfo.WorkingDir,
-			Username:         taskInfo.Username,
-		})
+		annotation := map[string]string{
+			"containerId":   taskInfo.ContainerId,
+			"containerName": taskInfo.ContainerName,
+		}
+		processor, err = commander.NewCommanderProcessor(taskInfo, timeout, annotation, commandermanager.ContainerCommanderName)
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		processor = &host.HostProcessor{
-			TaskId:            taskInfo.TaskId,
+			TaskId:        taskInfo.TaskId,
 			InvokeVersion: taskInfo.InvokeVersion,
-			CommandType:       taskInfo.CommandType,
-			Repeat:            taskInfo.Repeat,
-			Timeout:           timeout,
+			CommandType:   taskInfo.CommandType,
+			Repeat:        taskInfo.Repeat,
+			Timeout:       timeout,
 
 			CommandName:         taskInfo.CommandName,
 			WorkingDirectory:    taskInfo.WorkingDir,
 			Username:            taskInfo.Username,
 			WindowsUserPassword: taskInfo.Password,
+			TerminationMode:     taskInfo.TerminationMode,
 		}
 	}
 
 	task := &Task{
-		taskInfo:         taskInfo,
-		scheduleLocation: scheduleLocation,
-		onFinish:         onFinish,
-		processer:        processor,
-		canceled:         false,
-		droped:           0,
+		taskInfo:                taskInfo,
+		scheduleLocation:        scheduleLocation,
+		onFinish:                onFinish,
+		onReportError:           onReportError,
+		processer:               processor,
+		canceled:                false,
+		droped:                  0,
+		disableOutputRingbuffer: flagging.IsTaskOutputRingbufferDisabled(),
 	}
 
-	return task
+	return task, nil
 }
 
 func tryRead(stdouterrWrite io.Reader, out *bytes.Buffer) {
@@ -106,7 +113,6 @@ func tryRead(stdouterrWrite io.Reader, out *bytes.Buffer) {
 	n, _ := stdouterrWrite.Read(buf_stdout)
 	out.Write(buf_stdout[:n])
 }
-
 func tryReadAll(stdouterrWrite io.Reader, out *bytes.Buffer) {
 	for {
 		buf_stdout := make([]byte, 2048)
@@ -121,9 +127,9 @@ func tryReadAll(stdouterrWrite io.Reader, out *bytes.Buffer) {
 func (task *Task) PreCheck(reportVerified bool) error {
 	// Reuse specified logger across whole task pre-checking phase
 	taskLogger := log.GetLogger().WithFields(logrus.Fields{
-		"TaskId": task.taskInfo.TaskId,
+		"TaskId":        task.taskInfo.TaskId,
 		"InvokeVersion": task.taskInfo.InvokeVersion,
-		"Phase":  "Pre-checking",
+		"Phase":         "Pre-checking",
 	})
 
 	if task.taskInfo.CommandType != "RunBatScript" &&
@@ -143,7 +149,9 @@ func (task *Task) PreCheck(reportVerified bool) error {
 	}
 
 	if invalidParameter, err := task.processer.PreCheck(); err != nil {
-		if validationErr, ok := err.(taskerrors.NormalizedValidationError); ok {
+		if validationErr, ok := err.(*taskerrors.CommanderError); ok {
+			task.SendInvalidTask(validationErr.SubCode, validationErr.Error())
+		} else if validationErr, ok := err.(taskerrors.NormalizedValidationError); ok {
 			task.SendInvalidTask(validationErr.Param(), validationErr.Value())
 		} else if settingErr, ok := err.(taskerrors.InvalidSettingError); ok {
 			task.SendInvalidTask(invalidParameter, fmt.Sprintf("%s: %v", settingErr.ShortMessage(), settingErr.Unwrap()))
@@ -155,21 +163,27 @@ func (task *Task) PreCheck(reportVerified bool) error {
 	}
 
 	if reportVerified == true {
-		task.sendTaskVerified()
+		if err := task.sendTaskVerified(); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
 func (task *Task) Run() (taskerrors.ErrorCode, error) {
 	if err := task.PreCheck(false); err != nil {
+		if taskError, ok := err.(taskerrors.ExecutionError); ok {
+			return taskError.ErrCode(), taskError
+		}
 		return 0, err
 	}
 
 	// Reuse specified logger across whole task running phase
 	taskLogger := log.GetLogger().WithFields(logrus.Fields{
-		"TaskId": task.taskInfo.TaskId,
-		"InvokeVersion": task.taskInfo.InvokeVersion,
-		"Phase":  "Running",
+		"TaskId":            task.taskInfo.TaskId,
+		"InvokeVersion":     task.taskInfo.InvokeVersion,
+		"Phase":             "Running",
+		"disableRingbuffer": task.disableOutputRingbuffer,
 	})
 	taskLogger.Info("Run task")
 
@@ -187,8 +201,8 @@ func (task *Task) Run() (taskerrors.ErrorCode, error) {
 			if invalidErr, ok := err.(taskerrors.InvalidSettingError); ok {
 				task.SendInvalidTask("InvalidEnvironmentParameter", invalidErr.ShortMessage())
 			} else if taskErr, ok := err.(taskerrors.ExecutionError); ok {
-				task.SendError("", taskErr.Code(), taskErr.Error())
-				return taskErr.Code(), err
+				task.SendError("", taskErr.ErrCode(), taskErr.Error())
+				return taskErr.ErrCode(), err
 			} else {
 				task.SendError("", taskerrors.WrapErrResolveEnvironmentParameterFailed, err.Error())
 			}
@@ -220,15 +234,15 @@ func (task *Task) Run() (taskerrors.ErrorCode, error) {
 
 	if err := task.processer.Prepare(content); err != nil {
 		taskLogger.WithError(err).Errorln("Failed to prepare command process")
-		if executionErr, ok := err.(taskerrors.NormalizedExecutionError); ok {
-			task.SendError("", taskerrors.Stringer(executionErr.Code()), executionErr.Description())
+		if commErr, ok := err.(*taskerrors.CommanderError); ok {
+			task.SendError("", taskerrors.Stringer(commErr.SubCode), commErr.Error())
 			return taskerrors.WrapGeneralError, err
 		} else if validationErr, ok := err.(taskerrors.NormalizedValidationError); ok {
 			task.SendInvalidTask(validationErr.Param(), validationErr.Value())
 			return taskerrors.WrapGeneralError, err
 		} else if taskErr, ok := err.(taskerrors.ExecutionError); ok {
-			task.SendError("", taskErr.Code(), taskErr.Error())
-			return taskErr.Code(), err
+			task.SendError("", taskErr.ErrCode(), taskErr.Error())
+			return taskErr.ErrCode(), err
 		} else {
 			return taskerrors.WrapGeneralError, err
 		}
@@ -236,11 +250,30 @@ func (task *Task) Run() (taskerrors.ErrorCode, error) {
 	}
 
 	taskLogger.Info("Prepare command process")
-	var stdouterrWrite process.SafeBuffer
+	var stdouterrWriter io.ReadWriter
+	if task.disableOutputRingbuffer {
+		stdouterrWriter = &process.SafeBuffer{}
+	} else {
+		totalQuoto := task.taskInfo.Output.LogQuota
+		if totalQuoto < defaultQuoto {
+			totalQuoto = defaultQuoto
+		}
+		var err error
+		stdouterrWriter, err = task.outputRingbuffer.Init(defaultQuotoPre, totalQuoto-defaultQuotoPre)
+		if err != nil {
+			taskLogger.Error("create pipe failed: ", err)
+			taskError := taskerrors.NewCreatePipeError(err)
+			task.SendError("", taskError.ErrCode(), taskError.Error())
+			return taskError.ErrCode(), err
+		}
+	}
 
 	task.startTime = time.Now()
 	task.monotonicStartTimestamp = timetool.ToAccurateTime(task.startTime.Local())
-	task.sendTaskStart()
+	if taskError := task.sendTaskStart(); taskError != nil {
+		taskLogger.WithError(taskError).Error("Send starting event failed")
+		return taskError.ErrCode(), taskError
+	}
 	taskLogger.Infof("Sent starting event")
 
 	// Replace variable representing states with context and channel operation,
@@ -276,20 +309,33 @@ func (task *Task) Run() (taskerrors.ErrorCode, error) {
 
 			select {
 			case <-ticker.C:
-				if atomic.LoadUint32(&task.data_sended) > defaultQuotoPre {
-					tryRead(&stdouterrWrite, &task.output)
-					if reported := task.sendRunningOutput("", lastReportOutputTime); reported {
-						lastReportOutputTime = time.Now()
+				if task.disableOutputRingbuffer {
+					if atomic.LoadUint32(&task.data_sended) > defaultQuotoPre {
+						tryRead(stdouterrWriter, &task.output)
+						if reported := task.sendRunningOutput("", lastReportOutputTime); reported {
+							lastReportOutputTime = time.Now()
+						}
+						taskLogger.Infof("Running output sent: %d bytes, just report running no output sent", atomic.LoadUint32(&task.data_sended))
+					} else {
+						var running_output bytes.Buffer
+						tryRead(stdouterrWriter, &running_output)
+						if reported := task.sendRunningOutput(running_output.String(), lastReportOutputTime); reported {
+							lastReportOutputTime = time.Now()
+						}
+						atomic.AddUint32(&task.data_sended, uint32(running_output.Len()))
+						taskLogger.Infof("Running output sent: %d bytes", atomic.LoadUint32(&task.data_sended))
 					}
-					taskLogger.Infof("Running output sent: %d bytes, just report running no output sent", atomic.LoadUint32(&task.data_sended))
 				} else {
-					var running_output bytes.Buffer
-					tryRead(&stdouterrWrite, &running_output)
-					if reported := task.sendRunningOutput(running_output.String(), lastReportOutputTime); reported {
+					outputPre := task.outputRingbuffer.ReadPre()
+					if reported := task.sendRunningOutput(string(outputPre), lastReportOutputTime); reported {
 						lastReportOutputTime = time.Now()
 					}
-					atomic.AddUint32(&task.data_sended, uint32(running_output.Len()))
-					taskLogger.Infof("Running output sent: %d bytes", atomic.LoadUint32(&task.data_sended))
+					if len(outputPre) > 0 {
+						atomic.AddUint32(&task.data_sended, uint32(len(outputPre)))
+						taskLogger.Infof("Running output sent: %d bytes", atomic.LoadUint32(&task.data_sended))
+					} else {
+						taskLogger.Infof("Running output sent: %d bytes, just report running no output sent", atomic.LoadUint32(&task.data_sended))
+					}
 				}
 			case <-ctx.Done():
 				return
@@ -299,7 +345,7 @@ func (task *Task) Run() (taskerrors.ErrorCode, error) {
 
 	taskLogger.Info("Start command process")
 	var status int
-	task.exit_code, status, err = task.processer.SyncRun(&stdouterrWrite, &stdouterrWrite, nil)
+	task.exit_code, status, err = task.processer.SyncRun(stdouterrWriter, stdouterrWriter, nil)
 	if status == process.Success {
 		taskLogger.WithFields(logrus.Fields{
 			"exitcode":   task.exit_code,
@@ -323,37 +369,53 @@ func (task *Task) Run() (taskerrors.ErrorCode, error) {
 	stopSendRunning()
 	// Wait for the goroutine sending running output to exit
 	<-stoppedSendRunning
-	tryReadAll(&stdouterrWrite, &task.output)
-
 	task.endTime = time.Now()
 	task.monotonicEndTimestamp = timetool.ToAccurateTime(timetool.ToStableElapsedTime(task.endTime, task.startTime).Local())
 
+	var postOutput string
+	if task.disableOutputRingbuffer {
+		tryReadAll(stdouterrWriter, &task.output)
+		postOutput = task.getReportString(task.output)
+	} else {
+		task.droped = task.outputRingbuffer.Dropped()
+		postOutput = string(task.outputRingbuffer.ReadAll())
+	}
+
 	if status == process.Fail {
 		if err == nil {
-			task.sendOutput("failed", task.getReportString(task.output))
+			task.sendOutput("failed", postOutput)
 		} else if executionErr, ok := err.(taskerrors.NormalizedExecutionError); ok {
-			task.SendError(task.getReportString(task.output), taskerrors.Stringer(executionErr.Code()), executionErr.Description())
+			task.SendError(postOutput, taskerrors.Stringer(executionErr.Code()), executionErr.Description())
 		} else if taskErr, ok := err.(taskerrors.ExecutionError); ok {
-			task.SendError(task.getReportString(task.output), taskErr.Code(), taskErr.Error())
+			task.SendError(postOutput, taskErr.ErrCode(), taskErr.Error())
 		} else {
-			task.SendError(task.getReportString(task.output), taskerrors.WrapErrExecuteScriptFailed, fmt.Sprintf("ExecuteScriptFailed: %s", err.Error()))
+			task.SendError(postOutput, taskerrors.WrapErrExecuteScriptFailed, fmt.Sprintf("ExecuteScriptFailed: %s", err.Error()))
 		}
 	} else if status == process.Timeout {
-		task.sendOutput("timeout", task.getReportString(task.output))
+		task.sendOutput("timeout", postOutput)
 	} else {
 		if task.IsCancled() == false {
-			task.sendOutput("finished", task.getReportString(task.output))
+			task.sendOutput("finished", postOutput)
 		}
 	}
 	endTaskLogger := log.GetLogger().WithFields(logrus.Fields{
-		"TaskId": task.taskInfo.TaskId,
+		"TaskId":        task.taskInfo.TaskId,
 		"InvokeVersion": task.taskInfo.InvokeVersion,
-		"Phase":  "Ending",
+		"Phase":         "Ending",
 	})
 	endTaskLogger.Info("Sent final output and state")
 
-	task.output.Reset()
-	endTaskLogger.Info("Clean task output")
+	if task.disableOutputRingbuffer {
+		task.output.Reset()
+		endTaskLogger.Info("Clean task output")
+	} else {
+		if err := task.outputRingbuffer.Uninit(); err != nil {
+			endTaskLogger.Error("Task outputbuffer err: ", err)
+		} else {
+			endTaskLogger.Info("Clean task output")
+		}
+	}
+
 	// Perform cleanup actions after task finished
 	if err := task.processer.Cleanup(ScriptToDelete); err != nil {
 		endTaskLogger.WithError(err).Errorln("Failed to cleanup after command finished")
@@ -367,28 +429,62 @@ func (task *Task) Run() (taskerrors.ErrorCode, error) {
 	return 0, nil
 }
 
-func (task *Task) sendTaskVerified() {
+func (task *Task) sendTaskVerified() error {
 	queryParams := fmt.Sprintf("?taskId=%s&invokeVersion=%d",
 		task.taskInfo.TaskId, task.taskInfo.InvokeVersion)
 	url := util.GetVerifiedTaskService() + queryParams
-	util.HttpPost(url, "", "text")
+	url += task.processer.ExtraLubanParams()
+	content, _ := util.HttpPost(url, "", "text")
+	if resp := parseTaskReportResp(content); resp != nil && resp.ErrorCode != "" {
+		log.GetLogger().WithFields(logrus.Fields{
+			"taskId":            task.taskInfo.TaskId,
+			"invocationVersion": task.taskInfo.InvokeVersion,
+		}).Errorf("Receive errorCode[%s] and status[%s] in response", resp.ErrorCode, resp.Status)
+		if task.onReportError != nil && task.onReportError(task.taskInfo.TaskId, task.taskInfo.Repeat, resp.ErrorCode, resp.Status) {
+			err := fmt.Errorf("Server response error[%s] and status[%s] when send task verified", resp.ErrorCode, resp.Status)
+			taskError := taskerrors.NewServerResponseError(err)
+			return taskError
+		}
+	}
+	return nil
 }
 
-func (task *Task) sendTaskStart() {
+func (task *Task) sendTaskStart() taskerrors.ExecutionError {
 	if task.taskInfo.Output.SendStart == false {
-		return
+		return nil
 	}
 	url := util.GetRunningOutputService()
-	url += fmt.Sprintf("?taskId=%s&invokeVersion=%d&start=%s", 
+	url += fmt.Sprintf("?taskId=%s&invokeVersion=%d&start=%s",
 		task.taskInfo.TaskId, task.taskInfo.InvokeVersion, strconv.FormatInt(task.monotonicStartTimestamp, 10))
 	url += task.wallClockQueryParams()
 	url += task.processer.ExtraLubanParams()
 
-	util.HttpPost(url, "", "text")
+	content, _ := util.HttpPost(url, "", "text")
+	if resp := parseTaskReportResp(content); resp != nil && resp.ErrorCode != "" {
+		log.GetLogger().WithFields(logrus.Fields{
+			"taskId":            task.taskInfo.TaskId,
+			"invocationVersion": task.taskInfo.InvokeVersion,
+		}).Errorf("Receive errorCode[%s] and status[%s] in response", resp.ErrorCode, resp.Status)
+		if task.onReportError != nil && task.onReportError(task.taskInfo.TaskId, task.taskInfo.Repeat, resp.ErrorCode, resp.Status) {
+			err := fmt.Errorf("Server response error[%s] when send task start", resp.ErrorCode)
+			taskError := taskerrors.NewServerResponseError(err)
+			return taskError
+		}
+	}
+	return nil
 }
 
 func (task *Task) SendInvalidTask(param string, value string) {
-	reportInvalidTask(task.taskInfo.TaskId, task.taskInfo.InvokeVersion, param, value)
+	content, _ := reportInvalidTask(task.taskInfo.TaskId, task.taskInfo.InvokeVersion, param, value, task.processer.ExtraLubanParams())
+	if resp := parseTaskReportResp(content); resp != nil && resp.ErrorCode != "" {
+		log.GetLogger().WithFields(logrus.Fields{
+			"taskId":            task.taskInfo.TaskId,
+			"invocationVersion": task.taskInfo.InvokeVersion,
+		}).Errorf("Receive errorCode[%s] and status[%s] in response", resp.ErrorCode, resp.Status)
+		if task.onReportError != nil {
+			task.onReportError(task.taskInfo.TaskId, task.taskInfo.Repeat, resp.ErrorCode, resp.Status)
+		}
+	}
 }
 
 func (task *Task) sendOutput(status string, output string) {
@@ -399,28 +495,35 @@ func (task *Task) sendOutput(status string, output string) {
 		url = util.GetFinishOutputService()
 	} else if status == "timeout" {
 		url = util.GetTimeoutOutputService()
-	} else if status == "canceled" {
-		sendStoppedOutput(task.taskInfo.TaskId, task.taskInfo.InvokeVersion,
-			task.monotonicStartTimestamp, task.monotonicEndTimestamp, task.exit_code, task.droped, output, stopReasonKilled)
-		return
 	} else if status == "failed" {
 		url = util.GetErrorOutputService()
 	} else {
 		return
 	}
 
-	url += fmt.Sprintf("?taskId=%s&invokeVersion=%d&start=%s&end=%s&exitCode=%s&dropped=%s", 
-		task.taskInfo.TaskId, task.taskInfo.InvokeVersion, strconv.FormatInt(task.monotonicStartTimestamp, 10), 
+	url += fmt.Sprintf("?taskId=%s&invokeVersion=%d&start=%s&end=%s&exitCode=%s&dropped=%s",
+		task.taskInfo.TaskId, task.taskInfo.InvokeVersion, strconv.FormatInt(task.monotonicStartTimestamp, 10),
 		strconv.FormatInt(task.monotonicEndTimestamp, 10), strconv.Itoa(task.exit_code), strconv.Itoa(task.droped))
 	url += task.wallClockQueryParams()
 	url += task.processer.ExtraLubanParams()
 
 	var err error
-	_, err = util.HttpPost(url, output, "text")
+	var content string
+	content, err = util.HttpPost(url, output, "text")
 
 	for i := 0; i < 3 && err != nil; i++ {
 		time.Sleep(time.Duration(2) * time.Second)
-		_, err = util.HttpPost(url, output, "text")
+		content, err = util.HttpPost(url, output, "text")
+	}
+
+	if resp := parseTaskReportResp(content); resp != nil && resp.ErrorCode != "" {
+		log.GetLogger().WithFields(logrus.Fields{
+			"taskId":            task.taskInfo.TaskId,
+			"invocationVersion": task.taskInfo.InvokeVersion,
+		}).Errorf("Receive errorCode[%s] and status[%s] in response", resp.ErrorCode, resp.Status)
+		if task.onReportError != nil {
+			task.onReportError(task.taskInfo.TaskId, task.taskInfo.Repeat, resp.ErrorCode, resp.Status)
+		}
 	}
 
 	if task.onFinish != nil {
@@ -443,19 +546,28 @@ func (task *Task) SendError(output string, errCode fmt.Stringer, errDesc string)
 		output = langutil.LocalToUTF8(output)
 	}
 
-	_, err := util.HttpPost(requestURL, output, "text")
+	content, err := util.HttpPost(requestURL, output, "text")
 	for i := 0; i < 3 && err != nil; i++ {
 		time.Sleep(time.Duration(2) * time.Second)
-		_, err = util.HttpPost(requestURL, output, "text")
+		content, err = util.HttpPost(requestURL, output, "text")
+	}
+	if resp := parseTaskReportResp(content); resp != nil && resp.ErrorCode != "" {
+		log.GetLogger().WithFields(logrus.Fields{
+			"taskId":            task.taskInfo.TaskId,
+			"invocationVersion": task.taskInfo.InvokeVersion,
+		}).Errorf("Receive errorCode[%s] and status[%s] in response", resp.ErrorCode, resp.Status)
+		if task.onReportError != nil {
+			task.onReportError(task.taskInfo.TaskId, task.taskInfo.Repeat, resp.ErrorCode, resp.Status)
+		}
 	}
 }
 
 // Cancel the task invocation. If quietly is false, notify server the task is canceled.
-func (task *Task) Cancel(quietly bool) {
+func (task *Task) Cancel(quietly bool) error {
 	task.cancelMut.Lock()
 	defer task.cancelMut.Unlock()
 	if task.canceled {
-		return
+		return nil
 	}
 	task.canceled = true
 	// Consistent with C++ version, end time of canceled task is set to the time
@@ -466,10 +578,34 @@ func (task *Task) Cancel(quietly bool) {
 	} else {
 		task.monotonicEndTimestamp = timetool.ToAccurateTime(timetool.ToStableElapsedTime(task.endTime, task.startTime).Local())
 	}
-	if !quietly {
-		task.sendOutput("canceled", task.getReportString(task.output))
+	cancelErr := task.processer.Cancel()
+	taskLogger := log.GetLogger().WithFields(logrus.Fields{
+		"taskId":        task.taskInfo.TaskId,
+		"invokeVersion": task.taskInfo.InvokeVersion,
+	})
+	if cancelErr == nil {
+		taskLogger.Info("Task canceled")
+	} else {
+		taskLogger.WithError(cancelErr).Error("Task canceled failed")
 	}
-	task.processer.Cancel()
+
+	if !quietly {
+		stopResult := stopReasonKilled
+		if cancelErr != nil {
+			stopResult = stopFailed
+		}
+		var output string
+		if task.disableOutputRingbuffer {
+			output = task.getReportString(task.output)
+		} else {
+			task.droped = task.outputRingbuffer.Dropped()
+			output = string(task.outputRingbuffer.ReadAll())
+		}
+		sendStoppedOutput(task.taskInfo.TaskId, task.taskInfo.InvokeVersion,
+			task.monotonicStartTimestamp, task.monotonicEndTimestamp, task.exit_code,
+			task.droped, output, stopResult, cancelErr)
+	}
+	return cancelErr
 }
 
 func (task *Task) getReportString(output bytes.Buffer) string {
@@ -494,13 +630,25 @@ func (task *Task) sendRunningOutput(data string, lastReportTime time.Time) bool 
 		return false
 	}
 	url := util.GetRunningOutputService()
-	url += fmt.Sprintf("?taskId=%s&invokeVersion=%d&start=%s", 
+	url += fmt.Sprintf("?taskId=%s&invokeVersion=%d&start=%s",
 		task.taskInfo.TaskId, task.taskInfo.InvokeVersion, strconv.FormatInt(task.monotonicStartTimestamp, 10))
 	url += task.wallClockQueryParams()
 	url += task.processer.ExtraLubanParams()
 
 	data = langutil.LocalToUTF8(data)
-	util.HttpPost(url, data, "text")
+	if content, err := util.HttpPost(url, data, "text"); err == nil {
+		if resp := parseTaskReportResp(content); resp != nil && resp.ErrorCode != "" {
+			log.GetLogger().WithFields(logrus.Fields{
+				"taskId":            task.taskInfo.TaskId,
+				"invocationVersion": task.taskInfo.InvokeVersion,
+			}).Errorf("Receive errorCode[%s] and status[%s] in response", resp.ErrorCode, resp.Status)
+			if task.onReportError != nil && task.onReportError(task.taskInfo.TaskId, task.taskInfo.Repeat, resp.ErrorCode, resp.Status) {
+				// The task has started running, we need cancel it if the 
+				// backend server tells us this task has an error.
+				task.Cancel(true)
+			}
+		}
+	}
 	return true
 }
 
@@ -508,6 +656,13 @@ func (task *Task) IsCancled() bool {
 	task.cancelMut.Lock()
 	defer task.cancelMut.Unlock()
 	return task.canceled
+}
+
+// ResetCancel reset the canceled flag
+func (task *Task) ResetCancel() {
+	task.cancelMut.Lock()
+	defer task.cancelMut.Unlock()
+	task.canceled = false
 }
 
 // Generate additional querystring parameters: Unix timestamp of wall clock for

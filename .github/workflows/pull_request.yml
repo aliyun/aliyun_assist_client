@@ -49,7 +49,7 @@ jobs:
 
       - name: Build ali-instance-cli
         run: |
-          cd agent/session/plugin/main
+          cd agent/session/plugin
           GOOS=windows GOARCH=amd64 go build -v -o ali-instance-cli.exe &&
           GOOS=linux GOARCH=386 go build -v -o ali-instance-cli &&
           GOOS=linux GOARCH=arm64 go build -v -o ali-instance-cli-arm

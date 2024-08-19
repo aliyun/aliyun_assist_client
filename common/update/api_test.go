@@ -6,19 +6,27 @@ import (
 	"net/http"
 	"testing"
 
-	"bou.ke/monkey"
+	gomonkey "github.com/agiledragon/gomonkey/v2"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/jarcoal/httpmock"
+	"github.com/aliyun/aliyun_assist_client/common/requester"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
+	"github.com/aliyun/aliyun_assist_client/internal/testutil"
 )
 
 func TestFetchUpdateInfo(t *testing.T) {
+	guard_transport := gomonkey.ApplyFunc(requester.GetHTTPTransport, func(logrus.FieldLogger) *http.Transport {
+		transport, _ := http.DefaultTransport.(*http.Transport)
+		return transport
+	})
+	defer guard_transport.Reset()
+
 	httpmock.Activate()
 	util.NilRequest.Set()
 	defer httpmock.DeactivateAndReset()
 	defer util.NilRequest.Clear()
 	mockReginid := "test-regin"
-	guard := monkey.Patch(util.GetRegionId, func() string { return mockReginid })
-	defer guard.Unpatch()
+	testutil.MockMetaServer(mockReginid)
 	httpmock.RegisterResponder("POST", 
 		fmt.Sprintf("https://%s.axt.aliyun.com/luban/api/v1/update/update_check", mockReginid),
 		func(h *http.Request) (*http.Response, error) {

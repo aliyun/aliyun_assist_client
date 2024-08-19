@@ -4,16 +4,17 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"time"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
-	// "github.com/aliyun/aliyun_assist_client/agent/log"
+
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/cli"
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/config"
-	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/i18n"
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/session"
-	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
+
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/i18n"
 )
 
 const (
@@ -53,17 +54,17 @@ func NewSendPublicKeyCommand() *cli.Command {
 func doSession(ctx *cli.Context, instance_id, public_key, user_name string) error {
 	// 判断public_key 是公钥内容还是公钥文件路径
 	isfile := false
-	s, err := os.Stat(public_key)  
-    if err != nil {  
-        if os.IsExist(err) {  
-            isfile = !s.IsDir()
-        } 
+	s, err := os.Stat(public_key)
+	if err != nil {
+		if os.IsExist(err) {
+			isfile = !s.IsDir()
+		}
 	} else {
 		isfile = !s.IsDir()
 	}
 	publicKeyContent := ""
 	if isfile {
-		publicKeyContent, err = osutil.ReadFile(public_key)
+		publicKeyContent, err = readFile(public_key)
 		if err != nil {
 			fmt.Errorf("read public_key file failed %s", err.Error())
 			return err
@@ -111,7 +112,7 @@ func doSession(ctx *cli.Context, instance_id, public_key, user_name string) erro
 		fmt.Errorf("query 'install config_ecs_instance_connect' command result failed %s", err.Error())
 		return err
 	}
-	for ; describeInvocationResponse.Invocation.InvocationResults.InvocationResult[0].InvocationStatus == "Running" || describeInvocationResponse.Invocation.InvocationResults.InvocationResult[0].InvocationStatus == "Pending"; {
+	for describeInvocationResponse.Invocation.InvocationResults.InvocationResult[0].InvocationStatus == "Running" || describeInvocationResponse.Invocation.InvocationResults.InvocationResult[0].InvocationStatus == "Pending" {
 		describeInvocationResponse, err = client.DescribeInvocationResults(describeInvocationRequest)
 		if err != nil {
 			fmt.Errorf("query 'install config_ecs_instance_connect' command result failed %s", err.Error())
@@ -123,14 +124,14 @@ func doSession(ctx *cli.Context, instance_id, public_key, user_name string) erro
 		fmt.Errorf("'install config_ecs_instance_connect' command failed, InvocationStatus: %s", describeInvocationResponse.Invocation.InvocationResults.InvocationResult[0].InvocationStatus)
 		return errors.New("'install config_ecs_instance_connect' command failed")
 	}
-	
+
 	// 调用公共命令注册临时公钥
 	invokecommandRequest := ecs.CreateInvokeCommandRequest()
 	invokecommandRequest.Scheme = "https"
 	invokecommandRequest.CommandId = SENDSSHPUBLICKEY_PUBLICCOMMANDID
 	invokecommandRequest.InstanceId = &[]string{instance_id}
 	invokecommandRequest.Parameters = map[string]interface{}{
-		"username": user_name,
+		"username":     user_name,
 		"sshPublicKey": publicKeyContent,
 	}
 	invokecommandResponse, err := client.InvokeCommand(invokecommandRequest)
@@ -148,7 +149,7 @@ func doSession(ctx *cli.Context, instance_id, public_key, user_name string) erro
 		fmt.Errorf("query 'ACS-ECS-SendSshPublicKey-linux' command result failed %s", err.Error())
 		return err
 	}
-	for ; describeInvocationResponse.Invocation.InvocationResults.InvocationResult[0].InvocationStatus == "Running" || describeInvocationResponse.Invocation.InvocationResults.InvocationResult[0].InvocationStatus == "Pending"; {
+	for describeInvocationResponse.Invocation.InvocationResults.InvocationResult[0].InvocationStatus == "Running" || describeInvocationResponse.Invocation.InvocationResults.InvocationResult[0].InvocationStatus == "Pending" {
 		describeInvocationResponse, err = client.DescribeInvocationResults(describeInvocationRequest)
 		if err != nil {
 			fmt.Errorf("query 'ACS-ECS-SendSshPublicKey-linux' command result failed %s", err.Error())
@@ -162,4 +163,17 @@ func doSession(ctx *cli.Context, instance_id, public_key, user_name string) erro
 	}
 	fmt.Println("The temporary ssh_public_key has been registered")
 	return nil
+}
+
+func readFile(filename string) (content string, err error) {
+	f, err := os.Open(filename)
+	if err != nil {
+		return
+	}
+	b, err := io.ReadAll(f)
+	if err != nil {
+		return
+	}
+	content = string(b)
+	return
 }

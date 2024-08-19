@@ -8,15 +8,16 @@ import (
 	"reflect"
 	"testing"
 
-	"bou.ke/monkey"
+	gomonkey "github.com/agiledragon/gomonkey/v2"
 	"github.com/jarcoal/httpmock"
 
+	"github.com/aliyun/aliyun_assist_client/common/fileutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/common/networkcategory"
 )
 
 func deletefile(file string) {
-	if util.CheckFileIsExist(file) {
+	if fileutil.CheckFileIsExist(file) {
 		os.Remove(file)
 	}
 }
@@ -34,10 +35,10 @@ func TestNetWorkCheck(t *testing.T) {
 	defer deletefile(currentVersionNetcheckPath)
 	
 	var cmd *exec.Cmd
-	guard_1 := monkey.PatchInstanceMethod(reflect.TypeOf(cmd), "Run", func(*exec.Cmd) error {
+	guard_1 := gomonkey.ApplyMethod(reflect.TypeOf(cmd), "Run", func(*exec.Cmd) error {
 		return nil
 	})
-	defer guard_1.Unpatch()
+	defer guard_1.Reset()
 
 	RequestNetcheck("-")
 	RequestNetcheck(NetcheckRequestNormal)	

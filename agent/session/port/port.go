@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strconv"
 	"time"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
@@ -11,6 +12,7 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/session/message"
 	"github.com/aliyun/aliyun_assist_client/agent/session/shell"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 )
 
 const (
@@ -25,6 +27,8 @@ const (
 	sendPackageSize     = 2048                                                   // 发送的payload大小上限，单位 B
 	defaultSendSpeed    = 200                                                    // 默认的最大数据发送速率，单位 kbps
 	defaultSendInterval = 1000 / (defaultSendSpeed * 1024 / 8 / sendPackageSize) // writeloop的循环间隔时间 单位ms
+
+	waitLocalConnTimeoutSecond = 10
 )
 
 type PortPlugin struct {
@@ -33,10 +37,12 @@ type PortPlugin struct {
 	portNumber         int
 	dataChannel        channel.ISessionChannel
 	conn               net.Conn
+	connReady          chan struct{}
 	reconnectToPort    bool
 	reconnectToPortErr chan error
-	flowLimit          int
 	sendInterval       int
+
+	logger logrus.FieldLogger
 }
 
 func NewPortPlugin(id string, targetHost string, portNumber int, flowLimit int) *PortPlugin {
@@ -50,13 +56,18 @@ func NewPortPlugin(id string, targetHost string, portNumber int, flowLimit int) 
 		portNumber:         portNumber,
 		reconnectToPortErr: make(chan error),
 		sendInterval:       defaultSendInterval,
+		logger: log.GetLogger().WithFields(logrus.Fields{
+			"sessionType": "portforward",
+			"sessionId":   id,
+		}),
 	}
+	plugin.connReady = make(chan struct{})
 	if flowLimit > 0 {
 		plugin.sendInterval = 1000 / (flowLimit / 8 / sendPackageSize)
 	} else {
 		flowLimit = defaultSendSpeed * 1024
 	}
-	log.GetLogger().Infof("Init send speed, channelId[%s] speed[%d]bps sendInterval[%d]ms\n", id, flowLimit, plugin.sendInterval)
+	plugin.logger.Infof("Init send speed, channelId[%s] speed[%d]bps sendInterval[%d]ms\n", id, flowLimit, plugin.sendInterval)
 	return plugin
 }
 
@@ -74,11 +85,11 @@ func (p *PortPlugin) Execute(dataChannel channel.ISessionChannel, cancelFlag uti
 	p.dataChannel = dataChannel
 
 	defer func() {
-		log.GetLogger().Infoln("stop in run PortPlugin")
+		p.logger.Infoln("stop in run PortPlugin")
 		p.Stop()
 
 		if err := recover(); err != nil {
-			log.GetLogger().Errorf("Error occurred while executing port plugin %s: \n%v", p.id, err)
+			p.logger.Errorf("Error occurred while executing port plugin %s: \n%v", p.id, err)
 			// Panic in session port plugin SHOULD NOT disturb the whole agent
 			// process
 			errorCode = Unknown_error
@@ -89,15 +100,17 @@ func (p *PortPlugin) Execute(dataChannel channel.ISessionChannel, cancelFlag uti
 			}
 		}
 	}()
-	log.GetLogger().Infoln("start port")
-	if p.conn, pluginErr = net.Dial("tcp", fmt.Sprintf("%s:%d", p.targetHost, p.portNumber)); pluginErr != nil {
+	targetHostPort := net.JoinHostPort(p.targetHost, strconv.Itoa(p.portNumber))
+	p.logger.Infoln("start port, dial tcp connection to ", targetHostPort)
+	if p.conn, pluginErr = net.DialTimeout("tcp", targetHostPort, time.Second*waitLocalConnTimeoutSecond); pluginErr != nil {
 		errorString := fmt.Errorf("Unable to start port: %s", pluginErr)
-		log.GetLogger().Errorln(errorString)
+		p.logger.Errorln(errorString)
 		errorCode = Open_port_failed
 		return
 	}
+	close(p.connReady)
 
-	log.GetLogger().Infoln("start port success")
+	p.logger.Infoln("start port success")
 	cancelled := make(chan bool, 1)
 	errorCode = Ok
 	go func() {
@@ -110,22 +123,22 @@ func (p *PortPlugin) Execute(dataChannel channel.ISessionChannel, cancelFlag uti
 			cancelled <- true
 			errorCode = shell.Notified
 		}
-		log.GetLogger().Debugf("Cancel flag set to %v in session", cancelState)
+		p.logger.Debugf("Cancel flag set to %v in session", cancelState)
 	}()
 
 	done := make(chan string, 1)
 	go func() {
 		done <- p.writePump()
 	}()
-	log.GetLogger().Infof("Plugin %s started", p.id)
+	p.logger.Infof("Plugin %s started", p.id)
 
 	select {
 	case <-cancelled:
 		p.reconnectToPortErr <- errors.New("Session has been cancelled")
-		log.GetLogger().Info("The session was cancelled")
+		p.logger.Info("The session was cancelled")
 
 	case exitCode := <-done:
-		log.GetLogger().Infoln("Plugin  done", p.id, exitCode)
+		p.logger.Infoln("Plugin  done", p.id, exitCode)
 		errorCode = exitCode
 	}
 
@@ -135,7 +148,7 @@ func (p *PortPlugin) Execute(dataChannel channel.ISessionChannel, cancelFlag uti
 func (p *PortPlugin) writePump() (errorCode string) {
 	defer func() {
 		if err := recover(); err != nil {
-			log.GetLogger().Infoln("WritePump thread crashed with message ", err)
+			p.logger.Infoln("WritePump thread crashed with message ", err)
 			fmt.Println("WritePump thread crashed with message: \n", err)
 		}
 	}()
@@ -148,24 +161,24 @@ func (p *PortPlugin) writePump() (errorCode string) {
 			if err != nil {
 				// it may cause goroutines leak, disable retry.
 				var exitCode int
-				if exitCode = p.onError(); exitCode == 1 {
-					log.GetLogger().Infoln("Reconnection to port is successful, resume reading from port.")
+				if exitCode = p.onError(err); exitCode == 1 {
+					p.logger.Infoln("Reconnection to port is successful, resume reading from port.")
 					continue
 				}
-				log.GetLogger().Infof("Unable to read port: %v", err)
+				p.logger.Infof("Unable to read port: %v", err)
 				return Read_port_failed
 			}
 
 			if util.IsVerboseMode() {
-				log.GetLogger().Infoln("read data:", string(packet[:numBytes]))
+				p.logger.Infoln("read data:", string(packet[:numBytes]))
 			}
 
 			if err = p.dataChannel.SendStreamDataMessage(packet[:numBytes]); err != nil {
-				log.GetLogger().Errorf("Unable to send stream data message: %v", err)
+				p.logger.Errorf("Unable to send stream data message: %v", err)
 				return IO_socket_error
 			}
 		} else {
-			log.GetLogger().Infoln("PortPlugin:writePump stream is closed")
+			p.logger.Infoln("PortPlugin:writePump stream is closed")
 			return IO_socket_error
 		}
 
@@ -174,16 +187,16 @@ func (p *PortPlugin) writePump() (errorCode string) {
 	}
 }
 
-func (p *PortPlugin) onError() int {
-	log.GetLogger().Infoln("Encountered reconnect while reading from port ")
+func (p *PortPlugin) onError(theErr error) int {
+	p.logger.Infoln("Encountered reconnect while reading from port: ", theErr)
 	p.Stop()
 	p.reconnectToPort = true
 
-	log.GetLogger().Debugf("Waiting for reconnection to port!!")
+	p.logger.Debugf("Waiting for reconnection to port!!")
 	err := <-p.reconnectToPortErr
-	log.GetLogger().Infoln("reconnectToPortErr: ", err)
+	p.logger.Infoln("reconnectToPortErr: ", err)
 	if err != nil {
-		log.GetLogger().Error(err)
+		p.logger.Error(err)
 		return 2
 	}
 
@@ -192,11 +205,18 @@ func (p *PortPlugin) onError() int {
 
 func (p *PortPlugin) InputStreamMessageHandler(streamDataMessage message.Message) error {
 	if p.conn == nil {
-		log.GetLogger().Infoln("InputStreamMessageHandler: connect not ready")
-		return nil
+		p.logger.Infof("InputStreamMessageHandler: connect not ready, wait %d seconds...", waitLocalConnTimeoutSecond)
+		timer := time.NewTimer(time.Duration(waitLocalConnTimeoutSecond) * time.Second)
+		select {
+		case <-p.connReady:
+			p.logger.Infoln("InputStreamMessageHandler: connect is ready")
+		case <-timer.C:
+			p.logger.Infof("InputStreamMessageHandler: connect still not ready after %d seconds", waitLocalConnTimeoutSecond)
+			return fmt.Errorf("connection with target host port not ready")
+		}
 	}
 	if p.reconnectToPort {
-		log.GetLogger().Infof("InputStreamMessageHandler:Reconnect to %s:%d", p.targetHost, p.portNumber)
+		p.logger.Infof("InputStreamMessageHandler:Reconnect to %s:%d", p.targetHost, p.portNumber)
 		var err error
 		p.conn, err = net.Dial("tcp", fmt.Sprintf("%s:%d", p.targetHost, p.portNumber))
 		p.reconnectToPortErr <- err
@@ -209,11 +229,11 @@ func (p *PortPlugin) InputStreamMessageHandler(streamDataMessage message.Message
 	switch streamDataMessage.MessageType {
 	case message.InputStreamDataMessage:
 		if _, err := p.conn.Write(streamDataMessage.Payload); err != nil {
-			log.GetLogger().Errorf("Unable to write to port, err: %v.", err)
+			p.logger.Errorf("Unable to write to port, err: %v.", err)
 			return err
 		}
 		if util.IsVerboseMode() {
-			log.GetLogger().Infoln("write data:", string(streamDataMessage.Payload))
+			p.logger.Infoln("write data:", string(streamDataMessage.Payload))
 		}
 	case message.StatusDataMessage:
 		if len(streamDataMessage.Payload) > 0 {
@@ -225,14 +245,14 @@ func (p *PortPlugin) InputStreamMessageHandler(streamDataMessage message.Message
 						break
 					}
 					if err != nil {
-						log.GetLogger().Errorf("Invalid flowLimit: %s", err)
+						p.logger.Errorf("Invalid flowLimit: %s", err)
 						return err
 					}
 					p.sendInterval = 1000 / (speed / 8 / sendPackageSize)
-					log.GetLogger().Infof("Set send speed, channelId[%s] speed[%d]bps sendInterval[%d]ms\n", p.id, speed, p.sendInterval)
+					p.logger.Infof("Set send speed, channelId[%s] speed[%d]bps sendInterval[%d]ms\n", p.id, speed, p.sendInterval)
 				}
 			} else {
-				log.GetLogger().Errorf("Parse status code err: %s", err)
+				p.logger.Errorf("Parse status code err: %s", err)
 			}
 		}
 		break

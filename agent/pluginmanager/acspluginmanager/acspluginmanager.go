@@ -21,6 +21,7 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/util/process"
 	"github.com/aliyun/aliyun_assist_client/agent/util/versionutil"
 	"github.com/aliyun/aliyun_assist_client/common/filelock"
+	"github.com/aliyun/aliyun_assist_client/common/fileutil"
 	"github.com/aliyun/aliyun_assist_client/common/fuzzyjson"
 	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 	"github.com/aliyun/aliyun_assist_client/common/zipfile"
@@ -36,7 +37,7 @@ type pluginConfig struct {
 	Version           string      `json:"version"`
 	PluginType_       interface{} `json:"pluginType"`
 	HeartbeatInterval int         `json:"heartbeatInterval"`
-	AddSysTag 		  bool 		  `json:"addSysTag"`
+	AddSysTag         bool        `json:"addSysTag"`
 	pluginTypeStr     string
 }
 
@@ -49,6 +50,8 @@ func (pc *pluginConfig) PluginType() string {
 				pc.pluginTypeStr = PLUGIN_ONCE
 			} else if pt == PLUGIN_PERSIST {
 				pc.pluginTypeStr = PLUGIN_PERSIST
+			} else if pt == PLUGIN_COMMANDER {
+				pc.pluginTypeStr = PLUGIN_COMMANDER
 			} else {
 				pc.pluginTypeStr = PLUGIN_UNKNOWN
 			}
@@ -58,6 +61,8 @@ func (pc *pluginConfig) PluginType() string {
 				pc.pluginTypeStr = PLUGIN_ONCE
 			} else if pt == float64(PLUGIN_PERSIST_INT) {
 				pc.pluginTypeStr = PLUGIN_PERSIST
+			} else if pt == float64(PLUGIN_COMMANDER_INT){
+				pc.pluginTypeStr = PLUGIN_COMMANDER
 			} else {
 				pc.pluginTypeStr = PLUGIN_UNKNOWN
 			}
@@ -256,7 +261,7 @@ func (pm *PluginManager) ExecutePlugin(fetchOptions *ExecFetchOptions, executePa
 	log.GetLogger().Infoln("Enter ExecutePlugin")
 	if pm.Verbose {
 		log.GetLogger().WithFields(log.Fields{
-			"fetchOptions": fetchOptions,
+			"fetchOptions":  fetchOptions,
 			"executeParams": executeParams,
 		}).Infof("ExecutePlugin")
 	}
@@ -391,7 +396,7 @@ func (pm *PluginManager) executePluginFromFile(packagePath string, fetchTimeoutI
 	}
 	localArch, _ = GetArch()
 	exitCode = SUCCESS
-	if !util.CheckFileIsExist(packagePath) {
+	if !fileutil.CheckFileIsExist(packagePath) {
 		err = errors.New("File not exist: " + packagePath)
 		exitCode, errorCode = errProcess(funcName, PACKAGE_NOT_FOUND, err, "Package file not exist: "+packagePath)
 		return
@@ -498,11 +503,11 @@ func (pm *PluginManager) executePluginFromFile(packagePath string, fetchTimeoutI
 	var exitingErr ExitingError
 	fetchTimeout := time.Duration(fetchTimeoutInSeconds) * time.Second
 	guardErr := InstallLockGuard{
-		PluginName: config.Name,
+		PluginName:    config.Name,
 		PluginVersion: config.Version,
 
 		AcquireSharedLockTimeout: fetchTimeout,
-	}.Do(func () {
+	}.Do(func() {
 		// Double-check if specified plugin has been installed by another
 		// plugin-manager process, that releases plugin-version-wise
 		// exclusive lock and then this acquired.
@@ -618,14 +623,27 @@ func installFromFile(packagePath string, config *pluginConfig, plugin *PluginInf
 
 	pluginPath := filepath.Join(PLUGINDIR, plugin.Name, plugin.Version)
 	pathutil.MakeSurePath(pluginPath)
-	if err := zipfile.UnzipContext(ctx, packagePath, pluginPath); err != nil {
+	if err := zipfile.UnzipContext(ctx, packagePath, pluginPath, false); err != nil {
 		return nil, NewUnzipExitingError(err, fmt.Sprintf("Unzip err, file is [%s], target dir is [%s], err is [%s]", packagePath, pluginPath, err.Error()))
 	}
 
+	if config.PluginType() == PLUGIN_COMMANDER {
+		commanderInfoPath := filepath.Join(pluginPath, "axt-commander.json")
+		if !fileutil.CheckFileIsExist(commanderInfoPath) {
+			err := errors.New(fmt.Sprintf("File axt-commander.json not exist, %s.", commanderInfoPath))
+			return nil, NewPluginFormatExitingError(err, fmt.Sprintf("File axt-commander.json not exist, %s.", commanderInfoPath))
+		}
+		commanderInfo := CommanderInfo{}
+		if content, err := fuzzyjson.UnmarshalFile(commanderInfoPath, &commanderInfo); err != nil {
+			return nil, NewUnmarshalExitingError(err, fmt.Sprintf("Unmarshal axt-commander.json err, axt-commander.json is [%s], err is [%s]", string(content), err.Error()))
+		}
+		plugin.CommanderInfo = commanderInfo
+	}
+
 	cmdPath := filepath.Join(pluginPath, config.RunPath)
-	if !util.CheckFileIsExist(cmdPath) {
+	if !fileutil.CheckFileIsExist(cmdPath) {
 		log.GetLogger().Infoln("Cmd file not exist: ", cmdPath)
-		return nil, NewPluginFormatExitingError(errors.New("Cmd file not exist: " + cmdPath), fmt.Sprintf("Executable file not exist, %s.", cmdPath))
+		return nil, NewPluginFormatExitingError(errors.New("Cmd file not exist: "+cmdPath), fmt.Sprintf("Executable file not exist, %s.", cmdPath))
 	}
 	if osutil.GetOsType() != osutil.OSWin {
 		if err := os.Chmod(cmdPath, os.FileMode(0o744)); err != nil {
@@ -643,15 +661,15 @@ func installFromFile(packagePath string, config *pluginConfig, plugin *PluginInf
 	}
 
 	return &Fetched{
-		PluginName: config.Name,
+		PluginName:    config.Name,
 		PluginVersion: config.Version,
-		PluginType: config.PluginType(),
-		AddSysTag: config.AddSysTag,
+		PluginType:    config.PluginType(),
+		AddSysTag:     config.AddSysTag,
 
-		Entrypoint: cmdPath,
+		Entrypoint:                cmdPath,
 		ExecutionTimeoutInSeconds: executionTimeoutInSeconds,
-		EnvPluginDir: pluginPath,
-		EnvPrePluginDir: envPrePluginDir,
+		EnvPluginDir:              pluginPath,
+		EnvPrePluginDir:           envPrePluginDir,
 	}, nil
 }
 
@@ -719,11 +737,11 @@ func (pm *PluginManager) executePluginOnlineOrLocal(fetchOptions *ExecFetchOptio
 		resource = FetchFromOnline
 		fetchTimeout := time.Duration(fetchOptions.FetchTimeoutInSeconds) * time.Second
 		guardErr := InstallLockGuard{
-			PluginName: queried.Name,
+			PluginName:    queried.Name,
 			PluginVersion: queried.Version,
 
 			AcquireSharedLockTimeout: fetchTimeout,
-		}.Do(func () {
+		}.Do(func() {
 			// Double-check if specified plugin has been installed by another
 			// plugin-manager process, that releases plugin-version-wise
 			// exclusive lock and then this acquired.
@@ -793,7 +811,7 @@ func (pm *PluginManager) executePluginOnlineOrLocal(fetchOptions *ExecFetchOptio
 			"env":           env,
 			"status":        status,
 		}).WithError(err).Infof("CheckAndReportPlugin")
-	} else if pluginType == PLUGIN_ONCE && resource == FetchFromOnline  {
+	} else if pluginType == PLUGIN_ONCE && resource == FetchFromOnline {
 		if fetched.AddSysTag {
 			sysTagType = AddSysTag
 		} else if len(fetched.EnvPrePluginDir) != 0 {
@@ -819,15 +837,15 @@ func queryFromLocalOnly(pluginName string, pluginVersion string) (*Fetched, Exit
 		executionTimeoutInSeconds = t
 	}
 	return &Fetched{
-		PluginName: localInfo.Name,
+		PluginName:    localInfo.Name,
 		PluginVersion: localInfo.Version,
-		PluginType: localInfo.PluginType(),
-		AddSysTag: localInfo.AddSysTag,
+		PluginType:    localInfo.PluginType(),
+		AddSysTag:     localInfo.AddSysTag,
 
-		Entrypoint: filepath.Join(envPluginDir, localInfo.RunPath),
+		Entrypoint:                filepath.Join(envPluginDir, localInfo.RunPath),
 		ExecutionTimeoutInSeconds: executionTimeoutInSeconds,
-		EnvPluginDir: envPluginDir,
-		EnvPrePluginDir: "",
+		EnvPluginDir:              envPluginDir,
+		EnvPrePluginDir:           "",
 	}, nil
 }
 
@@ -878,20 +896,21 @@ func queryFromOnlineOrLocal(fetchOptions *ExecFetchOptions, localArch string) (*
 
 		pluginPath := filepath.Join(PLUGINDIR, localInfo.Name, localInfo.Version)
 		return &Fetched{
-			PluginName: localInfo.Name,
+			PluginName:    localInfo.Name,
 			PluginVersion: localInfo.Version,
-			PluginType: localInfo.PluginType(),
+			PluginType:    localInfo.PluginType(),
 
-			Entrypoint: filepath.Join(pluginPath, localInfo.RunPath),
+			Entrypoint:                filepath.Join(pluginPath, localInfo.RunPath),
 			ExecutionTimeoutInSeconds: executionTimeoutInSeconds,
-			EnvPluginDir: pluginPath,
-			EnvPrePluginDir: "",
+			EnvPluginDir:              pluginPath,
+			EnvPrePluginDir:           "",
 		}, nil, nil
 	}
 
 	return nil, onlineInfo, nil
 }
 
+// 下载并安装插件
 // pull package
 func installFromOnline(onlineInfo *PluginInfo, timeout time.Duration, localArch string) (*Fetched, ExitingError) {
 	ctx := context.Background()
@@ -908,7 +927,7 @@ func installFromOnline(onlineInfo *PluginInfo, timeout time.Duration, localArch 
 	const retryDelay = 3 * time.Second
 	var err error
 	if timeout == 0 {
-		err = func (remoteUrl string, localPath string) error {
+		err = func(remoteUrl string, localPath string) error {
 			var err2 error
 			for retry := maxRetries; retry > 0; retry-- {
 				err2 = util.HttpDownlod(remoteUrl, localPath)
@@ -921,7 +940,7 @@ func installFromOnline(onlineInfo *PluginInfo, timeout time.Duration, localArch 
 			return err2
 		}(onlineInfo.Url, filePath)
 	} else {
-		err = func (ctx context.Context, remoteUrl string, localPath string) error {
+		err = func(ctx context.Context, remoteUrl string, localPath string) error {
 			var err2 error
 			for retry := maxRetries; retry > 0; retry-- {
 				err2 = util.HttpDownloadContext(ctx, remoteUrl, localPath)
@@ -931,9 +950,9 @@ func installFromOnline(onlineInfo *PluginInfo, timeout time.Duration, localArch 
 
 				delayTimer := time.NewTimer(retryDelay)
 				select {
-				case <- ctx.Done():
+				case <-ctx.Done():
 					return ctx.Err()
-				case <- delayTimer.C:
+				case <-delayTimer.C:
 					continue
 				}
 			}
@@ -959,13 +978,13 @@ func installFromOnline(onlineInfo *PluginInfo, timeout time.Duration, localArch 
 	unzipdir := filepath.Join(PLUGINDIR, onlineInfo.Name, onlineInfo.Version)
 	pathutil.MakeSurePath(unzipdir)
 	log.GetLogger().Infoln("Unzip package...")
-	if err := zipfile.UnzipContext(ctx, filePath, unzipdir); err != nil {
+	if err := zipfile.UnzipContext(ctx, filePath, unzipdir, false); err != nil {
 		return nil, NewUnzipExitingError(err, fmt.Sprintf("Unzip package err, plugin.Url is [%s], err is [%s]", onlineInfo.Url, err.Error()))
 	}
 	os.RemoveAll(filePath)
 
 	config_path := filepath.Join(unzipdir, "config.json")
-	if !util.CheckFileIsExist(config_path) {
+	if !fileutil.CheckFileIsExist(config_path) {
 		err := errors.New(fmt.Sprintf("File config.json not exist, %s.", config_path))
 		return nil, NewPluginFormatExitingError(err, fmt.Sprintf("File config.json not exist, %s.", config_path))
 	}
@@ -986,6 +1005,19 @@ func installFromOnline(onlineInfo *PluginInfo, timeout time.Duration, localArch 
 	onlineInfo.SetPluginType(config.PluginType())
 	onlineInfo.AddSysTag = config.AddSysTag
 
+	if config.PluginType() == PLUGIN_COMMANDER {
+		commanderInfoPath := filepath.Join(unzipdir, "axt-commander.json")
+		if !fileutil.CheckFileIsExist(commanderInfoPath) {
+			err := errors.New(fmt.Sprintf("File axt-commander.json not exist, %s.", commanderInfoPath))
+			return nil, NewPluginFormatExitingError(err, fmt.Sprintf("File axt-commander.json not exist, %s.", commanderInfoPath))
+		}
+		commanderInfo := CommanderInfo{}
+		if content, err := fuzzyjson.UnmarshalFile(commanderInfoPath, &commanderInfo); err != nil {
+			return nil, NewUnmarshalExitingError(err, fmt.Sprintf("Unmarshal axt-commander.json err, axt-commander.json is [%s], err is [%s]", string(content), err.Error()))
+		}
+		onlineInfo.CommanderInfo = commanderInfo
+	}
+
 	cmdPath := filepath.Join(unzipdir, config.RunPath)
 	// 检查系统类型和架构是否符合
 	if strings.ToLower(onlineInfo.OSType) != "both" && strings.ToLower(onlineInfo.OSType) != osutil.GetOsType() {
@@ -996,7 +1028,7 @@ func installFromOnline(onlineInfo *PluginInfo, timeout time.Duration, localArch 
 		err := errors.New("Plugin arch not suit for this system")
 		return nil, NewPluginFormatExitingError(err, fmt.Sprintf("Plugin arch[%s] not suit for this system[%s], plugin.Url is [%s]", onlineInfo.Arch, localArch, onlineInfo.Url))
 	}
-	if !util.CheckFileIsExist(cmdPath) {
+	if !fileutil.CheckFileIsExist(cmdPath) {
 		log.GetLogger().Infoln("Cmd file not exist: ", cmdPath)
 		err := errors.New("Cmd file not exist: " + cmdPath)
 		return nil, NewPluginFormatExitingError(err, fmt.Sprintf("Executable file not exist, %s.", cmdPath))
@@ -1036,22 +1068,22 @@ func installFromOnline(onlineInfo *PluginInfo, timeout time.Duration, localArch 
 		executionTimeoutInSeconds = t
 	}
 	return &Fetched{
-		PluginName: config.Name,
+		PluginName:    config.Name,
 		PluginVersion: config.Version,
-		PluginType: config.PluginType(),
-		AddSysTag: config.AddSysTag,
+		PluginType:    config.PluginType(),
+		AddSysTag:     config.AddSysTag,
 
-		Entrypoint: cmdPath,
+		Entrypoint:                cmdPath,
 		ExecutionTimeoutInSeconds: executionTimeoutInSeconds,
-		EnvPluginDir: filepath.Join(PLUGINDIR, config.Name, config.Version),
-		EnvPrePluginDir: envPrePluginDir,
+		EnvPluginDir:              filepath.Join(PLUGINDIR, config.Name, config.Version),
+		EnvPrePluginDir:           envPrePluginDir,
 	}, nil
 }
 
-func (pm *PluginManager) executePlugin(cmdPath string, paramList []string, timeout int, env []string, quiet bool, options... process.CmdOption) (exitCode int, errorCode string, err error) {
+func (pm *PluginManager) executePlugin(cmdPath string, paramList []string, timeout int, env []string, quiet bool, options ...process.CmdOption) (exitCode int, errorCode string, err error) {
 	log.GetLogger().Infof("Enter executePlugin, cmdPath[%s] paramList[%v] paramCount[%d] timeout[%d]\n", cmdPath, paramList, len(paramList), timeout)
 	funcName := "ExecutePlugin"
-	if !util.CheckFileIsExist(cmdPath) {
+	if !fileutil.CheckFileIsExist(cmdPath) {
 		log.GetLogger().Infoln("Cmd file not exist: ", cmdPath)
 		err = errors.New("Cmd file not exist: " + cmdPath)
 		exitCode, errorCode = errProcess(funcName, PLUGIN_FORMAT_ERR, err, fmt.Sprintf("Executable file not exist, %s.", cmdPath))
@@ -1097,22 +1129,22 @@ func (pm *PluginManager) executePlugin(cmdPath string, paramList []string, timeo
 func (pm *PluginManager) VerifyPlugin(fetchOptions *VerifyFetchOptions, executeParams *ExecuteParams) (exitCode int, err error) {
 	const funcName = "VerifyPlugin"
 	log.GetLogger().WithFields(log.Fields{
-		"fetchOptions": fetchOptions,
+		"fetchOptions":  fetchOptions,
 		"executeParams": executeParams,
 	}).Infoln("Enter VerifyPlugin")
 
 	// pull package
 	unzipdir := filepath.Join(PLUGINDIR, "verify_plugin_test")
-	exitCode, err = func (packageUrl string, timeoutInSeconds int) (int, error) {
+	exitCode, err = func(packageUrl string, timeoutInSeconds int) (int, error) {
 		ctx := context.Background()
 		var cancel context.CancelFunc
 		if timeoutInSeconds > 0 {
-			ctx, cancel = context.WithTimeout(ctx, time.Duration(timeoutInSeconds) * time.Second)
+			ctx, cancel = context.WithTimeout(ctx, time.Duration(timeoutInSeconds)*time.Second)
 			defer cancel()
 		}
 
 		log.GetLogger().Infoln("Downloading package from ", packageUrl)
-		filePath, err := func (packageUrl string, timeoutInSeconds int) (string, error) {
+		filePath, err := func(packageUrl string, timeoutInSeconds int) (string, error) {
 			fileName := packageUrl[strings.LastIndex(packageUrl, "/")+1:]
 			filePath := PLUGINDIR + Separator + fileName
 			if len(packageUrl) > 4 && packageUrl[:4] == "http" {
@@ -1128,7 +1160,7 @@ func (pm *PluginManager) VerifyPlugin(fetchOptions *VerifyFetchOptions, executeP
 
 		pathutil.MakeSurePath(unzipdir)
 		log.GetLogger().Infoln("Unzip package...")
-		if err := zipfile.UnzipContext(ctx, filePath, unzipdir); err != nil {
+		if err := zipfile.UnzipContext(ctx, filePath, unzipdir, false); err != nil {
 			exitcode, _ := errProcess(funcName, UNZIP_ERR, err, fmt.Sprintf("Unzip package err, url is [%s], err is [%s]", packageUrl, err.Error()))
 			return exitcode, err
 		}
@@ -1142,7 +1174,7 @@ func (pm *PluginManager) VerifyPlugin(fetchOptions *VerifyFetchOptions, executeP
 	}
 
 	configPath := filepath.Join(unzipdir, "config.json")
-	if !util.CheckFileIsExist(configPath) {
+	if !fileutil.CheckFileIsExist(configPath) {
 		err = errors.New("Can not find the config.json")
 		exitCode, _ = errProcess(funcName, PLUGIN_FORMAT_ERR, err, fmt.Sprintf("File config.json not exist, %s.", configPath))
 		return
@@ -1167,7 +1199,7 @@ func (pm *PluginManager) VerifyPlugin(fetchOptions *VerifyFetchOptions, executeP
 	}
 
 	cmdPath := filepath.Join(unzipdir, config.RunPath)
-	if !util.CheckFileIsExist(cmdPath) {
+	if !fileutil.CheckFileIsExist(cmdPath) {
 		err = errors.New("Can not find the cmd file")
 		exitCode, _ = errProcess(funcName, PLUGIN_FORMAT_ERR, err, fmt.Sprintf("Executable file not exist, %s.", cmdPath))
 		return
@@ -1217,9 +1249,9 @@ func (pm *PluginManager) ReportPluginStatus(pluginName, pluginVersion, status st
 	pluginStatusRequest := PluginStatusResquest{
 		Plugin: []PluginStatus{
 			{
-				Name:    pluginName,
-				Version: pluginVersion,
-				Status:  status,
+				Name:       pluginName,
+				Version:    pluginVersion,
+				Status:     status,
 				SysTagType: sysTagType,
 			},
 		},
@@ -1266,4 +1298,74 @@ func needReportStatus(paramsList []string) bool {
 		}
 	}
 	return false
+}
+
+func InstallPluginFromOnline(onlineInfo *PluginInfo, timeout int) error {
+	localArch, _ := GetArch()
+	_, err := installFromOnline(onlineInfo, time.Second*time.Duration(timeout), localArch)
+	return err
+}
+
+func QueryPluginFromOnline(pluginName, pluginType, version string) (*PluginInfo, error) {
+	pluginInfos, err := getPackageInfo(pluginName, version, true)
+	if err != nil {
+		return nil, err
+	}
+	if len(pluginInfos) == 0 {
+		return nil, fmt.Errorf("not found")
+	}
+	var res *PluginInfo
+	for i, _ := range pluginInfos {
+		if pluginInfos[i].PluginType() != pluginType {
+			continue
+		}
+		if version != "" {
+			if pluginInfos[i].Version == version {
+				res = &pluginInfos[i]
+				break
+			}
+		} else {
+			if res == nil || versionutil.CompareVersion(pluginInfos[i].Version, res.Version) > 0 {
+				res = &pluginInfos[i]
+			}
+		}
+	}
+	if res == nil {
+		return nil, fmt.Errorf("not found")
+	}
+	return res, nil
+}
+
+func QueryPluginFromLocal(pluginName, pluginType string) (*PluginInfo, error) {
+	plugins, err := getInstalledPluginsByName(pluginName)
+	if err != nil {
+		return nil, err
+	}
+	var res *PluginInfo
+	for i, _ := range plugins {
+		if plugins[i].IsRemoved || plugins[i].PluginType() != pluginType {
+			continue
+		}
+	}
+	if res == nil {
+		return nil, fmt.Errorf("not found")
+	}
+	return res, nil
+}
+
+func LoadAllPluginFromLocal(pluginType string) ([]PluginInfo, error) {
+	plugins, err := getAllInstalledPlugins()
+	if err != nil {
+		return nil, err
+	}
+	if pluginType != "" {
+		res := []PluginInfo{}
+		for _, p := range plugins {
+			if p.PluginType() == pluginType && !p.IsRemoved {
+				res = append(res, p)
+			}
+		}
+		return res, nil
+	}
+	return plugins, nil
 }

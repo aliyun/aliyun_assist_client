@@ -9,9 +9,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/version"
 	"github.com/aliyun/aliyun_assist_client/common/pathutil"
+	"github.com/aliyun/aliyun_assist_client/common/fileutil"
 )
 
 func TestRegexVersionPattern(t *testing.T) {
@@ -53,9 +53,9 @@ func TestExecuteUpdateScript(t *testing.T) {
 		echo hello`
 	}
 	scriptpath := filepath.Join(path, filename)
-	util.WriteStringToFile(scriptpath, script)
+	fileutil.WriteStringToFile(scriptpath, script)
 	defer func() {
-		if util.CheckFileIsExist(scriptpath) {
+		if fileutil.CheckFileIsExist(scriptpath) {
 			os.Remove(scriptpath)
 		}
 	}()
@@ -92,7 +92,7 @@ func TestRemoveOldVersion(t *testing.T) {
 	assistVersionBackup := version.AssistVersion
 	version.AssistVersion = "1.0.0.1"
 	file := filepath.Join(multiVersionPath, "somefile")
-	util.WriteStringToFile(file, "somefile")
+	fileutil.WriteStringToFile(file, "somefile")
 	sameVersionDir := filepath.Join(multiVersionPath, version.AssistVersion)
 	oldVersionDir := filepath.Join(multiVersionPath, "1.0.0.0")
 	otherDir := filepath.Join(multiVersionPath, "otherdir")

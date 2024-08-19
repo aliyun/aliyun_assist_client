@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go.uber.org/atomic"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -15,10 +16,10 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine"
-	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/process"
 	"github.com/aliyun/aliyun_assist_client/common/pathutil"
+	"github.com/aliyun/aliyun_assist_client/common/fileutil"
 	libupdate "github.com/aliyun/aliyun_assist_client/common/update"
 )
 
@@ -27,13 +28,24 @@ const (
 	MaximumCheckUpdateRetries = 3
 )
 
+const (
+	NotUpdating              = "NotUpdating"
+	UpdateReasonBoot         = "Boot"
+	UpdateReasonPeriod       = "Periodic"
+	UpdateReasonKickRollback = "KickRollback"
+	UpdateReasonKickupgrade  = "KickUpgrade"
+)
+
 var (
 	ErrPreparationTimeout   = errors.New("Updating preparation phase timeout")
 	ErrUpdatorNotFound      = errors.New("Updator is required but not found")
 	ErrUpdatorNotExecutable = errors.New("Updator is not executable")
+	ErrUpdateIsDisabled     = errors.New("Updating is disabled")
 
 	errFailurePlaceholder = errors.New("Failed to execute update script via updator but no error returned")
 	errTimeoutPlaceholder = errors.New("Executing update script via updator timeout")
+
+	isUpdating *atomic.String = atomic.NewString(NotUpdating)
 )
 
 func ExecuteUpdateScriptRunner(updateScriptPath string) {
@@ -90,19 +102,19 @@ func SafeBootstrapUpdate(preparationTimeout time.Duration, maximumDownloadTimeou
 		return ErrPreparationTimeout
 	}
 
-	return safeUpdate(startTime, preparationTimeout, maximumDownloadTimeout)
+	return safeUpdate(startTime, preparationTimeout, maximumDownloadTimeout, UpdateReasonBoot)
 }
 
 // SafeUpdate checks update information and running tasks before invoking updator
-func SafeUpdate(preparationTimeout time.Duration, maximumDownloadTimeout time.Duration) error {
+func SafeUpdate(preparationTimeout time.Duration, maximumDownloadTimeout time.Duration, updateReason string) error {
 	// golang's runtime promised time.Time.Sub() method works like a monotonic
 	// clock, so it's safe for timeout calculation.
 	startTime := time.Now()
 
-	return safeUpdate(startTime, preparationTimeout, maximumDownloadTimeout)
+	return safeUpdate(startTime, preparationTimeout, maximumDownloadTimeout, updateReason)
 }
 
-func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDownloadTimeout time.Duration) error {
+func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDownloadTimeout time.Duration, updateReason string) error {
 	errmsg := ""
 	extrainfo := ""
 	defer func() {
@@ -110,9 +122,21 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 			metrics.GetUpdateFailedEvent(
 				"errmsg", errmsg,
 				"extrainfo", extrainfo,
+				"updateReason", updateReason,
 			).ReportEvent()
 		}
 	}()
+
+	if isUpdating.CompareAndSwap(NotUpdating, updateReason) {
+		defer isUpdating.Store(NotUpdating)
+	} else {
+		// At this time, isUpdating may have been modified by other coroutines,
+		// but the probability is very small, ignore for now.
+		currentUpdateReason := isUpdating.Load()
+		errmsg = "Another update routine is running"
+		extrainfo = fmt.Sprintf("another updateReason is %s", currentUpdateReason)
+		return errors.New(errmsg)
+	}
 
 	// 0. Pre-check
 	updatingDisabled, err := isUpdatingDisabled()
@@ -125,14 +149,14 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 	}
 	// Check updator existence for possible disabling, compatibile with 1.* version
 	updatorPath := libupdate.GetUpdatorPathByCurrentProcess()
-	if !util.CheckFileIsExist(updatorPath) {
+	if !fileutil.CheckFileIsExist(updatorPath) {
 		wrapErr := fmt.Errorf("%w: %s does not exist", ErrUpdatorNotFound, updatorPath)
 		log.GetLogger().WithError(wrapErr).Errorln("Updating has been disabled due to updator not found")
 		errmsg = wrapErr.Error()
 		extrainfo = fmt.Sprintf("updatorPath=%s", updatorPath)
 		return wrapErr
 	}
-	if !util.CheckFileIsExecutable(updatorPath) {
+	if !fileutil.CheckFileIsExecutable(updatorPath) {
 		wrapErr := fmt.Errorf("%w: %s is not executable", ErrUpdatorNotExecutable, updatorPath)
 		log.GetLogger().WithError(wrapErr).Errorln("Updating has been disabled due to updator is not executable")
 		errmsg = wrapErr.Error()
@@ -196,8 +220,22 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 		return ErrPreparationTimeout
 	}
 
+	// 2. Extract package version from url of update package
+	// TODO: Extract package version from downloaded package itself, thus remove
+	// dependency on url of update package
+	newVersion, err := libupdate.ExtractVersionStringFromURL(updateInfo.UpdateInfo.URL)
+	if err != nil {
+		errmsg = fmt.Sprintf("ExtractVersionStringFromURL error: %s", err.Error())
+		extrainfo = fmt.Sprintf("packageURL=%s", updateInfo.UpdateInfo.URL)
+		log.GetLogger().WithFields(logrus.Fields{
+			"updateInfo": updateInfo,
+			"packageURL": updateInfo.UpdateInfo.URL,
+		}).WithError(err).Errorln("Failed to extract package version from URL")
+		return err
+	}
+
 	// Check if target version's directory existed locally
-	updateScriptPath, err := checkLocalDirectory(updateInfo)
+	updateScriptPath, err := checkLocalDirectory(newVersion)
 	if err != nil {
 		log.GetLogger().WithError(err).Errorf("Check local directory failed")
 	} else {
@@ -212,7 +250,7 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 		return ErrPreparationTimeout
 	}
 
-	// 2. Download update package into temporary directory
+	// 3. Download update package into temporary directory
 	tempDir, err := pathutil.GetTempPath()
 	if err != nil {
 		errmsg = fmt.Sprintf("GetTempPath error: %s", err.Error())
@@ -222,7 +260,7 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 
 	downloadTimeout := time.Duration(0)
 	if preparationTimeout > 0 {
-		elapsedTime := time.Now().Sub(startTime)
+		elapsedTime := time.Since(startTime)
 		if elapsedTime >= preparationTimeout {
 			errmsg = fmt.Sprintf("after GetTempPath timeout: %s", ErrPreparationTimeout.Error())
 			extrainfo = fmt.Sprintf("preparationTimeout=%s", preparationTimeout.String())
@@ -307,7 +345,7 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 			log.GetLogger().Infof("Clean downloaded update package %s", tempSavePath)
 		}()
 
-		// 3. Check MD5 checksum of downloaded update package
+		// 4. Check MD5 checksum of downloaded update package
 		if err := libupdate.CompareFileMD5(tempSavePath, updateInfo.UpdateInfo.Md5); err != nil {
 			log.GetLogger().WithFields(logrus.Fields{
 				"updateInfo":            updateInfo,
@@ -332,7 +370,7 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 			return "", ErrPreparationTimeout
 		}
 
-		// 4. Remove old versions, only preserving no more than two versions after installation
+		// 5. Remove old versions, only preserving no more than two versions after installation
 		destinationDir := libupdate.GetInstallDir()
 		if err := libupdate.RemoveOldVersion(destinationDir); err != nil {
 			log.GetLogger().WithFields(logrus.Fields{
@@ -348,7 +386,7 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 			return "", ErrPreparationTimeout
 		}
 
-		// 5. Extract downloaded update package directly to install directory
+		// 6. Extract downloaded update package directly to install directory
 		if err := libupdate.ExtractPackage(tempSavePath, destinationDir); err != nil {
 			errmsg = fmt.Sprintf("ExtractPackage error: %s", err.Error())
 			extrainfo = fmt.Sprintf("destinationDir=%s&downloadedPackagePath=%s", destinationDir, tempSavePath)
@@ -373,20 +411,6 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 			errmsg = fmt.Sprintf("after ExtractPackage timeout: %s", ErrPreparationTimeout.Error())
 			extrainfo = fmt.Sprintf("preparationTimeout=%s", preparationTimeout.String())
 			return "", ErrPreparationTimeout
-		}
-
-		// 6. Extract package version from url of update package
-		// TODO: Extract package version from downloaded package itself, thus remove
-		// dependency on url of update package
-		newVersion, err := libupdate.ExtractVersionStringFromURL(updateInfo.UpdateInfo.URL)
-		if err != nil {
-			errmsg = fmt.Sprintf("ExtractVersionStringFromURL error: %s", err.Error())
-			extrainfo = fmt.Sprintf("packageURL=%s", updateInfo.UpdateInfo.URL)
-			log.GetLogger().WithFields(logrus.Fields{
-				"updateInfo": updateInfo,
-				"packageURL": updateInfo.UpdateInfo.URL,
-			}).WithError(err).Errorln("Failed to extract package version from URL")
-			return "", err
 		}
 
 		// 7. Validate agent executable file format and architecture
@@ -433,7 +457,55 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 
 	log.GetLogger().Infof("Update script of new version is %s", updateScriptPath)
 
-	
+	return executeUpdateScript(updateScriptPath)
+}
+
+func RollbackWithLocalDir(newVersion string, updateReason string) error {
+	return updateWithLocalDir(newVersion, updateReason)
+}
+
+func UpgradeWithLocalDir(newVersion string, updateReason string) error {
+	// Pre-check is updating disabled
+	updatingDisabled, err := isUpdatingDisabled()
+	if err != nil {
+		log.GetLogger().WithError(err).Errorln("Error encountered when reading updating disabling configuration")
+	}
+	if updatingDisabled {
+		log.GetLogger().Infoln("Updating has been disabled due to configuration")
+		return ErrUpdateIsDisabled
+	}
+	return updateWithLocalDir(newVersion, updateReason)
+}
+
+func updateWithLocalDir(newVersion string, updateReason string) error {
+	errmsg := ""
+	extrainfo := ""
+	defer func() {
+		if len(errmsg) > 0 {
+			metrics.GetUpdateFailedEvent(
+				"errmsg", errmsg,
+				"extrainfo", extrainfo,
+				"updateReason", updateReason,
+			).ReportEvent()
+		}
+	}()
+
+	if isUpdating.CompareAndSwap(NotUpdating, updateReason) {
+		defer isUpdating.Store(NotUpdating)
+	} else {
+		// At this time, isUpdating may have been modified by other coroutines,
+		// but the probability is very small and ignored for now.
+		currentUpdateReason := isUpdating.Load()
+		errmsg = "Another update routine is running"
+		extrainfo = fmt.Sprintf("another updateReason is %s", currentUpdateReason)
+		return errors.New(errmsg)
+	}
+
+	updateScriptPath, err := checkLocalDirectory(newVersion)
+	if err != nil {
+		log.GetLogger().WithError(err).Errorf("Check local directory failed")
+		return err
+	}
 	return executeUpdateScript(updateScriptPath)
 }
 
@@ -496,17 +568,11 @@ func preparationTimedOut(startTime time.Time, preparationTimeout time.Duration) 
 	return preparationTimeout > 0 && time.Now().Sub(startTime) >= preparationTimeout
 }
 
-func checkLocalDirectory(updateInfo *libupdate.UpdateCheckResp) (updateScriptPath string, err error) {
-	logger := log.GetLogger().WithField("phase", "CheckLocalDirectory")
-	targetVersion, err := libupdate.ExtractVersionStringFromURL(updateInfo.UpdateInfo.URL)
-	if err != nil {
-		logger.WithFields(logrus.Fields{
-			"updateInfo": updateInfo,
-			"packageURL": updateInfo.UpdateInfo.URL,
-		}).WithError(err).Errorln("Failed to extract package version from URL")
-		return "", err
-	}
-	logger = logger.WithField("target", targetVersion)
+func checkLocalDirectory(targetVersion string) (updateScriptPath string, err error) {
+	logger := log.GetLogger().WithFields(logrus.Fields{
+		"phase":         "CheckLocalDirectory",
+		"targetVersion": targetVersion,
+	})
 	installDir := libupdate.GetInstallDir()
 	entries, err := os.ReadDir(installDir)
 	if err != nil {

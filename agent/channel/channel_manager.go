@@ -12,16 +12,17 @@ import (
 
 	"github.com/aliyun/aliyun_assist_client/agent/clientreport"
 	"github.com/aliyun/aliyun_assist_client/agent/hybrid"
+	"github.com/aliyun/aliyun_assist_client/agent/hybrid/instance"
 	"github.com/aliyun/aliyun_assist_client/agent/kickvmhandle"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine"
 	"github.com/aliyun/aliyun_assist_client/agent/update"
 	"github.com/aliyun/aliyun_assist_client/agent/util/powerutil"
-	"github.com/aliyun/aliyun_assist_client/common/apiserver"
 )
 
 var _gshellChannel IChannel = nil
+var _websocketChannel *WebSocketChannel = nil
 
 //manage all channels
 type ChannelMgr struct {
@@ -91,32 +92,15 @@ func (m *ChannelMgr) Init(CallBack OnReceiveMsg) error {
 				return
 			case <-tick.C:
 				if m.checkChannelWorker() == false {
-					err := m.SelectAvailableChannel(ChannelNone)
-					var report clientreport.ClientReport
-					if err == nil {
-						report = clientreport.ClientReport{
-							ReportType: "switch_channel_in_timer",
-							Info:       fmt.Sprintf("success: Current channel is %d", m.GetCurrentChannelType()),
-						}
-					} else {
-						report = clientreport.ClientReport{
-							ReportType: "switch_channel_in_timer",
-							Info:       fmt.Sprintf("fail:" + err.Error()),
-						}
-					}
-					metrics.GetChannelSwitchEvent(
-						"type", ChannelTypeStr(m.GetCurrentChannelType()),
-						"reportType", report.ReportType,
-						"info", report.Info,
-					).ReportEvent()
-					clientreport.SendReport(report)
+					m.SelectAvailableChannelAndReport(ChannelNone, "switch_channel_in_timer", false)
 				}
 			}
 		}
 	}()
 	m.ChannelSetLock.Lock()
 	defer m.ChannelSetLock.Unlock()
-	m.AllChannel = append(m.AllChannel, _gshellChannel, NewWebsocketChannel(CallBack))
+	_websocketChannel = NewWebsocketChannel(CallBack)
+	m.AllChannel = append(m.AllChannel, _gshellChannel, _websocketChannel)
 	for _, item := range m.AllChannel {
 		if item.IsSupported() {
 			if e := item.StartChannel(); e == nil {
@@ -130,13 +114,40 @@ func (m *ChannelMgr) Init(CallBack OnReceiveMsg) error {
 	return errors.New("No available channel")
 }
 
-func (m *ChannelMgr) Uninit() {
-	m.StopChanelEvent <- struct{}{}
-	m.WaitCheckDone.Wait()
-	m.ChannelSetLock.Lock()
-	defer m.ChannelSetLock.Unlock()
-	m.ActiveChannel.StopChannel()
+// SelectAvailableChannelAndReport will call SelectAvailableChannel and report 
+// the result, but the failure will not be reported if ignoreFailed is true.
+func (m *ChannelMgr) SelectAvailableChannelAndReport(currentChannel int, reason string, ignoreFailed bool) error {
+	err := m.SelectAvailableChannel(ChannelNone)
+	if err == nil || !ignoreFailed {
+		var report clientreport.ClientReport
+		if err == nil {
+			report = clientreport.ClientReport{
+				ReportType: reason,
+				Info:       fmt.Sprintf("success: Current channel is %d", m.GetCurrentChannelType()),
+			}
+		} else {
+			report = clientreport.ClientReport{
+				ReportType: reason,
+				Info:       fmt.Sprintf("fail:" + err.Error()),
+			}
+		}
+		metrics.GetChannelSwitchEvent(
+			"type", ChannelTypeStr(m.GetCurrentChannelType()),
+			"reportType", report.ReportType,
+			"info", report.Info,
+		).ReportEvent()
+		clientreport.SendReport(report)
+	}
+	return err
 }
+
+// func (m *ChannelMgr) Uninit() {
+// 	m.StopChanelEvent <- struct{}{}
+// 	m.WaitCheckDone.Wait()
+// 	m.ChannelSetLock.Lock()
+// 	defer m.ChannelSetLock.Unlock()
+// 	m.ActiveChannel.StopChannel()
+// }
 
 func (m *ChannelMgr) GetCurrentChannelType() int {
 	m.ChannelSetLock.Lock()
@@ -151,10 +162,10 @@ func InitChannelMgr(CallBack OnReceiveMsg) error {
 	return G_ChannelMgr.Init(CallBack)
 }
 
-func StopChannelMgr() error {
-	G_ChannelMgr.Uninit()
-	return nil
-}
+// func StopChannelMgr() error {
+// 	G_ChannelMgr.Uninit()
+// 	return nil
+// }
 
 func GetCurrentChannelType() int {
 	return G_ChannelMgr.GetCurrentChannelType()
@@ -162,7 +173,7 @@ func GetCurrentChannelType() int {
 
 func TryStartGshellChannel() {
 	_gshellChannel = NewGshellChannel(OnRecvMsg)
-	if apiserver.IsHybrid() == false {
+	if instance.IsHybrid() == false {
 		err := _gshellChannel.StartChannel()
 		if err != nil {
 			log.GetLogger().Infoln("TryStartGshellChannel failed ", err)
@@ -349,4 +360,10 @@ func OnRecvMsg(Msg string, ChannelType int) string {
 		return string(retStr)
 	}
 	return BuildInvalidRet("invalid command")
+}
+
+// OnNetworkRecover will be called when network recover
+func OnNetworkRecover() {
+	_websocketChannel.ResetFailedCount()
+	G_ChannelMgr.SelectAvailableChannelAndReport(ChannelNone, "select_available_chan_when_net_recover", false)
 }

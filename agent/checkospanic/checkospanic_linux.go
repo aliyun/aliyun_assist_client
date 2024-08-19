@@ -14,7 +14,8 @@ import (
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
-	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/common/fileutil"
+	"github.com/aliyun/aliyun_assist_client/agent/util/timetool"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 )
 
@@ -68,7 +69,7 @@ func ReportLastOsPanic() {
 		logger.Info("the latest vmcore file is 24 hours ago, ignore it")
 		return
 	}
-	if !util.CheckFileIsExist(vmcoreDmesgPath) {
+	if !fileutil.CheckFileIsExist(vmcoreDmesgPath) {
 		logger.Error("vmcore dmesg file not exist", vmcoreDmesgPath)
 		return
 	}
@@ -84,11 +85,14 @@ func ReportLastOsPanic() {
 		tip := fmt.Sprint("compress raw content failed: ", err)
 		logger.Error(tip)
 	}
+	_, _, timeZone := timetool.NowWithTimezoneName()
 	metrics.GetLinuxGuestOSPanicEvent(
 		"rip", rip,
 		"callTrace", callTrace,
 		"kernelPanicInfo", kernelPanicInfo,
 		"crashTime", latestTime.Format("2006-01-02 15:04:05"),
+		"crashTimeUTC", latestTime.UTC().Format("2006-01-02 15:04:05"),
+		"timeZone", timeZone,
 		"vmcoreDir", vmcoreDir,
 		"rawContent", compressedContent,
 	).ReportEvent()
@@ -162,7 +166,7 @@ func ParseVmcore(logger logrus.FieldLogger, vmcoreDmesgPath string) (rip, callTr
 func FindLocalVmcoreDmesg(logger logrus.FieldLogger) (vmcoreDmesgPath, latestDir string, latestTime time.Time) {
 	kdumpDirTemp := kdumpPath
 	// read /etc/kdump.conf to get vmcore directory, default is /var/crash
-	if util.CheckFileIsExist(kdumpConfigPath) {
+	if fileutil.CheckFileIsExist(kdumpConfigPath) {
 		content, err := os.ReadFile(kdumpConfigPath)
 		if err == nil {
 			lines := strings.Split(string(content), "\n")
@@ -176,7 +180,7 @@ func FindLocalVmcoreDmesg(logger logrus.FieldLogger) (vmcoreDmesgPath, latestDir
 			}
 		}
 	}
-	if !util.CheckFileIsExist(kdumpDirTemp) {
+	if !fileutil.CheckFileIsExist(kdumpDirTemp) {
 		logger.WithField("path", kdumpDirTemp).Warn("kdump directory not exist")
 		return
 	}
@@ -195,7 +199,7 @@ func FindLocalVmcoreDmesg(logger logrus.FieldLogger) (vmcoreDmesgPath, latestDir
 			if len(items) != 2 {
 				logger.Error("unknown vmcore directory name fromation:", vmcoreDir)
 			} else {
-				vmcoreTime, err := time.Parse("2006-01-02-15:04:05", items[1])
+				vmcoreTime, err := time.ParseInLocation("2006-01-02-15:04:05", items[1], time.Local)
 				if err != nil {
 					logger.WithFields(logrus.Fields{
 						"name": vmcoreDir,

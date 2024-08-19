@@ -17,6 +17,7 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/timermanager"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
+	"github.com/aliyun/aliyun_assist_client/common/fileutil"
 	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 )
 
@@ -50,11 +51,16 @@ var (
 	pluginListReportInterval = 3600 * 24
 )
 
+type UpdateHandler func(name, version string) bool 
+
 var (
 	pluginHealthScanTimer *timermanager.Timer
 	pluginHealthPullTimer *timermanager.Timer
 	pluginListReportTimer *timermanager.Timer
 	pluginUpdateTimer     *timermanager.Timer
+
+	updateHandler UpdateHandler
+	updateHandlerLock sync.Mutex
 )
 
 func InitPluginCheckTimer() {
@@ -89,8 +95,6 @@ func InitPluginCheckTimer() {
 		log.GetLogger().Error("InitPluginCheckTimer: pluginUpdateTimer err: ", err.Error())
 	} else {
 		go func() {
-			mills := rand.Intn(60 * 1000)
-			time.Sleep(time.Duration(120000 + mills) * time.Millisecond)
 			if _, err = pluginUpdateTimer.Run(); err != nil {
 				log.GetLogger().Error("InitPluginCheckTimer: pluginUpdateTimer run err: ", err.Error())
 			}
@@ -109,6 +113,20 @@ func InitPluginCheckTimer() {
 			}
 		}()
 	}
+}
+
+func SetUpdateHandler(h UpdateHandler) {
+	updateHandlerLock.Lock()
+	defer updateHandlerLock.Unlock()
+
+	updateHandler = h
+}
+
+func getUpdateHandler() UpdateHandler {
+	updateHandlerLock.Lock()
+	defer updateHandlerLock.Unlock()
+
+	return updateHandler
 }
 
 func pluginHealthCheckScan() {
@@ -316,7 +334,7 @@ func pluginHealthCheckPull() {
 		if pluginInfo.PluginType() == PLUGIN_PERSIST && !pluginInfo.IsRemoved {
 			// 常驻型插件且未被删除：检查并读取插件目录下的heartbeat文件
 			heartbeatPath := filepath.Join(pluginDir, pluginInfo.Name, pluginInfo.Version, "heartbeat")
-			if util.CheckFileIsExist(heartbeatPath) {
+			if fileutil.CheckFileIsExist(heartbeatPath) {
 				content, err := ioutil.ReadFile(heartbeatPath)
 				if err != nil {
 					log.GetLogger().Errorf("pluginHealthCheckPull: Read heartbeat file err, heartbeat[%s], err: %s", heartbeatPath, err.Error())
@@ -434,7 +452,7 @@ func pluginUpdateCheck() {
 	}
 	pluginList := []PluginUpdateCheck{}
 	for _, pluginInfo := range pluginInfoList {
-		if pluginInfo.PluginType() == PLUGIN_PERSIST && !pluginInfo.IsRemoved{
+		if (pluginInfo.PluginType() == PLUGIN_PERSIST || pluginInfo.PluginType() == PLUGIN_COMMANDER) && !pluginInfo.IsRemoved{
 			pluginList = append(pluginList, PluginUpdateCheck{
 				Name:     pluginInfo.Name,
 				Version:  pluginInfo.Version,
@@ -478,28 +496,32 @@ func pluginUpdateCheck() {
 		log.GetLogger().WithError(err).Errorf("pluginUpdateCheck fail: parse pluginUpdateInfo from resp fail: %s", resp)
 		return
 	}
+	handler := getUpdateHandler()
 	for _, plugin := range pluginUpdateCheckResp.Plugin {
-			command := "acs-plugin-manager"
-			arguments := []string{"--exec", "-P", plugin.Name, "-n", plugin.Version, "-p", "--upgrade"}
-			mixedOutput := bytes.Buffer{}
-			exitCode, status, err := syncRunKillGroup("", command, arguments, &mixedOutput, &mixedOutput, plugin.Timeout + 5)
-			output := mixedOutput.String()
-			if len(output) > 1024 {
-				output = output[:1024]
-			}
-			errMsg := ""
-			if err != nil {
-				errMsg = err.Error()
-			}
-			metrics.GetPluginUpdateEvent(
-				"name", plugin.Name,
-				"version", plugin.Version,
-				"exitCode", strconv.Itoa(exitCode),
-				"status", strconv.Itoa(status),
-				"errMsg", errMsg,
-				"output", output,
-			).ReportEvent()
-			log.GetLogger().Errorf("pluginUpdateCheck: update plugin[%s] version[%s], exitCode[%d] status[%d] err[%v], output is: %s", plugin.Name, plugin.Version, exitCode, status, err, output)
+		if handler != nil && handler(plugin.Name, plugin.Version) {
+			continue
+		}
+		command := "acs-plugin-manager"
+		arguments := []string{"--exec", "-P", plugin.Name, "-n", plugin.Version, "-p", "--upgrade"}
+		mixedOutput := bytes.Buffer{}
+		exitCode, status, err := syncRunKillGroup("", command, arguments, &mixedOutput, &mixedOutput, plugin.Timeout + 5)
+		output := mixedOutput.String()
+		if len(output) > 1024 {
+			output = output[:1024]
+		}
+		errMsg := ""
+		if err != nil {
+			errMsg = err.Error()
+		}
+		metrics.GetPluginUpdateEvent(
+			"name", plugin.Name,
+			"version", plugin.Version,
+			"exitCode", strconv.Itoa(exitCode),
+			"status", strconv.Itoa(status),
+			"errMsg", errMsg,
+			"output", output,
+		).ReportEvent()
+		log.GetLogger().Errorf("pluginUpdateCheck: update plugin[%s] version[%s], exitCode[%d] status[%d] err[%v], output is: %s", plugin.Name, plugin.Version, exitCode, status, err, output)
 	}
 	log.GetLogger().Infof("pluginUpdateCheck done, updated [%d] plugins", len(pluginUpdateCheckResp.Plugin))
 	if pluginUpdateCheckResp.NextInterval > 0 {

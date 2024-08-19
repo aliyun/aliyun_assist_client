@@ -2,15 +2,18 @@ package taskengine
 
 import (
 	"encoding/base64"
-	"github.com/jarcoal/httpmock"
-	"github.com/stretchr/testify/assert"
 	"math/rand"
 	"runtime"
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/agiledragon/gomonkey/v2"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/models"
+	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
+	"github.com/jarcoal/httpmock"
+	"github.com/stretchr/testify/assert"
 )
 
 func addMockServer() {
@@ -22,11 +25,11 @@ func addMockServer() {
 	httpmock.RegisterResponder("GET", "https://cn-test.axt.aliyun.com/luban/api/connection_detect",
 		httpmock.NewStringResponder(200, `ok`))
 
-	httpmock.RegisterResponder("POST", "https://cn-test.axt.aliyun.com//luban/api/v1/task/finish",
-		httpmock.NewStringResponder(200, ``))
+	httpmock.RegisterResponder("POST", "https://cn-test.axt.aliyun.com/luban/api/v1/task/finish",
+		httpmock.NewStringResponder(200, `ok`))
 
-	httpmock.RegisterResponder("POST", "https://cn-test.axt.aliyun.com//luban/api/v1/task/running",
-		httpmock.NewStringResponder(200, ``))
+	httpmock.RegisterResponder("POST", "https://cn-test.axt.aliyun.com/luban/api/v1/task/running",
+		httpmock.NewStringResponder(200, `ok`))
 }
 
 func removeMockServer() {
@@ -34,8 +37,14 @@ func removeMockServer() {
 }
 
 func TestRunTask(t *testing.T) {
+	util.NilRequest.Set()
+	defer util.NilRequest.Clear()
 	addMockServer()
 	defer removeMockServer()
+	guard := gomonkey.ApplyFunc(util.GetServerHost, func() string{
+		return "cn-test.axt.aliyun.com"
+	})
+	defer guard.Reset()
 
 	var commandType string
 	var content string
@@ -57,13 +66,13 @@ func TestRunTask(t *testing.T) {
 	info := models.RunTaskInfo{
 		InstanceId:  "i-test",
 		CommandType: commandType,
-		TaskId:  "t-test" + rand_str,
-		CommandId: "c-test",
-		TimeOut:"120",
-		WorkingDir:workingDir,
-		Content:content,
+		TaskId:      "t-test" + rand_str,
+		CommandId:   "c-test",
+		TimeOut:     "120",
+		WorkingDir:  workingDir,
+		Content:     content,
 	}
-	task := NewTask(info, nil, nil)
+	task, _ := NewTask(info, nil, nil, nil)
 
 	errcode, err := task.Run()
 

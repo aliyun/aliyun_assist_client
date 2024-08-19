@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,8 +14,9 @@
 package config
 
 import (
-	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/cli"
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/i18n"
+
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/cli"
 )
 
 const (
@@ -46,8 +47,8 @@ const (
 	ExpiredSecondsFlagName  = "expired-seconds"
 	ProcessCommandFlagName  = "process-command"
 	ServiceInstanceFlagName = "service-instance"
-	PublicKeyFlagName 		= "public-key"
-	UserNameFlagName		= "user-name"
+	PublicKeyFlagName       = "public-key"
+	UserNameFlagName        = "user-name"
 )
 
 func AddFlags(fs *cli.FlagSet) {
@@ -216,7 +217,7 @@ func NewProfileFlag() *cli.Flag {
 			"使用 `--profile <profileName>` 指定操作的配置集")}
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////////
 func NewInstanceFlag() *cli.Flag {
 	return &cli.Flag{
 		Category:     "caller",
@@ -267,7 +268,7 @@ func NewPortNumberUrlFlag() *cli.Flag {
 			"使用 `--port <port>` 指定操作的实例端口")}
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
+// /////////////////////////////////////////////////////////////////////////////////////////
 func NewLocalPortFlag() *cli.Flag {
 	return &cli.Flag{
 		Category:     "caller",
@@ -290,12 +291,12 @@ func NewRemotePortFlag() *cli.Flag {
 		DefaultValue: "",
 		Persistent:   true,
 		Short: i18n.T(
-			"use `--remote-port <port>` to select remote port",
-			"使用 `--remote-port <port>` 指定实例的端口")}
+			"use `--remote-port <port>` to select remote port\n\tuse `--remote-port <ip:port>` to select other host and port",
+			"使用 `--remote-port <port>` 指定实例的端口\n\t使用 `--remote-port <ip:port>` 指定实例能够访问的其他主机的端口")}
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair|RamRoleArnWithRoleName}
+// /////////////////////////////////////////////////////////////////////////////////////////
+// --mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair|RamRoleArnWithRoleName}
 func NewModeFlag() *cli.Flag {
 	return &cli.Flag{
 		Category: "config",
@@ -511,11 +512,11 @@ func NewServiceInstanceFlag() *cli.Flag {
 }
 
 func NewPublicKeyFlag() *cli.Flag {
-	return &cli.Flag {
-		Category: "caller",
-		Name: PublicKeyFlagName,
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         PublicKeyFlagName,
 		AssignedMode: cli.AssignedOnce,
-		Persistent: true,
+		Persistent:   true,
 		Short: i18n.T(
 			"use `--public-key <public-key>` to set the content of temporary ssh_public_key or the path of ssh_public_key file",
 			"使用 `--public-key <public-key>` 指定临时ssh公钥的内容或者公钥文件的路径",
@@ -525,10 +526,10 @@ func NewPublicKeyFlag() *cli.Flag {
 
 func NewUserNameFlag() *cli.Flag {
 	return &cli.Flag{
-		Category: "caller",
-		Name: UserNameFlagName,
+		Category:     "caller",
+		Name:         UserNameFlagName,
 		AssignedMode: cli.AssignedOnce,
-		Persistent: true,
+		Persistent:   true,
 		Short: i18n.T(
 			"use `--user-name <user-name>` to set the user name of temporary ssh_public_key, default root",
 			"使用 `--user-name <user-name>` 指定临时公钥的用户名, 默认是root",

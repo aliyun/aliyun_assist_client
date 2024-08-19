@@ -18,6 +18,6 @@ func (e *NoEnoughSpaceError) Error() string {
 	return fmt.Sprintf("NoEnoughSpace: %s", e.cause.Error())
 }
 
-func (e *NoEnoughSpaceError) Code() ErrorCode {
+func (e *NoEnoughSpaceError) ErrCode() ErrorCode {
 	return wrapErrNoEnoughSpace
 }

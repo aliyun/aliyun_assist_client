@@ -4,8 +4,8 @@ import (
 	"path/filepath"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
-	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/common/pathutil"
+	"github.com/aliyun/aliyun_assist_client/common/fileutil"
 )
 
 const (
@@ -20,7 +20,7 @@ func isUpdatingDisabled() (bool, error) {
 		return false, err
 	}
 	crossVersionFlagPath := filepath.Join(crossVersionConfigDir, disableUpdateFlagFilename)
-	if util.CheckFileIsExist(crossVersionFlagPath) {
+	if fileutil.CheckFileIsExist(crossVersionFlagPath) {
 		log.GetLogger().Infof("Detected cross-version disabling updating flag %s", crossVersionFlagPath)
 		return true, nil
 	}
@@ -31,7 +31,7 @@ func isUpdatingDisabled() (bool, error) {
 		return false, err
 	}
 	currentVersionFlagPath := filepath.Join(currentVersionConfigDir, disableUpdateFlagFilename)
-	if util.CheckFileIsExist(currentVersionFlagPath) {
+	if fileutil.CheckFileIsExist(currentVersionFlagPath) {
 		log.GetLogger().Infof("Detected disabling updating flag of current version %s", currentVersionFlagPath)
 		return true, nil
 	}
@@ -46,7 +46,7 @@ func isBootstrapUpdatingDisabled() (bool, error) {
 		return false, err
 	}
 	crossVersionFlagPath := filepath.Join(crossVersionConfigDir, disableBootstrapUpdateFlagFilename)
-	if util.CheckFileIsExist(crossVersionFlagPath) {
+	if fileutil.CheckFileIsExist(crossVersionFlagPath) {
 		log.GetLogger().Infof("Detected cross-version disabling bootstrap updating flag %s", crossVersionFlagPath)
 		return true, nil
 	}
@@ -57,7 +57,7 @@ func isBootstrapUpdatingDisabled() (bool, error) {
 		return false, err
 	}
 	currentVersionFlagPath := filepath.Join(currentVersionConfigDir, disableBootstrapUpdateFlagFilename)
-	if util.CheckFileIsExist(currentVersionFlagPath) {
+	if fileutil.CheckFileIsExist(currentVersionFlagPath) {
 		log.GetLogger().Infof("Detected disabling bootstrap updating flag of current version %s", currentVersionFlagPath)
 		return true, nil
 	}

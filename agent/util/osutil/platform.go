@@ -3,7 +3,6 @@ package osutil
 import (
 	"os"
 	"regexp"
-	"runtime"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 )
@@ -123,12 +122,12 @@ func PlatformType() (value string, err error) {
 	return getPlatformType()
 }
 
-func PlatformArchitect() (value string, err error) {
-	if runtime.GOARCH == "amd64" {
-		return "x86_64", nil
-	}
-	return runtime.GOARCH, nil
-}
+// func PlatformArchitect() (value string, err error) {
+// 	if runtime.GOARCH == "amd64" {
+// 		return "x86_64", nil
+// 	}
+// 	return runtime.GOARCH, nil
+// }
 
 func getNormalizedPlatform(data string) (string, error) {
 	mapping := []struct {

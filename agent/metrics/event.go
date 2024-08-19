@@ -28,6 +28,7 @@ const (
 	EVENT_PERF_MEM_OVERLOAD                  MetricsEventID = "agent.pref.mem.overload"
 	EVENT_PERF_SAMPLE                        MetricsEventID = "agent.pref.sample"
 	EVENT_BASE_STARTUP                       MetricsEventID = "agent.startup"
+	EVENT_BASE_STOPPED                       MetricsEventID = "agent.stopped"
 	EVENT_BASE_SHUTDOWN_FAILED               MetricsEventID = "agent.shutdown.failed"
 	EVENT_BASE_VIRTIO                        MetricsEventID = "agent.virtio"
 	EVENT_KDUMP                              MetricsEventID = "agent.kdump"
@@ -46,6 +47,7 @@ const (
 	EVENT_CATEGORY_SESSION  EventCategory = "SESSION"
 	EVENT_CATEGORY_PERF     EventCategory = "PERF"
 	EVENT_CATEGORY_STARTUP  EventCategory = "STARTUP"
+	EVENT_CATEGORY_STOPPED  EventCategory = "STOPPED"
 	EVENT_CATEGORY_SHUTDOWN EventCategory = "SHUTDOWN"
 	EVENT_CATEGORY_VIRTIO   EventCategory = "VIRTIO"
 	EVENT_CATEGORY_KDUMP    EventCategory = "KDUMP"
@@ -331,6 +333,18 @@ func GetBaseStartupEvent(keywords ...string) *MetricsEvent {
 	event := &MetricsEvent{
 		EventId:    EVENT_BASE_STARTUP,
 		Category:   EVENT_CATEGORY_STARTUP,
+		EventLevel: EVENT_LEVEL_INFO,
+		EventTime:  time.Now().UnixNano() / 1e6,
+		Common:     getCommonInfoStr(),
+		KeyWords:   genKeyWordsStr(keywords...),
+	}
+	return event
+}
+
+func GetBaseStoppedEvent(keywords ...string) *MetricsEvent {
+	event := &MetricsEvent{
+		EventId:    EVENT_BASE_STOPPED,
+		Category:   EVENT_CATEGORY_STOPPED,
 		EventLevel: EVENT_LEVEL_INFO,
 		EventTime:  time.Now().UnixNano() / 1e6,
 		Common:     getCommonInfoStr(),

@@ -3,7 +3,7 @@ package clientreport
 import (
 	"testing"
 
-	"bou.ke/monkey"
+	gomonkey "github.com/agiledragon/gomonkey/v2"
 )
 
 func TestReportCommandOutput(t *testing.T) {
@@ -30,8 +30,8 @@ func TestReportCommandOutput(t *testing.T) {
 			wantErr: false,
 		},
 	}
-	guard := monkey.Patch(SendReport, func(ClientReport) (string, error) { return "", nil} )
-	defer guard.Unpatch()
+	guard := gomonkey.ApplyFunc(SendReport, func(ClientReport) (string, error) { return "", nil} )
+	defer guard.Reset()
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := ReportCommandOutput(tt.args.reportType, tt.args.command, tt.args.arguments)

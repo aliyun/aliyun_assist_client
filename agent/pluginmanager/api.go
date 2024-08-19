@@ -10,6 +10,7 @@ type PluginListRequest struct {
 	OsType     string `json:"osType"`
 	PluginName string `json:"pluginName"`
 	Version    string `json:"version"`
+	PluginType string `json:"pluginType"`
 	Arch       string `json:"arch"`
 }
 type PluginListResponse struct {

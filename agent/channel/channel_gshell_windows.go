@@ -1,4 +1,5 @@
 // +build windows
+
 package channel
 
 func getGshellPath() (gshellPath string, err error) {
