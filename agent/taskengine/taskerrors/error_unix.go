@@ -7,14 +7,14 @@ import (
 	"errors"
 	"strings"
 	"syscall"
-	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/agent/util/errnoutil"
 )
 
 func (e *baseError) Error() string {
 	errcodePhrase := e.category
 	var errno syscall.Errno
 	if errors.As(e.cause, &errno) {
-		if errnoPhrase, ok := util.ErrnoPhrases[errno]; ok {
+		if errnoPhrase, ok := errnoutil.ErrnoPhrases[errno]; ok {
 			errcodePhrase += "." + errnoPhrase
 		}
 	}
@@ -30,7 +30,7 @@ func (e *baseError) Error() string {
 	return strings.Join(messages, ": ")
 }
 
-func (e *baseError) Code() ErrorCode {
+func (e *baseError) ErrCode() ErrorCode {
 	var errno syscall.Errno
 	if errors.As(e.cause, &errno) {
 		return ErrorCode(errno)

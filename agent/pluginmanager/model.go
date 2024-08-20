@@ -30,6 +30,9 @@ const (
 	// PluginPersist 常驻型插件
 	PLUGIN_PERSIST     string = "Persist"
 	PLUGIN_PERSIST_INT int    = 1
+	// Commander 云助手组件
+	PLUGIN_COMMANDER     string = "Commander"
+	PLUGIN_COMMANDER_INT        = 2
 	// PluginUnknown 未知类型
 	PLUGIN_UNKNOWN     string = "Unknown"
 	PLUGIN_UNKNOWN_INT int    = -1
@@ -49,9 +52,17 @@ type PluginInfo struct {
 	IsPreInstalled    string      `json:"isPreInstalled"`
 	PluginType_       interface{} `json:"pluginType"`
 	pluginTypeStr     string
-	HeartbeatInterval int  `json:"heartbeatInterval"`
-	IsRemoved         bool `json:"isRemoved"`
-	AddSysTag         bool `json:"addSysTag"`
+	HeartbeatInterval int           `json:"heartbeatInterval"`
+	IsRemoved         bool          `json:"isRemoved"`
+	AddSysTag         bool          `json:"addSysTag"`
+	CommanderInfo     CommanderInfo `json:"commanderInfo"`
+}
+
+type CommanderInfo struct {
+	PidFile      string `json:"pidFile"`
+	EndpointType string `json:"endpointType"`
+	EndpointFile string `json:"endpointFile"`
+	ApiVersion   string `json:"apiVersion"`
 }
 
 func (pi *PluginInfo) PluginType() string {
@@ -63,6 +74,8 @@ func (pi *PluginInfo) PluginType() string {
 				pi.pluginTypeStr = PLUGIN_ONCE
 			} else if pt == PLUGIN_PERSIST {
 				pi.pluginTypeStr = PLUGIN_PERSIST
+			} else if pt == PLUGIN_COMMANDER {
+				pi.pluginTypeStr = PLUGIN_COMMANDER
 			} else {
 				pi.pluginTypeStr = PLUGIN_UNKNOWN
 			}
@@ -72,6 +85,8 @@ func (pi *PluginInfo) PluginType() string {
 				pi.pluginTypeStr = PLUGIN_ONCE
 			} else if pt == float64(PLUGIN_PERSIST_INT) {
 				pi.pluginTypeStr = PLUGIN_PERSIST
+			} else if pt == float64(PLUGIN_COMMANDER_INT) {
+				pi.pluginTypeStr = PLUGIN_COMMANDER
 			} else {
 				pi.pluginTypeStr = PLUGIN_UNKNOWN
 			}
@@ -91,6 +106,8 @@ func (pi *PluginInfo) SetPluginType(pluginType string) {
 	// 兼容旧版本，installed_plugins文件中的pluginType字段仍然使用int类型
 	if pluginType == PLUGIN_PERSIST {
 		pi.PluginType_ = PLUGIN_PERSIST_INT
+	} else if pluginType == PLUGIN_COMMANDER {
+		pi.PluginType_ = PLUGIN_COMMANDER_INT
 	} else {
 		pi.PluginType_ = PLUGIN_ONCE_INT
 	}

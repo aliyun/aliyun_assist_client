@@ -33,6 +33,11 @@ const (
 	wrapErrContainerNotFoundById
 	wrapErrManyContainersFoundById
 	wrapErrContainerNotRunning
+
+	WrapErrCreatePipeFailed
+	WrapErrCreateProcessCollectionFailed
+	WrapCommanderError
+	WrapErrServerResponseError // Backend server Response errorCode for api task/xxx
 )
 
 func (c ErrorCode) String() string {
@@ -129,6 +134,30 @@ func NewResolvingInstanceNameError(cause error) ExecutionError {
 	return &baseError{
 		categoryCode: WrapErrResolveEnvironmentParameterFailed,
 		category: "ResolvingInstanceNameFailed",
+		cause: cause,
+	}
+}
+
+func NewCreateProcessCollectionError(cause error) ExecutionError {
+	return &baseError{
+		categoryCode: WrapGeneralError,
+		category: "CreateProcessCollectionFailed",
+		cause: cause,
+	}
+}
+
+func NewCreatePipeError(cause error) ExecutionError {
+	return &baseError{
+		categoryCode: WrapErrCreatePipeFailed,
+		category: "CreatePipeFailed",
+		cause: cause,
+	}
+}
+
+func NewServerResponseError(cause error) ExecutionError {
+	return &baseError{
+		categoryCode: WrapErrServerResponseError,
+		category: "ServerResponseError",
 		cause: cause,
 	}
 }

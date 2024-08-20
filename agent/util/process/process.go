@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/agent/util/process/processcollection"
 	"github.com/aliyun/aliyun_assist_client/common/executil"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 )
@@ -39,6 +40,7 @@ type ProcessCmd struct {
 	env          []string
 
 	commandOptions []CmdOption
+	collection     processcollection.ProcessCollection
 }
 
 func NewProcessCmd(options ...CmdOption) *ProcessCmd {
@@ -46,6 +48,14 @@ func NewProcessCmd(options ...CmdOption) *ProcessCmd {
 		commandOptions: options,
 	}
 	return p
+}
+
+func NewProcessCmdWithProcessTree(groupName string, options ...CmdOption) (*ProcessCmd, error) {
+	p := &ProcessCmd{
+		commandOptions: options,
+	}
+	p.collection, _ = processcollection.CreateProcessTree(groupName)
+	return p, nil
 }
 
 type cancellableAndSafeWriter struct {
@@ -57,10 +67,15 @@ type cancellableAndSafeWriter struct {
 
 type ReadCallbackFunc func(stdoutWriter io.Reader, stderrWriter io.Reader)
 
-func (p *ProcessCmd) Cancel() {
-	if p.command != nil {
-		p.command.Process.Kill()
+func (p *ProcessCmd) Cancel() error {
+	if p.collection != nil {
+		return p.collection.KillAll()
+	} else if p.command != nil {
+		if err := p.command.Process.Kill(); err != nil {
+			return fmt.Errorf("Failed to kill process %d: %s", p.command.Process.Pid, err)
+		}
 	}
+	return nil
 }
 
 func (p *ProcessCmd) SetUserInfo(name string) {
@@ -95,6 +110,15 @@ func (p *ProcessCmd) SyncRunSimple(commandName string, commandArguments []string
 		return errors.New("error occurred starting the command")
 	}
 
+	if p.collection != nil {
+		if err := p.collection.AddProcess(p.command.Process); err != nil {
+			logger.WithError(err).Error("add process into collection failed")
+			p.command.Process.Kill()
+			return fmt.Errorf("add process into collection failed: %v", err)
+		}
+		logger.Infof("add process %d into collection", p.command.Process.Pid)
+	}
+
 	finished := make(chan error, 1)
 	go func() {
 		finished <- p.command.Wait()
@@ -110,7 +134,17 @@ func (p *ProcessCmd) SyncRunSimple(commandName string, commandArguments []string
 	case <-time.After(time.Duration(timeOut) * time.Second):
 		logger.Errorln("Timeout in run command.")
 		err = errors.New("cmd run timeout")
-		p.command.Process.Kill()
+		if p.collection != nil {
+			if err := p.collection.KillAll(); err != nil {
+				logger.WithError(err).Error("kill all process in collection failed")
+			}
+		} else {
+			p.command.Process.Kill()
+		}
+	}
+
+	if p.collection != nil {
+		p.collection.Dispose()
 	}
 	return err
 }
@@ -148,6 +182,15 @@ func (p *ProcessCmd) SyncRun(
 		log.GetLogger().Errorln("error occurred starting the command", err)
 		exitCode = 1
 		return exitCode, Fail, err
+	}
+	if p.collection != nil {
+		if err := p.collection.AddProcess(p.command.Process); err != nil {
+			log.GetLogger().WithError(err).Error("add process into collection failed")
+			p.command.Process.Kill()
+			return 1, Fail, fmt.Errorf("add process into collection failed: %v", err)
+		} else {
+			log.GetLogger().Infof("add process %d into collection %s success", p.command.Process.Pid, p.collection.Name())
+		}
 	}
 
 	finished := make(chan WaitProcessResult, 1)
@@ -189,11 +232,21 @@ func (p *ProcessCmd) SyncRun(
 		exitCode = 1
 		status = Timeout
 		err = errors.New("timeout")
-		p.command.Process.Kill()
+		if p.collection != nil {
+			if err := p.collection.KillAll(); err != nil {
+				log.GetLogger().WithError(err).Error("kill all process in collection failed")
+			}
+		} else {
+			p.command.Process.Kill()
+		}
 	}
 
 	if p.user_name != "" {
 		p.removeCredential()
+	}
+
+	if p.collection != nil {
+		p.collection.Dispose()
 	}
 
 	return exitCode, status, err
@@ -265,10 +318,5 @@ func GetUserCredentials(sessionUser string) (uint32, uint32, []uint32, error) {
 		}
 	}
 
-	// Make sure they are non-zero valid positive ids
-	if uid > 0 && gid > 0 {
-		return uint32(uid), uint32(gid), groupIds, nil
-	}
-
-	return 0, 0, nil, errors.New("invalid uid and gid")
+	return uint32(uid), uint32(gid), groupIds, nil
 }

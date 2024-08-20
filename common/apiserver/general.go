@@ -26,8 +26,7 @@ const (
 
 var (
 	errUnknownDetectionResponse = errors.New("Unknown connection detection response")
-
-	wellKnownRegionIds = []string{
+	wellKnownRegionIds          = []string{
 		"cn-hangzhou",
 		"cn-qingdao",
 		"cn-beijing",
@@ -43,7 +42,7 @@ var (
 type GeneralProvider struct {
 	regionId atomic.String
 
-	instanceIdHeaders map[string]string
+	instanceIdHeaders         map[string]string
 	initInstanceIdHeadersOnce sync.Once
 }
 
@@ -84,6 +83,7 @@ func (p *GeneralProvider) ServerDomain(logger logrus.FieldLogger) (string, error
 		domain := regionId + IntranetDomain
 		if err := connectionDetect(logger, domain); err == nil {
 			p.regionId.Store(regionId)
+			go saveRegionIdToFile(logger, regionId)
 			networkcategory.Set(networkcategory.NetworkVPC)
 			return domain, nil
 		} else {
@@ -94,7 +94,7 @@ func (p *GeneralProvider) ServerDomain(logger logrus.FieldLogger) (string, error
 	}
 
 	// 2. Retrieve region id from meta server in VPC network
-	regionId, _ = httpGetWithoutExtraHeader(logger, "http://100.100.100.200/latest/meta-data/region-id")
+	regionId, _ = HttpGetWithoutExtraHeader(logger, "http://100.100.100.200/latest/meta-data/region-id")
 	if regionId != "" {
 		domain := regionId + IntranetDomain
 		if err := connectionDetect(logger, domain); err == nil {
@@ -111,7 +111,7 @@ func (p *GeneralProvider) ServerDomain(logger logrus.FieldLogger) (string, error
 
 	// 3. Poll well-known API servers for region id
 	for _, regionId := range wellKnownRegionIds {
-		regionId, err := httpGetWithoutExtraHeader(logger, "https://" + regionId + IntranetDomain + "/luban/api/classic/region-id")
+		regionId, err := HttpGetWithoutExtraHeader(logger, "https://"+regionId+IntranetDomain+"/luban/api/classic/region-id")
 		if err != nil {
 			continue
 		}
@@ -138,19 +138,17 @@ func (p *GeneralProvider) ExtraHTTPHeaders(logger logrus.FieldLogger) (map[strin
 	}
 
 	p.initInstanceIdHeadersOnce.Do(func() {
-		instanceId := func () string {
-			instanceId, err := httpGetWithoutExtraHeader(logger, "http://100.100.100.200/latest/meta-data/instance-id")
+		instanceId := func() string {
+			instanceId, err := HttpGetWithoutExtraHeader(logger, "http://100.100.100.200/latest/meta-data/instance-id")
 			if err != nil {
 				return "unknown"
 			}
-
 			return instanceId
 		}()
 		p.instanceIdHeaders = map[string]string{
 			"X-Client-Instance-ID": instanceId,
 		}
 	})
-
 	return p.instanceIdHeaders, nil
 }
 
@@ -199,7 +197,7 @@ func saveRegionIdToFile(logger logrus.FieldLogger, regionId string) {
 
 func connectionDetect(logger logrus.FieldLogger, domain string) error {
 	url := "https://" + domain + "/luban/api/connection_detect"
-	content, err := httpGetWithoutExtraHeader(logger, url)
+	content, err := HttpGetWithoutExtraHeader(logger, url)
 	if err != nil {
 		return err
 	}
@@ -211,7 +209,11 @@ func connectionDetect(logger logrus.FieldLogger, domain string) error {
 	return errUnknownDetectionResponse
 }
 
-func httpGetWithoutExtraHeader(logger logrus.FieldLogger, url string) (string, error) {
+func HttpGetWithoutExtraHeader(logger logrus.FieldLogger, url string) (string, error) {
+	return HttpGetWithSpecifiedHeader(logger, url, nil)
+}
+
+func HttpGetWithSpecifiedHeader(logger logrus.FieldLogger, url string, headers map[string]string) (string, error) {
 	request := HttpRequest.Transport(requester.GetHTTPTransport(logger))
 
 	// IMPORTANT NOTE: Although time.Duration type is used for the argument of
@@ -226,6 +228,7 @@ func httpGetWithoutExtraHeader(logger logrus.FieldLogger, url string) (string, e
 	request.SetHeaders(map[string]string{
 		requester.UserAgentHeader: requester.UserAgentValue,
 	})
+	request.SetHeaders(headers)
 
 	logger = logger.WithField("url", url)
 	response, err := request.Get(url)
@@ -257,8 +260,8 @@ func httpGetWithoutExtraHeader(logger logrus.FieldLogger, url string) (string, e
 	}
 
 	logger.WithFields(logrus.Fields{
-		"url": url,
-		"responseCode": response.StatusCode(),
+		"url":             url,
+		"responseCode":    response.StatusCode(),
 		"responseContent": content,
 	}).WithError(err).Infoln("HTTP GET Requested")
 	return content, err

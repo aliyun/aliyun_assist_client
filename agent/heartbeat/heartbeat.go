@@ -14,13 +14,13 @@ import (
 	"github.com/tidwall/gjson"
 
 	"github.com/aliyun/aliyun_assist_client/agent/flagging"
+	"github.com/aliyun/aliyun_assist_client/agent/hybrid/instance"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/timermanager"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/timetool"
 	"github.com/aliyun/aliyun_assist_client/agent/version"
-	"github.com/aliyun/aliyun_assist_client/common/apiserver"
 	"github.com/aliyun/aliyun_assist_client/common/machineid"
 	"github.com/aliyun/aliyun_assist_client/common/requester"
 )
@@ -43,7 +43,7 @@ var (
 	_retryCounter uint16
 	_retryMutex   *sync.Mutex
 
-	_processStartTime   int64
+	_processStartTime   time.Time
 	_acknowledgeCounter uint64
 	_sendCounter        uint64
 
@@ -60,12 +60,16 @@ var (
 	// if _useFullFields is true ping hear-beat with full fields,
 	// otherwise use the reduced fields
 	_useFullFields atomic.Bool
+
+	_networkConnected atomic.Bool
+	_actionsWhenNetRecover map[string]func()
+	_actionsWhenNetRecoverLock sync.Mutex
 )
 
 func init() {
 	_retryCounter = 0
 	_retryMutex = &sync.Mutex{}
-	_processStartTime = timetool.GetAccurateTime()
+	_processStartTime = time.Now()
 	_acknowledgeCounter = 0
 	_sendCounter = 0
 
@@ -268,7 +272,7 @@ func doPing() error {
 		}
 	}
 	// ...but internet for hybrid mode is obviously untrusted
-	if apiserver.IsHybrid() {
+	if instance.IsHybrid() {
 		isHttpScheme = false
 		willSwitchScheme = false
 	}
@@ -276,11 +280,23 @@ func doPing() error {
 
 	responseContent, err := invokePingRequest(isHttpScheme, urlWithoutScheme, willSwitchScheme)
 	if err != nil {
+		_networkConnected.Store(false)
 		log.GetLogger().WithFields(log.Fields{
 			"requestURLWithourScheme": urlWithoutScheme,
 			"isHttpScheme":            isHttpScheme,
 		}).WithError(err).Errorln("Failed to invoke ping request")
 		return err
+	} else {
+		if _networkConnected.CompareAndSwap(false, true) {
+			go func() {
+				_actionsWhenNetRecoverLock.Lock()
+				defer _actionsWhenNetRecoverLock.Unlock()
+				for name, action := range _actionsWhenNetRecover {
+					log.GetLogger().Infof("Execute action[%s] after network recover", name)
+					action()
+				}
+			}()
+		}
 	}
 
 	mutableSchedule, ok := _heartbeatTimer.Schedule.(*timermanager.MutableScheduled)
@@ -300,7 +316,7 @@ func buildPingParams(sendCounter uint64) (querystring string) {
 	uptime := osutil.GetUptimeOfMs()
 	timestamp := timetool.GetAccurateTime()
 	pid := os.Getpid()
-	processUptime := timetool.GetAccurateTime() - _processStartTime
+	processUptime := time.Since(_processStartTime).Milliseconds()
 	acknowledgeCounter := _acknowledgeCounter
 	querystring = fmt.Sprintf("?uptime=%d&timestamp=%d&pid=%d&process_uptime=%d&index=%d&seq_no=%d",
 		uptime, timestamp, pid, processUptime, acknowledgeCounter, sendCounter)
@@ -332,7 +348,7 @@ func buildFullFieldsPingParams(sendCounter uint64) (querystring string) {
 	uptime := osutil.GetUptimeOfMs()
 	timestamp := timetool.GetAccurateTime()
 	pid := os.Getpid()
-	processUptime := timetool.GetAccurateTime() - _processStartTime
+	processUptime := time.Since(_processStartTime).Milliseconds()
 	acknowledgeCounter := _acknowledgeCounter
 	querystring = fmt.Sprintf("?uptime=%d&timestamp=%d&pid=%d&process_uptime=%d&index=%d&seq_no=%d",
 		uptime, timestamp, pid, processUptime, acknowledgeCounter, sendCounter)
@@ -408,4 +424,15 @@ func InitHeartbeatTimer() error {
 		return errors.New("Heartbeat timer has been initialized")
 	}
 	return errors.New("Heartbeat timer has been initialized")
+}
+
+func RegisterActionWhenNetRecover(actions map[string]func()) {
+	_actionsWhenNetRecoverLock.Lock()
+	defer _actionsWhenNetRecoverLock.Unlock()
+	if _actionsWhenNetRecover == nil {
+		_actionsWhenNetRecover = make(map[string]func())
+	}
+	for name, f := range actions {
+		_actionsWhenNetRecover[name] = f
+	}
 }

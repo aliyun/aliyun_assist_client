@@ -202,18 +202,7 @@ func (c *WebSocketChannel) StartChannel() error {
 func (c *WebSocketChannel) SwitchChannel() error {
 	time.Sleep(time.Duration(1) * time.Second)
 	for i := 0; i < 5; i++ {
-		if G_ChannelMgr.SelectAvailableChannel(ChannelNone) == nil {
-			metrics.GetChannelSwitchEvent(
-				"type", ChannelTypeStr(G_ChannelMgr.GetCurrentChannelType()),
-				"reportType", "switch_channel_in_wsk",
-				"info", fmt.Sprintf("success: Current channel is %d", G_ChannelMgr.GetCurrentChannelType()),
-			).ReportEvent()
-
-			report := clientreport.ClientReport{
-				ReportType: "switch_channel_in_wsk",
-				Info:       fmt.Sprintf("success: Current channel is %d", G_ChannelMgr.GetCurrentChannelType()),
-			}
-			clientreport.SendReport(report)
+		if err := G_ChannelMgr.SelectAvailableChannelAndReport(ChannelNone, "switch_channel_in_wsk", true); err == nil {
 			return nil
 		}
 		time.Sleep(time.Duration(5) * time.Second)
@@ -276,7 +265,14 @@ func (c *WebSocketChannel) StartPings(pingInterval time.Duration) {
 	}()
 }
 
-func NewWebsocketChannel(CallBack OnReceiveMsg) IChannel {
+func (c *WebSocketChannel) ResetFailedCount() {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	log.GetLogger().Info("ws channel: reset fail count")
+	c.consecutiveConnectFailed = 0
+}
+
+func NewWebsocketChannel(CallBack OnReceiveMsg) *WebSocketChannel {
 	w := &WebSocketChannel{
 		Channel: &Channel{
 			CallBack:    CallBack,

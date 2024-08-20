@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"bou.ke/monkey"
+	gomonkey "github.com/agiledragon/gomonkey/v2"
 	"github.com/aliyun/aliyun_assist_client/agent/session/message"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 )
@@ -45,16 +45,16 @@ func TestNewSessionChannel(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.name == "wsChannelInitializeError" {
 				var c *WebSocketChannel
-				guard := monkey.PatchInstanceMethod(
+				guard := gomonkey.ApplyMethod(
 					reflect.TypeOf(c), 
 					"Initialize", func(c *WebSocketChannel, channelUrl string, onMessageHandler func([]byte), onErrorHandler func(error)) error { return errors.New("some errir") })
-				defer guard.Unpatch()
+				defer guard.Reset()
 			} else {
 				var c *WebSocketChannel
-				guard := monkey.PatchInstanceMethod(
+				guard := gomonkey.ApplyMethod(
 					reflect.TypeOf(c), 
 					"Initialize", func(c *WebSocketChannel, channelUrl string, onMessageHandler func([]byte), onErrorHandler func(error)) error { return nil })
-				defer guard.Unpatch()
+				defer guard.Reset()
 			}
 			_, err := NewSessionChannel(tt.args.url, tt.args.sessionId, tt.args.inputStreamMessageHandler, tt.args.cancelFlag)
 			if (err != nil) != tt.wantErr {

@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
-	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/common/fileutil"
 )
 
 const (
@@ -25,7 +25,7 @@ var (
 
 func getGshellPath() (gshellPath string, err error) {
 	gshellPath = "/dev/virtio-ports/org.qemu.guest_agent.0"
-	if !util.CheckFileIsExist(gshellPath) {
+	if !fileutil.CheckFileIsExist(gshellPath) {
 		log.GetLogger().Warnf("gshellPath `%s` not exist, try to find gshellPath from %s", gshellPath, classVirtioPortPath)
 		gshellPath = getVportDevPath()
 		if gshellPath == "" {

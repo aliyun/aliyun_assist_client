@@ -12,8 +12,8 @@ type TaskProcessor interface {
 	SyncRun(
 		stdoutWriter io.Writer,
 		stderrWriter io.Writer,
-		stdinReader  io.Reader)  (exitCode int, status int, err error)
-	Cancel()
+		stdinReader io.Reader) (exitCode int, status int, err error)
+	Cancel() error
 
 	Cleanup(removeScriptFile bool) error
 

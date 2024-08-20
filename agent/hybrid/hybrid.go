@@ -13,47 +13,18 @@ import (
 	"os"
 	"strings"
 
-	"github.com/tidwall/gjson"
-
+	"github.com/aliyun/aliyun_assist_client/agent/hybrid/instance"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/process"
 	"github.com/aliyun/aliyun_assist_client/agent/version"
-	"github.com/aliyun/aliyun_assist_client/common/apiserver"
-	"github.com/aliyun/aliyun_assist_client/common/machineid"
-	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 )
 
-type RegisterInfo struct {
-	Code            string `json:"activationCode"`
-	MachineId       string `json:"machineId"`
-	RegionId        string `json:"regionId"`
-	InstanceName    string `json:"instanceName"`
-	Hostname        string `json:"hostname"`
-	IntranetIp      string `json:"intranetIp"`
-	OsVersion       string `json:"osVersion"`
-	OsType          string `json:"osType"`
-	ClientVersion   string `json:"agentVersion"`
-	PublicKeyBase64 string `json:"publicKey"`
-	Id              string `json:"activationId"`
-	Tag             []Tag  `json:"tag"`
-}
-
-type Tag struct {
-	Key   string `json:"key"`
-	Value string `json:"value"`
-}
-
-type registerResponse struct {
-	Code       int    `json:"code"`
-	InstanceId string `json:"instanceId"`
-}
-
-type unregisterResponse struct {
-	Code int `json:"code"`
-}
+const (
+	errCodeFingerprintDuplicate = "fingerprint_duplicate"
+)
 
 func Register(region string, code string, id string, name string, networkmode string, need_restart bool, tags []Tag) (ret bool) {
 	log.GetLogger().Infoln(region, code, id, name)
@@ -73,7 +44,7 @@ func Register(region string, code string, id string, name string, networkmode st
 	}()
 
 	ret = true
-	if apiserver.IsHybrid() {
+	if instance.IsHybrid() {
 		fmt.Println("error, agent already register, deregister first")
 		errmsg = "error, agent already register, deregister first"
 		log.GetLogger().Infoln("error, agent already register, deregister first")
@@ -86,16 +57,23 @@ func Register(region string, code string, id string, name string, networkmode st
 	var pub, pri bytes.Buffer
 	err := genRsaKey(&pub, &pri)
 	if err != nil {
-
 		errmsg = fmt.Sprintf("generate rsa key error: %s", err.Error())
 		fmt.Println("error, generate rsa key failed")
 		return false
 	}
 	encodeString := base64.StdEncoding.EncodeToString(pub.Bytes())
-	mid, _ := machineid.GetMachineID()
+	mid, _ := instance.MachineID()
+	fingerprint, err := instance.GenerateFingerprint()
+	if err != nil {
+		errmsg = fmt.Sprintf("generate fingerprint failed: %v", err)
+		fmt.Println(errmsg)
+		ret = false
+		return
+	}
 	info := &RegisterInfo{
 		Code:            code,
 		MachineId:       mid,
+		Fingerprint:     fingerprint,
 		RegionId:        region,
 		InstanceName:    name,
 		Hostname:        hostname,
@@ -107,54 +85,41 @@ func Register(region string, code string, id string, name string, networkmode st
 		Id:              id,
 		Tag:             tags,
 	}
-	jsonBytes, _ := json.Marshal(*info)
-	var response string
-	url := util.GetRegisterService(region, networkmode)
-	log.GetLogger().Info("register service url: ", url)
-	response, err = util.HttpPost(url, string(jsonBytes), "")
+
+	resp, err := doRegister(info, networkmode)
 	if err != nil {
-		ret = false
-		errmsg = fmt.Sprintf("register request err: %s, url=%s", err.Error(), url)
-		fmt.Println(response, err)
+		fmt.Println("Register failed: ", err)
 		return
 	}
-
-	if !gjson.Valid(response) {
-		ret = false
-		errmsg = fmt.Sprintf("invalid task info json, url=%s, response=%s", url, response)
-		fmt.Println("invalid task info json:", response)
-		return
-	}
-
-	var register_response registerResponse
-	if err := json.Unmarshal([]byte(response), &register_response); err == nil {
-		if register_response.Code == 200 {
-			path, _ := pathutil.GetHybridPath()
-			util.WriteStringToFile(path+"/network-mode", networkmode)
-			util.WriteStringToFile(path+"/pub-key", pub.String())
-			util.WriteStringToFile(path+"/pri-key", pri.String())
-			util.WriteStringToFile(path+"/region-id", region)
-			util.WriteStringToFile(path+"/instance-id", register_response.InstanceId)
-			util.WriteStringToFile(path+"/machine-id", mid)
+	if resp.Code == 200 {
+		instance.SaveInstanceInfo(resp.InstanceId, fingerprint, region, pub.String(), pri.String(), networkmode)
+	} else if resp.ErrCode == errCodeFingerprintDuplicate {
+		fmt.Println("Fingerprint is duplicated and needs to be regenerated")
+		fingerprint, err = instance.GenerateFingerprintIgnoreSavedHash()
+		if err != nil {
+			fmt.Println("Regenerate fingerprint failed: ", err)
+			return
+		}
+		info.Fingerprint = fingerprint
+		resp, err = doRegister(info, networkmode)
+		if err == nil && resp.Code == 200 {
+			instance.SaveInstanceInfo(resp.InstanceId, fingerprint, region, pub.String(), pri.String(), networkmode)
 		} else {
-			ret = false
+			fmt.Println("Register failed: ", err, resp)
+			return
 		}
+	} else {
+		fmt.Println("Register failed: ", resp)
+		return
 	}
 
-	if !ret {
-		errmsg = fmt.Sprintf("register failed, responsecode=%d, url=%s", register_response.Code, url)
-		fmt.Println("register failed")
-		fmt.Println(response)
-		return
-	} else {
-		errmsg = fmt.Sprintf("register ok, instanceid=%s", register_response.InstanceId)
-		fmt.Println("register ok")
-		fmt.Println("instance id:", register_response.InstanceId)
-		if need_restart {
-			restartService()
-		}
-		fmt.Println("restart service")
+	errmsg = fmt.Sprintf("register ok, instanceid=%s", resp.InstanceId)
+	fmt.Println("register ok")
+	fmt.Println("instance id:", resp.InstanceId)
+	if need_restart {
+		restartService()
 	}
+	fmt.Println("restart service")
 	return
 }
 
@@ -203,7 +168,44 @@ func UnRegister(need_restart bool) bool {
 	return ret
 }
 
-//RSA公钥私钥产生
+// In previous versions, we used the fingerprint generated by the Agent itself as
+// the unique ID of hybrid instance and saved it in the hybrid/fingerprint file.
+// The hybrid/machine-id still stored the original ID, which caused ambiguity.
+// Now we discard the hybrid/fingerprint file and save the fingerprint directly to
+// the hybrid/machine-id file.
+// So we need to check the hybrid/fingerprint file. If it exists, copy the
+// fingerprint to hybrid/machind-id and delete the hybrid/fingerprint file.
+func CheckFingerprint() {
+	if !instance.IsHybrid() {
+		return
+	}
+	logger := log.GetLogger().WithField("phase", "CheckFingerprint")
+	fingerprint := instance.ReadDiscardFingerprintFile()
+	if fingerprint != "" {
+		logger.Infof("Move fingerprint[%s] from hybrid/fingerprint to hybrid/machine-id", fingerprint)
+		if err := instance.SaveFingerprint(fingerprint); err != nil {
+			logger.Errorf("Save fingerprint[%s] failed: %v", fingerprint, err)
+		} else {
+			instance.DeleteDiscardFingerprintFile()
+			logger.Infof("Save fingerprint[%s] success, delete discard fingerprint file", fingerprint)
+		}
+	}
+}
+
+func doRegister(info *RegisterInfo, networkmode string) (resp registerResponse, err error) {
+	jsonBytes, _ := json.Marshal(*info)
+	url := util.GetRegisterService(info.RegionId, networkmode)
+	log.GetLogger().Info("register service url: ", url)
+	content, err := util.HttpPost(url, string(jsonBytes), "")
+	if err != nil {
+		log.GetLogger().Info("register request failed: ", err)
+		return
+	}
+	err = json.Unmarshal([]byte(content), &resp)
+	return
+}
+
+// RSA公钥私钥产生
 func genRsaKey(pub io.Writer, pri io.Writer) error {
 	// 生成私钥文件
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -250,13 +252,13 @@ func restartService() {
 }
 
 func clean_unregister_data(need_restart bool) {
-	path, _ := pathutil.GetHybridPath()
-	os.Remove(path + "/pub-key")
-	os.Remove(path + "/pri-key")
-	os.Remove(path + "/region-id")
-	os.Remove(path + "/instance-id")
-	os.Remove(path + "/machine-id")
-
+	instance.RemoveInstanceInfo()
+	// update hardwareInfo and hope this instance will be recognized when next registration
+	if hardwareInfo, err := instance.ReadHardwareInfo(); err == nil {
+		if currentHardwareInfo, err := instance.CurrentHwHash(); err == nil {
+			instance.SaveHardwareInfo(hardwareInfo.Fingerprint, currentHardwareInfo)
+		}
+	}
 	if need_restart {
 		restartService()
 		fmt.Println("restart service")

@@ -6,12 +6,20 @@ import (
 	"testing"
 
 	"github.com/jarcoal/httpmock"
-
+	gomonkey "github.com/agiledragon/gomonkey/v2"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/internal/testutil"
+	"github.com/aliyun/aliyun_assist_client/common/requester"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 )
 
 func TestMetrics(t *testing.T) {
+	guard_transport := gomonkey.ApplyFunc(requester.GetHTTPTransport, func(logrus.FieldLogger) *http.Transport {
+		transport, _ := http.DefaultTransport.(*http.Transport)
+		return transport
+	})
+	defer guard_transport.Reset()
+
 	httpmock.Activate()
 	util.NilRequest.Set()
 	defer httpmock.DeactivateAndReset()

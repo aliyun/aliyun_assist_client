@@ -1,10 +1,10 @@
 package taskengine
 
 import (
-	"errors"
 	"testing"
+	"net/http"
 
-	"bou.ke/monkey"
+	gomonkey "github.com/agiledragon/gomonkey/v2"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/models"
 	"github.com/jarcoal/httpmock"
@@ -14,10 +14,18 @@ func TestSendFileFinished(t *testing.T) {
 	mockMetrics()
 	defer util.NilRequest.Clear()
 	defer httpmock.DeactivateAndReset()
-	guard := monkey.Patch(util.HttpPost, func(string, string, string) (string, error) {
-		return "", errors.New("some error")
+
+	const mockRegion = "cn-test100"
+	guard_GetServerHost := gomonkey.ApplyFunc(util.GetServerHost, func() string {
+		return mockRegion + ".axt.aliyun.com"
 	})
-	defer guard.Unpatch()
+	defer guard_GetServerHost.Reset()
+	httpmock.RegisterResponder("POST",
+		util.GetFinishOutputService(),
+		func(h *http.Request) (*http.Response, error) {
+			return httpmock.NewStringResponse(200, "success"), nil
+		})
+
 	type args struct {
 		sendFile models.SendFileTaskInfo
 		status   int
@@ -56,10 +64,18 @@ func TestSendFileInvalid(t *testing.T) {
 	mockMetrics()
 	defer util.NilRequest.Clear()
 	defer httpmock.DeactivateAndReset()
-	guard := monkey.Patch(util.HttpPost, func(string, string, string) (string, error) {
-		return "", errors.New("some error")
+
+	const mockRegion = "cn-test100"
+	guard_GetServerHost := gomonkey.ApplyFunc(util.GetServerHost, func() string {
+		return mockRegion + ".axt.aliyun.com"
 	})
-	defer guard.Unpatch()
+	defer guard_GetServerHost.Reset()
+	httpmock.RegisterResponder("POST",
+		util.GetInvalidTaskService(),
+		func(h *http.Request) (*http.Response, error) {
+			return httpmock.NewStringResponse(200, "success"), nil
+		})
+
 	type args struct {
 		sendFile models.SendFileTaskInfo
 		status   int

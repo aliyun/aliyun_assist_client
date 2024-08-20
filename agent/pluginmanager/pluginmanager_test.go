@@ -11,18 +11,26 @@ import (
 	"testing"
 	"time"
 
-	"bou.ke/monkey"
+	gomonkey "github.com/agiledragon/gomonkey/v2"
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/timermanager"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/common/pathutil"
+	"github.com/aliyun/aliyun_assist_client/common/fileutil"
 	"github.com/aliyun/aliyun_assist_client/internal/testutil"
+	"github.com/aliyun/aliyun_assist_client/common/requester"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 )
 
 func TestPluginManager(t *testing.T) {
-	guard := monkey.Patch(syncRunKillGroup, func(workingDir string, commandName string, commandArguments []string, stdoutWriter io.Writer, stderrWriter io.Writer,
+	guard_transport := gomonkey.ApplyFunc(requester.GetHTTPTransport, func(logrus.FieldLogger) *http.Transport {
+		transport, _ := http.DefaultTransport.(*http.Transport)
+		return transport
+	})
+	defer guard_transport.Reset()
+	guard := gomonkey.ApplyFunc(syncRunKillGroup, func(workingDir string, commandName string, commandArguments []string, stdoutWriter io.Writer, stderrWriter io.Writer,
 		timeOut int) (exitCode int, status int, err error) {
 			if commandName=="acs-plugin-manager" {
 				if len(commandArguments)==1 && commandArguments[0]=="--status" {
@@ -33,15 +41,15 @@ func TestPluginManager(t *testing.T) {
 			}
 			return 1, 1, errors.New("unknown command")
 		})
-	defer guard.Unpatch()
+	defer guard.Reset()
 
 	pluginPath, _ := pathutil.GetPluginPath()
 	pluginPath += string(os.PathSeparator) + "installed_plugins"
 	installed_plugins := "{\"pluginList\": [{\"arch\": \"x64\", \"isPreInstalled\": \"\", \"md5\": \"b085b7d7c0b88e27bbd8a0de8dd5caa2\", \"name\": \"test_plugin_linux\", \"osType\": \"linux\", \"pluginId\": \"local_test_plugin_linux_1.0\", \"pluginType\": 1, \"publisher\": \"aliyun\", \"runPath\": \"main\", \"timeout\": \"5\", \"url\": \"local\", \"version\": \"1.0\"}, {\"arch\": \"X64\", \"isPreInstalled\": \"\", \"md5\": \"b3696ef2e0add78c8f4601d598ba1daa\", \"name\": \"oosutil\", \"osType\": \"LINUX\", \"pluginId\": \"p-hz0100z6doel4hs\", \"pluginType\": 0, \"publisher\": \"aliyun\", \"runPath\": \"oosutil_linux\", \"timeout\": \"60\", \"url\": \"http://aliyun-client-assist-cn-hangzhou.oss-cn-hangzhou-internal.aliyuncs.com/oosutil/linux/oosutil_1.8.zip\", \"version\": \"1.8\"}]}"
-	err := util.WriteStringToFile(pluginPath, installed_plugins)
+	err := fileutil.WriteStringToFile(pluginPath, installed_plugins)
 	assert.Equal(t, err, nil)
 	defer func() {
-		if util.CheckFileIsExist(pluginPath) {
+		if fileutil.CheckFileIsExist(pluginPath) {
 			os.Remove(pluginPath)
 		}
 	}()

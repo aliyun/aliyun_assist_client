@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"runtime"
@@ -21,12 +22,12 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/checkospanic"
 	"github.com/aliyun/aliyun_assist_client/agent/checkvirt"
 	"github.com/aliyun/aliyun_assist_client/agent/clientreport"
+	"github.com/aliyun/aliyun_assist_client/agent/commandermanager"
 	"github.com/aliyun/aliyun_assist_client/agent/cryptdata"
 	"github.com/aliyun/aliyun_assist_client/agent/flagging"
 	"github.com/aliyun/aliyun_assist_client/agent/heartbeat"
 	"github.com/aliyun/aliyun_assist_client/agent/hybrid"
 	"github.com/aliyun/aliyun_assist_client/agent/install"
-	ipcserver "github.com/aliyun/aliyun_assist_client/agent/ipc/server"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	"github.com/aliyun/aliyun_assist_client/agent/perfmon"
@@ -41,6 +42,10 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/util/wrapgo"
 	"github.com/aliyun/aliyun_assist_client/agent/version"
 	"github.com/aliyun/aliyun_assist_client/common/pathutil"
+	commander_server "github.com/aliyun/aliyun_assist_client/interprocess/commander/server"
+	cryptdata_server "github.com/aliyun/aliyun_assist_client/interprocess/cryptdata/server"
+	"github.com/aliyun/aliyun_assist_client/interprocess/messagebus/buses"
+	messagebus_server "github.com/aliyun/aliyun_assist_client/interprocess/messagebus/server"
 )
 
 type Options struct {
@@ -96,6 +101,7 @@ var (
 	G_Running     bool          = true
 	G_StopEvent   chan struct{} = nil
 	SingleAppLock *single.Single
+	Started       bool
 
 	persistentFlags = []cli.Flag{
 		{
@@ -267,6 +273,11 @@ func (p *program) run() {
 	checkagentpanic.RedirectStdouterr()
 	G_Running = true
 	G_StopEvent = make(chan struct{})
+
+	if err := timermanager.InitTimerManager(); err != nil {
+		log.GetLogger().Fatalln("Failed to initialize timer manager: " + err.Error())
+		return
+	}
 	channel.TryStartGshellChannel()
 
 	if runtime.GOOS == "windows" {
@@ -309,6 +320,9 @@ func (p *program) run() {
 	// Check last panic and report it
 	wrapgo.CallWithPanicHandler(checkagentpanic.CheckAgentPanic, clientreport.LogAndReportIgnorePanic)
 
+	// Check hybrid instance's fingerprint file
+	hybrid.CheckFingerprint()
+
 	// Check in main goroutine and update as soon as possible, which use stricter
 	// timeout limitation. NOTE: The preparation phase timeout parameter should
 	// be considered as the whole timeout toleration minus minimum sleeping time
@@ -318,11 +332,6 @@ func (p *program) run() {
 		log.GetLogger().Errorln("Failed to check update when starting: " + err.Error())
 		// Failed to update at starting phase would not terminate agent
 		// return
-	}
-
-	if err := timermanager.InitTimerManager(); err != nil {
-		log.GetLogger().Fatalln("Failed to initialize timer manager: " + err.Error())
-		return
 	}
 
 	if err := update.InitCheckUpdateTimer(); err != nil {
@@ -336,18 +345,36 @@ func (p *program) run() {
 	if disabled, err := flagging.DetectNormalizingCRLFDisabled(); disabled {
 		log.GetLogger().WithError(err).Warning("CRLF-normalization has been disabled due to configuration")
 	}
+	if disabled, err := flagging.DetectTaskOutputRingbufferDisabled(); disabled {
+		log.GetLogger().WithError(err).Warning("TaskOutput-Ringbuffer has been disabled due to configuration")
+	}
 
 	channel.StartChannelMgr()
+
+	// Register callback functions that will be called when the network recover
+	heartbeat.RegisterActionWhenNetRecover(map[string]func(){
+		"SelectAvailableChannel": channel.OnNetworkRecover,
+	})
 
 	if err := heartbeat.InitHeartbeatTimer(); err != nil {
 		log.GetLogger().Fatalln("Failed to initialize heartbeat: " + err.Error())
 		return
 	}
 
-	// Start ipc server and init cryptdata package before fetching tasks, 
+	// Start ipc server and init cryptdata package before fetching tasks,
 	// because they may be relied on by tasks.
-	ipcserver.StartService()
 	cryptdata.Init()
+	// Init commander manager
+	commandermanager.InitCommanderManager("")
+	// Initialize and serve inter-process functionalities in parallel
+	wrapgo.GoWithDefaultPanicHandler(func() {
+		messagebus_server.ListenAndServe(log.GetLogger(), buses.GetCentralEndpoint(true), nil,
+			[]messagebus_server.RegisterFunc{
+				cryptdata_server.RegisterAssistAgentServer,
+				commander_server.RegisterAssistAgentServer,
+			},
+		)
+	})
 
 	// TODO: First heart-beat may fail and be failed to indicate agent is ready.
 	// Retrying should be tried here.
@@ -359,9 +386,10 @@ func (p *program) run() {
 	// And also log to stdout, which would be written to systemd-journal as well
 	// as console via systemd
 	fmt.Println("Started successfully")
+	Started = true
 
 	// Periodic tasks are retrieved only once at startup.
-	// The interval between startup fetch task and the first heart-beat should 
+	// The interval between startup fetch task and the first heart-beat should
 	// be minimized as much as possible.
 	wrapgo.CallWithDefaultPanicHandler(func() {
 		isColdstart, err := flagging.IsColdstart()
@@ -390,20 +418,22 @@ func (p *program) run() {
 		// Report last os panic if panic record found
 		if isColdstart, err := flagging.IsColdstart(); err != nil || isColdstart {
 			wrapgo.GoWithDefaultPanicHandler(checkospanic.ReportLastOsPanic)
-		}	
+		}
 
-		// Initialize non-critical periodic items, failure of initialization will not interrupt agent. 
+		// Initialize non-critical periodic items, failure of initialization will not interrupt agent.
 		if err := statemanager.InitStateManagerTimer(); err != nil {
 			log.GetLogger().Errorln("Failed to initialize statemanager: " + err.Error())
 		}
+
 		pluginmanager.InitPluginCheckTimer()
+
 		if err := checkkdump.CheckKdumpTimer(); err != nil {
 			log.GetLogger().Errorln("Failed to StartKdumpCheckTimer: ", err)
 		} else {
 			log.GetLogger().Infoln("Start StartKdumpCheckTimer")
 		}
-		err := checkvirt.StartVirtIoVersionReport()
-		if err != nil {
+
+		if err := checkvirt.StartVirtIoVersionReport(); err != nil {
 			log.GetLogger().Errorln("Failed to StartVirtIoVersionReport: " + err.Error())
 		} else {
 			log.GetLogger().Infoln("Start StartVirtIoVersionReport success")
@@ -418,6 +448,16 @@ func (p *program) run() {
 
 func (p *program) Stop(s service.Service) error {
 	log.GetLogger().Println("Stopping ......")
+	if Started {
+		// Report stop event only after successfully starting
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(2)*time.Second)
+		defer cancel()
+		go func() {
+			defer cancel()
+			reportAgentStop(ctx)
+		}()
+		<-ctx.Done()
+	}
 	// channel.StopChannelMgr()
 	// //websocket.DisconnectWebsocketServer()
 	// G_Running = false
@@ -426,6 +466,19 @@ func (p *program) Stop(s service.Service) error {
 	// perfmon.StopSelfKillMon()
 	log.GetLogger().Println("Stopped")
 	return nil
+}
+
+func reportAgentStop(ctx context.Context) {
+	reason := "unknown"
+	shutdown, err := osutil.IsSystemShutdown(ctx)
+	if err != nil {
+		log.GetLogger().WithError(err).Error("IsSystemShutdown")
+	} else if shutdown {
+		reason = "shutdown"
+	}
+	metrics.GetBaseStoppedEvent(
+		"reason", reason,
+	).ReportEventSync()
 }
 
 func parseOptions(ctx *cli.Context) Options {
@@ -502,11 +555,15 @@ func runRootCommand(ctx *cli.Context, args []string) error {
 				Value: words[1],
 			})
 		}
-		hybrid.Register(options.Region, options.ActivationCode, options.ActivationId, options.InstanceName, options.NetWorkMode, true, tags)
+		if !hybrid.Register(options.Region, options.ActivationCode, options.ActivationId, options.InstanceName, options.NetWorkMode, true, tags) {
+			cli.Exit(1)
+		}
 		return nil
 	}
 	if options.DeRegister {
-		hybrid.UnRegister(true)
+		if !hybrid.UnRegister(true) {
+			cli.Exit(1)
+		}
 		return nil
 	}
 
@@ -514,6 +571,7 @@ func runRootCommand(ctx *cli.Context, args []string) error {
 		// TODO: Check other options like --install, --remove, --start, --stop should not be passed
 		if err := daemon.Daemonize(); err != nil {
 			fmt.Fprintln(os.Stderr, "Failed to start aliyun-service as daemon:", err)
+			cli.Exit(1)
 		}
 		return nil
 	}
@@ -522,49 +580,49 @@ func runRootCommand(ctx *cli.Context, args []string) error {
 	prg := &program{}
 	s, err := service.New(prg, svcConfig)
 	if err != nil {
-		fmt.Println("new service error " + err.Error())
-		return nil
+		return fmt.Errorf("new service error %w", err)
 	}
 
 	if options.Stop {
 		if err := s.Stop(); err != nil {
-			fmt.Println("stop assist failed:", err)
+			return fmt.Errorf("stop assist failed: %w", err)
 		} else {
 			fmt.Println("stop assist ok")
+			return nil
 		}
-		return nil
 	}
 
 	if options.Remove {
 		if err := s.Uninstall(); err != nil {
-			fmt.Println("uninstall assist failed:", err)
+			return fmt.Errorf("uninstall assist failed: %w", err)
 		} else {
 			fmt.Println("uninstall assist ok")
+			return nil
 		}
-		return nil
 	}
 
 	if options.Install {
 		if err := s.Install(); err != nil {
-			fmt.Println("install assist failed:", err)
+			return fmt.Errorf("install assist failed: %w", err)
 		} else {
 			fmt.Println("install assist ok")
+			return nil
 		}
-		return nil
 	}
 
 	if options.Start {
 		if err := s.Start(); err != nil {
-			fmt.Println("start assist failed:", err)
+			return fmt.Errorf("start assist failed: %w", err)
 		} else {
 			fmt.Println("start assist ok")
+			return nil
 		}
-		return nil
 	}
+
 	err = s.Run()
 	if err != nil {
 		log.GetLogger().Println(err.Error())
+		return err
 	}
-
 	return nil
 }

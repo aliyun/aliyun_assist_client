@@ -9,12 +9,21 @@ import (
 
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
+	gomonkey "github.com/agiledragon/gomonkey/v2"
+	"github.com/aliyun/aliyun_assist_client/common/requester"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/internal/testutil"
 )
 
 func TestReportUpdateFailure(t *testing.T) {
+	guard_transport := gomonkey.ApplyFunc(requester.GetHTTPTransport, func(logrus.FieldLogger) *http.Transport {
+		transport, _ := http.DefaultTransport.(*http.Transport)
+		return transport
+	})
+	defer guard_transport.Reset()
+	
 	httpmock.Activate()
 	util.NilRequest.Set()
 	defer util.NilRequest.Clear()

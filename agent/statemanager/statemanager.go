@@ -87,6 +87,7 @@ func refreshStateConfigs() {
 	defer func() {
 		if panicPayload := recover(); panicPayload != nil {
 			stacktrace := debug.Stack()
+			fmt.Println(string(stacktrace))
 			clientreport.ReportPanic(panicPayload, stacktrace, false)
 		}
 	}()

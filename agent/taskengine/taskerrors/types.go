@@ -11,5 +11,5 @@ type InvalidSettingError interface {
 type ExecutionError interface {
 	error
 
-	Code() ErrorCode
+	ErrCode() ErrorCode
 }

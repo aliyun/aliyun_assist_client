@@ -27,7 +27,7 @@ func syncRunKillGroup(workingDir string, commandName string, commandArguments []
 
 func GetArch() (formatArch string, rawArch string) {
 	defer func() {
-		log.GetLogger().Errorf("Get Arch: formatArch[%s] rawArch[%s]: ", formatArch, rawArch)
+		log.GetLogger().Infof("Get Arch: formatArch[%s] rawArch[%s]: ", formatArch, rawArch)
 	}()
 	formatArch = ARCH_UNKNOWN
 	arch, err := osutil.GetUnameMachine()

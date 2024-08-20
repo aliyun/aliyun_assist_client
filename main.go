@@ -20,8 +20,11 @@ func main() {
 	ctx.EnterCommand(&rootCmd)
 	ctx.SetCompletion(cli.ParseCompletionForShell())
 
-	rootCmd.AddSubCommand(&listContainersCmd)
-	rootCmd.AddSubCommand(&dataEncryptionCmd)
+	// Add subcommands
+	rootCmd.AddSubCommand(dataEncryptionCmd)
+	if listContainersCmd != nil {
+		rootCmd.AddSubCommand(listContainersCmd)
+	}
 
 	rootCmd.Execute(ctx, os.Args[1:])
 }

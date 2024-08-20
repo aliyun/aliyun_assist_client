@@ -37,6 +37,7 @@ type RunTaskInfo struct {
 	ContainerId       string            `json:"containerId"`
 	ContainerName     string            `json:"containerName"`
 	BuiltinParameters map[string]string `json:"builtInParameter"`
+	TerminationMode   string            `json:"terminationMode"`
 
 	Output OutputInfo
 	Repeat RunTaskRepeatType

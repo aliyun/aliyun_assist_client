@@ -18,7 +18,7 @@ import (
 	gomonkey "github.com/agiledragon/gomonkey/v2"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
-	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/common/fileutil"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -55,7 +55,7 @@ func (_fakeDirEntryB) Name() string {
 }
 
 func TestReportLastOsPanic(t *testing.T) {
-	guard_1 := gomonkey.ApplyFunc(util.CheckFileIsExist, func(filename string) bool { return true })
+	guard_1 := gomonkey.ApplyFunc(fileutil.CheckFileIsExist, func(filename string) bool { return true })
 	defer guard_1.Reset()
 	
 	guard_2 := gomonkey.ApplyFunc(os.ReadFile, func(name string) ([]byte, error) {
@@ -96,7 +96,7 @@ extra_bins /usr/bin/sh`), nil
 			assert.Equal(t, true, vmcorePathRegex.MatchString(name))
 			items := vmcorePathRegex.FindStringSubmatch(name)
 			assert.Equal(t, 2, len(items))
-			_, err := time.Parse("2006-01-02-15:04:05", items[1])
+			_, err := time.ParseInLocation("2006-01-02-15:04:05", items[1], time.Local)
 			assert.Equal(t, nil, err)
 			assert.Equal(t, currentTimeStr, items[1])
 		}
@@ -123,7 +123,7 @@ extra_bins /usr/bin/sh`), nil
 
 
 func TestFindLocalVmcoreDmesg(t *testing.T) {
-	guard_1 := gomonkey.ApplyFunc(util.CheckFileIsExist, func(filename string) bool { return true })
+	guard_1 := gomonkey.ApplyFunc(fileutil.CheckFileIsExist, func(filename string) bool { return true })
 	defer guard_1.Reset()
 	
 	guard_2 := gomonkey.ApplyFunc(os.ReadFile, func(name string) ([]byte, error) {
@@ -149,7 +149,7 @@ extra_bins /usr/bin/sh`), nil
 			assert.Equal(t, true, vmcorePathRegex.MatchString(name))
 			items := vmcorePathRegex.FindStringSubmatch(name)
 			assert.Equal(t, 2, len(items))
-			_, err := time.Parse("2006-01-02-15:04:05", items[1])
+			_, err := time.ParseInLocation("2006-01-02-15:04:05", items[1], time.Local)
 			assert.Equal(t, nil, err)
 			assert.Equal(t, currentTimeStr, items[1])
 		}
@@ -167,7 +167,7 @@ func TestParseVmcore(t *testing.T) {
 	root := "testfile" // Replace with the root directory you want to traverse
 	fileList := []string{}
 	err := filepath.Walk(root, func (path string, info os.FileInfo, err error) error {
-		if !info.IsDir() {
+		if info != nil && !info.IsDir() {
 			fileList = append(fileList, path)	
 		}
 		return nil

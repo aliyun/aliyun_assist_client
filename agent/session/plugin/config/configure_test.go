@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,11 +19,12 @@ import (
 	"strings"
 	"testing"
 
+	gomonkey "github.com/agiledragon/gomonkey/v2"
 	"github.com/stretchr/testify/assert"
-	"bou.ke/monkey"
+
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/i18n"
 
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/cli"
-	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/i18n"
 )
 
 func TestNewConfigureCommand(t *testing.T) {
@@ -115,13 +116,13 @@ func TestNewConfigureCommand(t *testing.T) {
 func TestDoConfigure(t *testing.T) {
 	originhook := hookLoadConfiguration
 	originhookSave := hookSaveConfiguration
-	guard := monkey.Patch(ReadInput, func(defaultValue string) string {
+	guard := gomonkey.ApplyFunc(ReadInput, func(defaultValue string) string {
 		return defaultValue
 	})
 	defer func() {
 		hookLoadConfiguration = originhook
 		hookSaveConfiguration = originhookSave
-		guard.Unpatch()
+		guard.Reset()
 	}()
 	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
 		return func(path string) (*Configuration, error) {
@@ -176,11 +177,11 @@ func TestDoConfigure(t *testing.T) {
 }
 
 func TestConfigureAK(t *testing.T) {
-	guard := monkey.Patch(ReadInput, func(defaultValue string) string {
+	guard := gomonkey.ApplyFunc(ReadInput, func(defaultValue string) string {
 		return defaultValue
 	})
 	defer func() {
-		guard.Unpatch()
+		guard.Reset()
 	}()
 	w := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
@@ -192,11 +193,11 @@ func TestConfigureAK(t *testing.T) {
 }
 
 func TestConfigureStsToken(t *testing.T) {
-	guard := monkey.Patch(ReadInput, func(defaultValue string) string {
+	guard := gomonkey.ApplyFunc(ReadInput, func(defaultValue string) string {
 		return defaultValue
 	})
 	defer func() {
-		guard.Unpatch()
+		guard.Reset()
 	}()
 	w := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
@@ -208,11 +209,11 @@ func TestConfigureStsToken(t *testing.T) {
 }
 
 func TestConfigureRamRoleArn(t *testing.T) {
-	guard := monkey.Patch(ReadInput, func(defaultValue string) string {
+	guard := gomonkey.ApplyFunc(ReadInput, func(defaultValue string) string {
 		return defaultValue
 	})
 	defer func() {
-		guard.Unpatch()
+		guard.Reset()
 	}()
 	w := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)

@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 	"github.com/hectane/go-acl"
@@ -25,11 +26,12 @@ import (
 type HostProcessor struct {
 	TaskId string
 	// Fundamental properties of command process
-	CommandType       string
-	CommandContent    string
-	InvokeVersion 	  int
-	Repeat            models.RunTaskRepeatType
-	Timeout           int
+	CommandType    string
+	CommandContent string
+	InvokeVersion  int
+	Repeat         models.RunTaskRepeatType
+	Timeout        int
+	TerminationMode string
 	// Additional attributes for command process in host
 	CommandName         string
 	WorkingDirectory    string
@@ -46,7 +48,7 @@ type HostProcessor struct {
 	invokeCommandArgs []string
 
 	// Object for command process
-	processCmd process.ProcessCmd
+	processCmd *process.ProcessCmd
 
 	// Generated variables from invoked command process
 	exitCode     int
@@ -89,6 +91,23 @@ func (p *HostProcessor) Prepare(commandContent string) error {
 		"Phase":  "HostProcessor-Preparing",
 	})
 	p.CommandContent = commandContent
+
+	var processCmd *process.ProcessCmd
+	var processCmdErr error
+	switch p.TerminationMode {
+	case "ProcessTree":
+		groupName := fmt.Sprintf("%s-%d", p.TaskId, time.Now().Unix())
+		processCmd, processCmdErr = process.NewProcessCmdWithProcessTree(groupName)
+	case "", "Process":
+		processCmd = process.NewProcessCmd()
+	default:
+		processCmdErr = fmt.Errorf("unknown terminate mode %s", p.TerminationMode)
+	}
+	taskLogger.Info("Terminate mode: ", p.TerminationMode)
+	if processCmdErr != nil {
+		return taskerrors.NewCreateProcessCollectionError(processCmdErr)
+	}
+	p.processCmd = processCmd
 
 	useScriptFile := true
 	var whyNoScriptFile error
@@ -206,8 +225,8 @@ func (p *HostProcessor) Prepare(commandContent string) error {
 		if _, err := executil.LookPath(p.invokeCommand); err != nil {
 			return taskerrors.NewPowershellNotFoundError(err)
 		}
-
-		if err := p.processCmd.SyncRunSimple("powershell.exe", []string{"Set-ExecutionPolicy", "RemoteSigned"}, 10); err != nil {
+		tempProcessCmd := process.NewProcessCmd()
+		if err := tempProcessCmd.SyncRunSimple("powershell.exe", []string{"Set-ExecutionPolicy", "RemoteSigned"}, 10); err != nil {
 			taskLogger.WithError(err).Warningln("Failed to set powershell execution policy")
 		}
 	} else if !useScriptFile {
@@ -246,8 +265,11 @@ func (p *HostProcessor) SyncRun(
 	return p.exitCode, p.resultStatus, err
 }
 
-func (p *HostProcessor) Cancel() {
-	p.processCmd.Cancel()
+func (p *HostProcessor) Cancel() error {
+	if err := p.processCmd.Cancel(); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (p *HostProcessor) Cleanup(removeScriptFile bool) error {

@@ -47,11 +47,15 @@ func PeekFileContext(ctx context.Context, zipFile string, target string) ([]byte
 	return nil, os.ErrNotExist
 }
 
-func Unzip(zipFile string, destDir string) error {
-	return UnzipContext(context.Background(), zipFile, destDir)
+// Unzip zipFile to destDir, all decompressed files will be synchronized to make sure 
+// being writen into disk if syncFile is true.
+func Unzip(zipFile string, destDir string, syncFile bool) error {
+	return UnzipContext(context.Background(), zipFile, destDir, syncFile)
 }
 
-func UnzipContext(ctx context.Context, zipFile string, destDir string) error {
+// Unzip zipFile to destDir, all decompressed files will be synchronized to make sure 
+// being writen into disk if syncFile is true.
+func UnzipContext(ctx context.Context, zipFile string, destDir string, syncFile bool) error {
 	zipReader, err := zip.OpenReader(zipFile)
 	if err != nil {
 		return err
@@ -83,6 +87,9 @@ func UnzipContext(ctx context.Context, zipFile string, destDir string) error {
 						return err
 					}
 					defer outFile.Close()
+					if syncFile {
+						defer outFile.Sync()
+					}
 
 					_, err = io.Copy(outFile, inFile)
 					return err

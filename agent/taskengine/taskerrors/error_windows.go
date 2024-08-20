@@ -16,6 +16,6 @@ func (e *baseError) Error() string {
 	return strings.Join(messages, ": ")
 }
 
-func (e *baseError) Code() ErrorCode {
+func (e *baseError) ErrCode() ErrorCode {
 	return e.categoryCode
 }

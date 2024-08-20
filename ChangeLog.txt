@@ -1,4 +1,16 @@
-﻿2024-01
+﻿2024-08
+v2.x.x.631
+1. 支持指定脚本执行的引导程序
+2. 容器内执行命令组件化
+3. StopInvocation支持以进程树终止任务进程
+4. sessionmanager支持root登录
+5. ali-instance-cli端口转发支持指定ip
+6. 使用ringbuffer接收任务输出内容 
+7. task/xxx接口返回任务状态错误时Agent对异常任务进行处理 
+8. 支持通过kick_vm指令快速回滚/升级 
+9. 通过心跳感知网络从不通变为通的事件并尝试重新建立gshell/websocket通道
+
+2024-01
 v2.x.x.578
 1. 命令执行时支持修改执行信息
 2. 支持selfhost场景注册托管实例

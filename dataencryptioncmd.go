@@ -11,11 +11,13 @@ import (
 	"github.com/aliyun/aliyun_assist_client/thirdparty/aliyun-cli/i18n"
 
 	"github.com/aliyun/aliyun_assist_client/agent/cryptdata"
-	"github.com/aliyun/aliyun_assist_client/agent/ipc/client"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/interprocess/cryptdata/client"
 )
 
 const (
+	TimeoutFlagName        = "timeout"
+	JsonFlagName           = "json"
 	GenKeyPairFlagName     = "genKeyPair"
 	RmKeyPairFlagName      = "rmKeyPair"
 	CreateSecretParam      = "createSecret"
@@ -140,7 +142,7 @@ var (
 		},
 	}
 
-	dataEncryptionCmd = cli.Command{
+	dataEncryptionCmd = &cli.Command{
 		Name: DataEncryptSubCmd,
 		Short: i18n.T(
 			"Use the RSA-OAEP algorithm to encrypt or decrypt text, the public modulus of the secret key is 2048 bit, the hash function used is sha256, and the max length of text to be encrypted is 190 bytes",
@@ -178,7 +180,7 @@ func runDataEncryptionCmd(ctx *cli.Context, args []string) error {
 	// Necessary initialization work
 	log.InitLog("aliyun_assist_main.log", logPath, true)
 	// IF write log failed, do nothing
-	log.GetLogger().SetErrorCallback(func(error){})
+	log.GetLogger().SetErrorCallback(func(error) {})
 	// Add field SubCmd to make log entries separated from the main process's
 	commonFields := log.DefaultCommonFields()
 	commonFields["SubCmd"] = DataEncryptSubCmd

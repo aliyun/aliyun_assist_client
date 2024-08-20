@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
-	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/common/fileutil"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 )
 
@@ -41,7 +41,7 @@ func initNetcheckPath() error {
 	}
 
 	currentVersionNetcheckPath := filepath.Join(currentVersionDir, getNetcheckExecutableName())
-	if !util.CheckFileIsExist(currentVersionNetcheckPath) {
+	if !fileutil.CheckFileIsExist(currentVersionNetcheckPath) {
 		_netcheckPath = ""
 		return fmt.Errorf("Netcheck executable not found at %s", currentVersionNetcheckPath)
 	}

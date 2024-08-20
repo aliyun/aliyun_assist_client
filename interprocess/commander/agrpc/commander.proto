@@ -1,0 +1,153 @@
+// protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative commander.proto
+syntax = "proto3";
+
+package commander;
+option go_package ="github.com/aliyun/aliyun_assist_client/interprocess/commander/agrpc";
+
+service Commander {
+    // For handshake
+    rpc Handshake(HandshakeReq) returns (HandshakeResp) {}
+    rpc Ping(PingReq) returns (PingResp) {}
+    rpc ConnectFromAgent(ConnectFromAgentReq) returns (ConnectFromAgentResp) {}
+
+    // For execute task
+    rpc PreCheckScript(PreCheckScriptReq) returns (PreCheckScriptResp) {}
+    rpc PrepareScript(PrepareScriptReq) returns (PrepareScriptResp) {}
+    rpc SubmitScript(SubmitScriptReq) returns (SubmitScriptResp) {}
+    rpc CancelSubmitted(CancelSubmittedReq) returns (CancelSubmittedResp) {}
+    rpc CleanUpSubmitted(CleanUpSubmittedReq) returns (CleanUpSubmittedResp) {}
+    rpc DisposeSubmission(DisposeSubmissionReq) returns (DisposeSubmissionResp) {}
+}
+
+service AssistAgent {
+    // For handshake
+    rpc RegisterCommander (RegisterCommanderReq) returns (RegisterCommanderResp) {}
+
+    // For execute task
+    rpc WriteSubmissionOutput(WriteSubmissionOutputReq) returns (WriteSubmissionOutputResp) {}
+    rpc FinalizeSubmissionStatus(FinalizeSubmissionStatusReq) returns (FinalizeSubmissionStatusResp) {}
+}
+
+message RespStatus {
+    int32 statusCode = 1;
+    string errMessage = 2;
+}
+
+message TaskError {
+    string errorCode = 1;
+    string errorSubCode = 2;
+    string errorMessage = 3;
+}
+
+message TaskOutput {
+    int32 index = 1;
+    string output = 2;
+}
+
+message TaskRes {
+    int32 exitCode = 1;
+    int32 taskStatus = 2;
+    TaskError taskError = 3;
+}
+
+message HandshakeReq{
+    string endpoint = 1;
+    string handshakeToken = 2;
+}
+message HandshakeResp{
+    RespStatus status = 1;
+}
+
+message PingReq{}
+message PingResp{
+    RespStatus status = 1;
+}
+
+message ConnectFromAgentReq {
+    string SupportedApiVersion = 1; // Api versions that agent supportes
+}
+message ConnectFromAgentResp {
+    RespStatus status = 1;
+    string apiVersion = 2;
+}
+
+message PreCheckScriptReq {
+    string submissionId = 1;
+    string commandType = 2;
+    int64 timeout = 3;
+    string workingDir = 4;
+    string userName = 5;
+    string password = 6;
+    string annotation = 7;
+}
+message PreCheckScriptResp {
+    RespStatus status = 1;
+    string extraLubanParams = 2;
+    TaskError taskError = 3;
+}
+
+message PrepareScriptReq {
+    string submissionId = 1;
+    string content = 2;
+}
+message PrepareScriptResp {
+    RespStatus status = 1;
+    TaskError taskError = 2;
+}
+
+message SubmitScriptReq {
+    string submissionId = 1;
+}
+message SubmitScriptResp {
+    RespStatus status = 1;
+    TaskError taskError = 2;
+}
+
+message CancelSubmittedReq {
+    string submissionId = 1;
+}
+message CancelSubmittedResp {
+    RespStatus status = 1;
+}
+
+message CleanUpSubmittedReq {
+    string submissionId = 1;
+}
+message CleanUpSubmittedResp {
+    RespStatus status = 1;
+}
+
+message DisposeSubmissionReq {
+    string submissionId = 1;
+}
+message DisposeSubmissionResp {
+    RespStatus status = 1;
+}
+
+
+message RegisterCommanderReq {
+    string pluginName = 1;
+    string handshakeToken = 2;
+    string endpoint = 3;
+    string SupportedApiVersion = 4; // Api versions that commander supportes
+}
+message RegisterCommanderResp {
+    RespStatus status = 1;
+}
+
+message WriteSubmissionOutputReq {
+    string submissionId = 1;
+    TaskOutput output = 2;
+}
+message WriteSubmissionOutputResp {
+    RespStatus status = 1;
+}
+
+message FinalizeSubmissionStatusReq {
+    string submissionId = 1;
+    TaskOutput output = 2;
+    TaskRes result = 3;
+}
+message FinalizeSubmissionStatusResp {
+    RespStatus status = 1;
+}

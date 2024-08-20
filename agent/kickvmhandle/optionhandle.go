@@ -30,6 +30,7 @@ func NewHealthCheckHandle() *HealthCheckHandle{
 	}
 }
 
+
 func ParseOption(input string) KickHandle {
     arrays := strings.Split(input, " ")
     if len(arrays) < 2 {

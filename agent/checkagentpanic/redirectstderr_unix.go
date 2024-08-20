@@ -22,7 +22,8 @@ const (
 
 // RedirectStdouterr redirect os.Stdout and os.Stderr to aliyun-service.err and
 // aliyun-service.out in log directory if agent running in SysVinit or Upstart
-// environment.
+// environment. In systemd environment stdout/stderr will be writen to journal 
+// and console.
 func RedirectStdouterr() {
 	if util.IsSystemdLinux() {
 		return
@@ -60,11 +61,8 @@ func RedirectStdouterr() {
 }
 
 func CheckAgentPanic() {
-	logger := log.GetLogger().WithField("function", "CheckAgentPanic")
 	defer fmt.Fprintln(os.Stderr, checkPoint)
-	if util.IsSystemdLinux() {
-		lastPanicTimestamp, lastPanicInfo = searchPanicInfoFromJournalctl(logger)
-	}
+	// lastPanicInfo will be empty if this is a systemd environment.
 	if !lastPanicTimestamp.IsZero() && len(lastPanicInfo) > 0 {
 		metrics.GetAgentLastPanicEvent(
 			"panicTime", lastPanicTimestamp.Format("2006-01-02 15:04:05"),

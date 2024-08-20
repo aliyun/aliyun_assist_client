@@ -15,7 +15,7 @@ var (
 		// 服务名称
 		DisplayName: "Aliyun Assist Service",
 		// 服务描述
-		Description: "阿里云助手",
+		Description: "Aliyun Assist Service",
 	}
 )
 

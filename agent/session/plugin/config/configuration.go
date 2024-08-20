@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,12 +16,11 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/cli"
 	"io/ioutil"
 	"os"
 	"runtime"
 
-
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/cli"
 )
 
 const (
@@ -204,10 +203,10 @@ func GetConfigPath2() string {
 			panic(err)
 		}
 	}
-	if _, err := os.Stat(path+"/config_ecs.json"); os.IsNotExist(err) {
-		return path+"/config.json"
+	if _, err := os.Stat(path + "/config_ecs.json"); os.IsNotExist(err) {
+		return path + "/config.json"
 	}
-	return path+"/config_ecs.json"
+	return path + "/config_ecs.json"
 }
 
 func GetHomePath() string {

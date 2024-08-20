@@ -3,19 +3,22 @@ package portforward
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"net"
 	"strconv"
 	"strings"
 
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
+
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/cli"
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/client"
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/config"
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/log"
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/session"
+
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/i18n"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
-	"github.com/aliyun/aliyun_assist_client/agent/log"
-	client "github.com/aliyun/aliyun_assist_client/agent/session/plugin"
-	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/cli"
-	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/config"
-	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/i18n"
-	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/session"
 )
 
 func NewPortForwardCommand() *cli.Command {
@@ -45,16 +48,18 @@ func NewPortForwardCommand() *cli.Command {
 
 func doPortForward(ctx *cli.Context, instance_id string, local_port string, remote_port string, service_instance string) error {
 	session.CheckSessionEnabled(ctx)
-	if remote_port == "" {
-		remote_port = "80"
+	var remote_host string
+	var err error
+	remote_host, remote_port, err = net.SplitHostPort(remote_port)
+	if err != nil {
+		return fmt.Errorf("parse remote host and port failed: %v", err)
 	}
 	var websocket_url string
-	var err error
 	var session_id string
 	if service_instance != "" {
 		websocket_url, session_id, err = callComputeNestStartTerminalSession(ctx, service_instance, instance_id, remote_port)
 	} else {
-		websocket_url, session_id, err = callEcsStartTerminalSession(ctx, instance_id, remote_port)
+		websocket_url, session_id, err = callEcsStartTerminalSession(ctx, instance_id, remote_port, remote_host)
 	}
 	if err != nil {
 		return fmt.Errorf("start tcp-listener err:%v", err)
@@ -74,7 +79,7 @@ func doPortForward(ctx *cli.Context, instance_id string, local_port string, remo
 		return fmt.Errorf("start tcp-listener err:%v", err)
 	}
 	log.GetLogger().Infoln("start tcp-listener, listening ", ip_port)
-	fmt.Printf("Port forwarding for SessionId: %s, local port %s, remote port %s\n", session_id, local_port, remote_port)
+	fmt.Printf("Port forwarding for SessionId: %s, local port %s, remote port %s:%s\n", session_id, local_port, remote_host, remote_port)
 	fmt.Println("Waiting for connections...")
 	for {
 		local_connect, err := tcp_listener.Accept()
@@ -86,7 +91,7 @@ func doPortForward(ctx *cli.Context, instance_id string, local_port string, remo
 	}
 }
 
-func callEcsStartTerminalSession(ctx *cli.Context, instance_id string, remote_port string) (string, string, error) {
+func callEcsStartTerminalSession(ctx *cli.Context, instance_id string, remote_port string, remort_server string) (string, string, error) {
 	ecs_client, err := session.GetEcsClient(ctx)
 	if err != nil {
 		fmt.Print(err.Error())
@@ -98,6 +103,7 @@ func callEcsStartTerminalSession(ctx *cli.Context, instance_id string, remote_po
 	request.Scheme = "https"
 	request.InstanceId = &[]string{instance_id}
 	request.PortNumber = requests.NewInteger(remote_port_i)
+	request.TargetServer = remort_server
 	response, err := ecs_client.StartTerminalSession(request)
 	if err != nil {
 		log.GetLogger().Errorln(err, response)

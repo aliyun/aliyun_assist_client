@@ -10,12 +10,12 @@ import (
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 	heavylock "github.com/viney-shih/go-lock"
 
+	"github.com/aliyun/aliyun_assist_client/agent/flagging"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/models"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/timermanager"
 	"github.com/aliyun/aliyun_assist_client/agent/util/atomicutil"
-	"github.com/aliyun/aliyun_assist_client/agent/flagging"
 )
 
 const (
@@ -189,7 +189,11 @@ func dispatchRunTask(taskInfo models.RunTaskInfo) {
 	})
 	switch taskInfo.Repeat {
 	case models.RunTaskOnce, models.RunTaskNextRebootOnly, models.RunTaskEveryReboot:
-		t := NewTask(taskInfo, nil, nil)
+		t, err := NewTask(taskInfo, nil, nil, onTaskReportError)
+		if err != nil {
+			scheduleLogger.Error("Invalid task: ", err)
+			return
+		}
 
 		scheduleLogger.Info("Schedule non-periodic task")
 		// Non-periodic tasks are managed by TaskFactory
@@ -250,7 +254,7 @@ func dispatchStopTask(taskInfo models.RunTaskInfo) {
 			scheduledTask.Cancel(false)
 			cancelLogger.Info("Canceled task and invocation")
 		} else {
-			response, err := sendStoppedOutput(taskInfo.TaskId, taskInfo.InvokeVersion, 0, 0, 0, 0, "", stopReasonKilled)
+			response, err := sendStoppedOutput(taskInfo.TaskId, taskInfo.InvokeVersion, 0, 0, 0, 0, "", stopReasonKilled, nil)
 			cancelLogger.WithFields(logrus.Fields{
 				"response": response,
 			}).WithError(err).Warning("Force cancelling task not found due to finished or error")
@@ -295,7 +299,11 @@ func dispatchTestTask(taskInfo models.RunTaskInfo) {
 	})
 	switch taskInfo.Repeat {
 	case models.RunTaskOnce, models.RunTaskCron, models.RunTaskNextRebootOnly, models.RunTaskEveryReboot, models.RunTaskRate, models.RunTaskAt:
-		t := NewTask(taskInfo, nil, nil)
+		t, err := NewTask(taskInfo, nil, nil, onTaskReportError)
+		if err != nil {
+			scheduleLogger.Info("Invalid task: ", err)
+			return
+		}
 
 		scheduleLogger.Info("Schedule testing task to be pre-checked")
 		pool := GetPrecheckPool()
@@ -331,6 +339,9 @@ func (s *PeriodicTaskSchedule) startExclusiveInvocation() {
 	taskFactory.AddTask(s.reusableInvocation)
 	pool := GetPool()
 	pool.RunTask(func() {
+		// reusableInvocation may be canceled in previous Run,
+		// reusableInvocation.ResetCancel() is called to reset the canceled flag.
+		s.reusableInvocation.ResetCancel()
 		code, err := s.reusableInvocation.Run()
 		if code != 0 || err != nil {
 			metrics.GetTaskFailedEvent(
@@ -408,9 +419,9 @@ func schedulePeriodicTask(taskInfo models.RunTaskInfo) error {
 		var reportErr error
 		if cronParameterErr, ok := err.(timermanager.CronParameterError); ok {
 			// Only report string constant code to luban
-			response, reportErr = reportInvalidTask(taskInfo.TaskId, taskInfo.InvokeVersion, invalidParamCron, cronParameterErr.Code())
+			response, reportErr = reportInvalidTask(taskInfo.TaskId, taskInfo.InvokeVersion, invalidParamCron, cronParameterErr.Code(), "")
 		} else {
-			response, reportErr = reportInvalidTask(taskInfo.TaskId, taskInfo.InvokeVersion, invalidParamCron, err.Error())
+			response, reportErr = reportInvalidTask(taskInfo.TaskId, taskInfo.InvokeVersion, invalidParamCron, err.Error(), "")
 		}
 		scheduleLogger.WithFields(logrus.Fields{
 			"expression": taskInfo.Cronat,
@@ -444,7 +455,7 @@ func schedulePeriodicTask(taskInfo models.RunTaskInfo) error {
 			}
 
 			if cronScheduled.NoNextRun() {
-				response, err := sendStoppedOutput(taskInfo.TaskId, taskInfo.InvokeVersion, 0, 0, 0, 0, "", stopReasonCompleted)
+				response, err := sendStoppedOutput(taskInfo.TaskId, taskInfo.InvokeVersion, 0, 0, 0, 0, "", stopReasonCompleted, nil)
 				onFinishLogger.WithFields(logrus.Fields{
 					"response": response,
 				}).WithError(err).Infoln("Sent completion event for cron task on last invocation finished")
@@ -453,7 +464,11 @@ func schedulePeriodicTask(taskInfo models.RunTaskInfo) error {
 	}
 	// then bind them to periodicTaskSchedule object
 	periodicTaskSchedule.timer = timer
-	periodicTaskSchedule.reusableInvocation = NewTask(taskInfo, scheduleLocation, onFinish)
+	periodicTaskSchedule.reusableInvocation, err = NewTask(taskInfo, scheduleLocation, onFinish, onTaskReportError)
+	if err != nil {
+		scheduleLogger.Info("Invalid task: ", err)
+		return err
+	}
 	scheduleLogger.Info("Created timer and schedule object of periodic task")
 
 	// 4. Register schedule object into _periodicTaskSchedules
@@ -493,7 +508,7 @@ func cancelPeriodicTask(taskInfo models.RunTaskInfo, quietly bool) error {
 	// 1. Check whether task is registered in local storage
 	periodicTaskSchedule, ok := _periodicTaskSchedules[taskInfo.TaskId]
 	if !ok && !quietly {
-		response, err := sendStoppedOutput(taskInfo.TaskId, taskInfo.InvokeVersion, 0, 0, 0, 0, "", stopReasonKilled)
+		response, err := sendStoppedOutput(taskInfo.TaskId, taskInfo.InvokeVersion, 0, 0, 0, 0, "", stopReasonKilled, nil)
 		cancelLogger.WithFields(logrus.Fields{
 			"response": response,
 		}).WithError(err).Warning("Force cancelling periodic task unregistered due to finished or previous errors")
@@ -520,7 +535,16 @@ func cancelPeriodicTask(taskInfo models.RunTaskInfo, quietly bool) error {
 		// Since no running
 		if !quietly {
 			lastInvocation := periodicTaskSchedule.reusableInvocation
-			lastInvocation.sendOutput("canceled", lastInvocation.getReportString(lastInvocation.output))
+			var output string
+			if lastInvocation.disableOutputRingbuffer {
+				output = lastInvocation.getReportString(lastInvocation.output)
+			} else {
+				lastInvocation.droped = lastInvocation.outputRingbuffer.Dropped()
+				output = string(lastInvocation.outputRingbuffer.ReadAll())
+			}
+			sendStoppedOutput(lastInvocation.taskInfo.TaskId, lastInvocation.taskInfo.InvokeVersion,
+				lastInvocation.monotonicStartTimestamp, lastInvocation.monotonicEndTimestamp,
+				lastInvocation.exit_code, lastInvocation.droped, output, stopReasonKilled, nil)
 			cancelLogger.Infof("Sent canceled ACK with output of last invocation")
 		}
 	}
@@ -536,4 +560,41 @@ func getPeriodicTask(taskName string) *Task {
 		return periodicTaskSchedule.reusableInvocation
 	}
 	return nil
+}
+
+func deletePeriodicTask(taskId string) {
+	timerManager := timermanager.GetTimerManager()
+	if timerManager == nil {
+		return
+	}
+
+	_periodicTaskSchedulesLock.Lock()
+	defer _periodicTaskSchedulesLock.Unlock()
+
+	log.GetLogger().WithField("taskId", taskId).Info("Delete periodic task")
+	if schedul, ok := _periodicTaskSchedules[taskId]; ok {
+		timerManager.DeleteTimer(schedul.timer)
+	}
+	delete(_periodicTaskSchedules, taskId)
+}
+
+// If server returns an errorCode in the response of task/xxx api, we need to do
+// some actions like deleting periodic task.
+func onTaskReportError(taskId string, repeat models.RunTaskRepeatType, errorCode, status string) (isTaskErr bool) {
+	isTaskErr = true
+	switch errorCode {
+	case TaskReportErrTaskNotFound:
+		// Delete periodic task
+		if repeat == models.RunTaskCron || repeat == models.RunTaskRate || repeat == models.RunTaskAt {
+			deletePeriodicTask(taskId)
+		}
+	case TaskReportErrTaskStatusInvalid:
+		// Delete periodic task if backend server tells us task is terminated
+		if status == TaskInvalidStatusTerminated && (repeat == models.RunTaskCron || repeat == models.RunTaskRate || repeat == models.RunTaskAt) {
+			deletePeriodicTask(taskId)
+		}
+	default:
+		isTaskErr = false
+	}
+	return
 }

@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,9 +15,9 @@ package cli
 
 import (
 	"fmt"
-	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/i18n"
 	"strconv"
 
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/i18n"
 )
 
 type AssignedMode int
@@ -84,7 +84,6 @@ type Flag struct {
 	formation string
 }
 
-//
 // return true if flag appeared, either `--flag1` or `--flag1 value1`
 func (f *Flag) IsAssigned() bool {
 	return f.assigned
@@ -98,9 +97,9 @@ func (f *Flag) SetValue(value string) {
 	f.value = value
 }
 
-//
 // return flag value, if not assigned return f.DefaultValue
-//   for `AssignedMode == AssignedRepeatable`. Use GetValues() to get all values
+//
+//	for `AssignedMode == AssignedRepeatable`. Use GetValues() to get all values
 func (f *Flag) GetValue() (string, bool) {
 	if f.IsAssigned() {
 		return f.value, true
@@ -111,7 +110,6 @@ func (f *Flag) GetValue() (string, bool) {
 	}
 }
 
-//
 // for `AssignedMode == AssignedRepeatable` flag, return values
 func (f *Flag) GetValues() []string {
 	return f.values
@@ -121,7 +119,6 @@ func (f *Flag) SetValues(values []string) {
 	f.values = values
 }
 
-//
 // for `AssignedMode == AssignedRepeatable` flag, return fields, multiply assignable
 // Sample: --output abc bbc acd bb=2 cc=3
 func (f *Flag) getField(key string) (*Field, bool) {
@@ -133,7 +130,6 @@ func (f *Flag) getField(key string) (*Field, bool) {
 	return nil, false
 }
 
-//
 // --flag field1=value1
 func (f *Flag) GetFieldValue(key string) (string, bool) {
 	if field, ok := f.getField(key); ok {
@@ -143,8 +139,6 @@ func (f *Flag) GetFieldValue(key string) (string, bool) {
 
 }
 
-//
-//
 func (f *Flag) GetFieldValues(key string) []string {
 	if field, ok := f.getField(key); ok {
 		return field.values
@@ -153,7 +147,6 @@ func (f *Flag) GetFieldValues(key string) []string {
 
 }
 
-//
 // return def if Flag is not assigned
 func (f *Flag) GetStringOrDefault(def string) string {
 	if f == nil {
@@ -180,7 +173,6 @@ func (f *Flag) GetIntegerOrDefault(def int) int {
 	return def
 }
 
-//
 // get all appears forms, maybe {"--Name", "--Alias1", "-Shorthand"}
 func (f *Flag) GetFormations() []string {
 	r := make([]string, 0)
@@ -196,7 +188,6 @@ func (f *Flag) GetFormations() []string {
 	return r
 }
 
-//
 // if this flag is appeared set assigned = true
 func (f *Flag) setIsAssigned() error {
 	if !f.assigned {
@@ -209,7 +200,6 @@ func (f *Flag) setIsAssigned() error {
 	return nil
 }
 
-//
 // return true, if this flag need assigned with values
 func (f *Flag) needValue() bool {
 	switch f.AssignedMode {
@@ -226,7 +216,6 @@ func (f *Flag) needValue() bool {
 	}
 }
 
-//
 // make check valid
 func (f *Flag) checkValid() {
 	if len(f.Fields) > 0 {
@@ -236,7 +225,6 @@ func (f *Flag) checkValid() {
 	}
 }
 
-//
 // validate flag value
 func (f *Flag) validate() error {
 	if f.AssignedMode == AssignedOnce && f.value == "" {
@@ -245,7 +233,6 @@ func (f *Flag) validate() error {
 	return nil
 }
 
-//
 // assign value
 func (f *Flag) assign(v string) error {
 	if f.AssignedMode == AssignedNone {
@@ -264,7 +251,6 @@ func (f *Flag) assign(v string) error {
 	return nil
 }
 
-//
 // assign field
 func (f *Flag) assignField(s string) error {
 	if k, v, ok := SplitStringWithPrefix(s, "="); ok {
@@ -285,7 +271,6 @@ func (f *Flag) assignField(s string) error {
 	return nil
 }
 
-//
 func (f *Flag) checkFields() error {
 	if len(f.Fields) == 0 {
 		return nil

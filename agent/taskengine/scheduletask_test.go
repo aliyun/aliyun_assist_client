@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"testing"
 
-	"bou.ke/monkey"
+	gomonkey "github.com/agiledragon/gomonkey/v2"
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
 
@@ -92,10 +92,10 @@ func TestFetch(t *testing.T) {
 				defer FetchingTaskLock.Unlock()
 			}
 			if tt.name == "from_kick" {
-				guard := monkey.Patch(fetchTasks, func(reason FetchReason, taskId string, taskType int, isColdstart bool) int {
+				guard := gomonkey.ApplyFunc(fetchTasks, func(reason FetchReason, taskId string, taskType int, isColdstart bool) int {
 					return 10
 				})
-				defer guard.Unpatch()
+				defer guard.Reset()
 			}
 			if got := Fetch(tt.args.from_kick, tt.args.taskId, tt.args.taskType); got != tt.want {
 				t.Errorf("Fetch() = %v, want %v", got, tt.want)
@@ -108,6 +108,13 @@ func Test_fetchTasks(t *testing.T) {
 	mockMetrics()
 	defer util.NilRequest.Clear()
 	defer httpmock.DeactivateAndReset()
+
+	const mockRegion = "cn-test100"
+	guard_GetServerHost := gomonkey.ApplyFunc(util.GetServerHost, func() string {
+		return mockRegion + ".axt.aliyun.com"
+	})
+	defer guard_GetServerHost.Reset()
+
 	type args struct {
 		reason      FetchReason
 		taskId      string
@@ -128,7 +135,7 @@ func Test_fetchTasks(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.name == "normal" {
-				monkey.Patch(FetchTaskList, func(reason FetchReason, taskId string, taskType int, isColdstart bool) *taskCollection {
+				gomonkey.ApplyFunc(FetchTaskList, func(reason FetchReason, taskId string, taskType int, isColdstart bool) *taskCollection {
 					return &taskCollection{
 						runInfos:     []models.RunTaskInfo{models.RunTaskInfo{}},
 						stopInfos:    []models.RunTaskInfo{models.RunTaskInfo{}},
@@ -203,10 +210,10 @@ func Test_dispatchRunTask(t *testing.T) {
 				defer taskFactory.RemoveTaskByName(tt.args.taskInfo.TaskId)
 			} else if tt.name == "taskRepeatOnce" {
 				var t *Task
-				guard := monkey.PatchInstanceMethod(reflect.TypeOf(t), "Run", func(*Task) (taskerrors.ErrorCode, error) {
+				guard := gomonkey.ApplyMethod(reflect.TypeOf(t), "Run", func(*Task) (taskerrors.ErrorCode, error) {
 					return 1, errors.New("some error")
 				})
-				defer guard.Unpatch()
+				defer guard.Reset()
 			}
 			dispatchRunTask(tt.args.taskInfo)
 		})
@@ -217,6 +224,18 @@ func Test_dispatchStopTask(t *testing.T) {
 	mockMetrics()
 	defer util.NilRequest.Clear()
 	defer httpmock.DeactivateAndReset()
+
+	const mockRegion = "cn-test100"
+	guard_GetServerHost := gomonkey.ApplyFunc(util.GetServerHost, func() string {
+		return mockRegion + ".axt.aliyun.com"
+	})
+	defer guard_GetServerHost.Reset()
+	httpmock.RegisterResponder("POST",
+		util.GetStoppedOutputService(),
+		func(h *http.Request) (*http.Response, error) {
+			return httpmock.NewStringResponse(200, "success"), nil
+		})
+
 	type args struct {
 		taskInfo models.RunTaskInfo
 	}
@@ -261,6 +280,11 @@ func Test_dispatchStopTask(t *testing.T) {
 			},
 		},
 	}
+	var tsk *Task
+	guard := gomonkey.ApplyMethod(reflect.TypeOf(tsk), "Cancel", func(*Task) error {
+		return nil
+	})
+	defer guard.Reset()
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.name == "taskHasExist" {
@@ -272,9 +296,9 @@ func Test_dispatchStopTask(t *testing.T) {
 				taskFactory.AddTask(task)
 				defer taskFactory.RemoveTaskByName(tt.args.taskInfo.TaskId)
 			} else if tt.name == "taskRepeatOnce" {
-				var t *Task
-				guard := monkey.PatchInstanceMethod(reflect.TypeOf(t), "Cancel", func(*Task) {})
-				defer guard.Unpatch()
+				// var t *Task
+				// guard := gomonkey.ApplyMethod(reflect.TypeOf(t), "Cancel", func(*Task) {})
+				// defer guard.Reset()
 			}
 			dispatchStopTask(tt.args.taskInfo)
 		})
@@ -330,8 +354,8 @@ func Test_dispatchTestTask(t *testing.T) {
 				defer taskFactory.RemoveTaskByName(tt.args.taskInfo.TaskId)
 			} else if tt.name == "taskRepeatOnce" {
 				var t *Task
-				guard := monkey.PatchInstanceMethod(reflect.TypeOf(t), "PreCheck", func(*Task, bool) error { return nil })
-				defer guard.Unpatch()
+				guard := gomonkey.ApplyMethod(reflect.TypeOf(t), "PreCheck", func(*Task, bool) error { return nil })
+				defer guard.Reset()
 			}
 			dispatchTestTask(tt.args.taskInfo)
 		})
@@ -384,10 +408,10 @@ func TestPeriodicTaskSchedule_startExclusiveInvocation(t *testing.T) {
 				defer taskFactory.RemoveTaskByName(tt.fields.reusableInvocation.taskInfo.TaskId)
 			} else if tt.name == "normal" {
 				var t *Task
-				guard := monkey.PatchInstanceMethod(reflect.TypeOf(t), "Run", func(*Task) (taskerrors.ErrorCode, error) {
+				guard := gomonkey.ApplyMethod(reflect.TypeOf(t), "Run", func(*Task) (taskerrors.ErrorCode, error) {
 					return 1, errors.New("some error")
 				})
-				defer guard.Unpatch()
+				defer guard.Reset()
 			}
 			s := &PeriodicTaskSchedule{
 				timer:              tt.fields.timer,
@@ -437,8 +461,8 @@ func Test_schedulePeriodicTask(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.name == "TimerManagerNotInitialized" {
-				guard := monkey.Patch(timermanager.GetTimerManager, func() *timermanager.TimerManager { return nil })
-				defer guard.Unpatch()
+				guard := gomonkey.ApplyFunc(timermanager.GetTimerManager, func() *timermanager.TimerManager { return nil })
+				defer guard.Reset()
 			} else if tt.name == "taskExist" {
 				timermanager.InitTimerManager()
 				_periodicTaskSchedulesLock.Lock()
@@ -457,8 +481,8 @@ func Test_schedulePeriodicTask(t *testing.T) {
 			} else if tt.name == "normal" {
 				timermanager.InitTimerManager()
 				var t *timermanager.Timer
-				guard := monkey.PatchInstanceMethod(reflect.TypeOf(t), "Run", func(*timermanager.Timer) (*timermanager.Timer, error) { return nil, errors.New("some error") })
-				defer guard.Unpatch()
+				guard := gomonkey.ApplyMethod(reflect.TypeOf(t), "Run", func(*timermanager.Timer) (*timermanager.Timer, error) { return nil, errors.New("some error") })
+				defer guard.Reset()
 			}
 			if err := schedulePeriodicTask(tt.args.taskInfo); (err != nil) != tt.wantErr {
 				t.Errorf("schedulePeriodicTask() error = %v, wantErr %v", err, tt.wantErr)
@@ -471,6 +495,18 @@ func Test_cancelPeriodicTask(t *testing.T) {
 	mockMetrics()
 	defer util.NilRequest.Clear()
 	defer httpmock.DeactivateAndReset()
+
+	const mockRegion = "cn-test100"
+	guard_GetServerHost := gomonkey.ApplyFunc(util.GetServerHost, func() string {
+		return mockRegion + ".axt.aliyun.com"
+	})
+	defer guard_GetServerHost.Reset()
+	httpmock.RegisterResponder("POST",
+		util.GetStoppedOutputService(),
+		func(h *http.Request) (*http.Response, error) {
+			return httpmock.NewStringResponse(200, "success"), nil
+		})
+
 	type args struct {
 		taskInfo models.RunTaskInfo
 	}
@@ -514,8 +550,8 @@ func Test_cancelPeriodicTask(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.name == "TimerManagerNotInitialized" {
-				guard := monkey.Patch(timermanager.GetTimerManager, func() *timermanager.TimerManager { return nil })
-				defer guard.Unpatch()
+				guard := gomonkey.ApplyFunc(timermanager.GetTimerManager, func() *timermanager.TimerManager { return nil })
+				defer guard.Reset()
 			} else if tt.name == "taskNotExist" {
 				timermanager.InitTimerManager()
 			} else if tt.name == "cancleTask" {
@@ -540,8 +576,10 @@ func Test_cancelPeriodicTask(t *testing.T) {
 				})
 				defer GetTaskFactory().RemoveTaskByName(tt.args.taskInfo.TaskId)
 				var t *Task
-				guard := monkey.PatchInstanceMethod(reflect.TypeOf(t), "Cancel", func(*Task) {})
-				defer guard.Unpatch()
+				guard := gomonkey.ApplyMethod(reflect.TypeOf(t), "Cancel", func(*Task) error {
+					return nil
+				})
+				defer guard.Reset()
 			} else if tt.name == "noNeedCancelTask" {
 				timermanager.InitTimerManager()
 				_periodicTaskSchedulesLock.Lock()
@@ -559,10 +597,10 @@ func Test_cancelPeriodicTask(t *testing.T) {
 					delete(_periodicTaskSchedules, tt.args.taskInfo.TaskId)
 					_periodicTaskSchedulesLock.Unlock()
 				}()
-				guard := monkey.Patch(util.HttpPost, func(string, string, string) (string, error) { return "", nil })
-				defer guard.Unpatch()
+				guard := gomonkey.ApplyFunc(util.HttpPost, func(string, string, string) (string, error) { return "", nil })
+				defer guard.Reset()
 			}
-			if err := cancelPeriodicTask(tt.args.taskInfo); (err != nil) != tt.wantErr {
+			if err := cancelPeriodicTask(tt.args.taskInfo, false); (err != nil) != tt.wantErr {
 				t.Errorf("cancelPeriodicTask() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})

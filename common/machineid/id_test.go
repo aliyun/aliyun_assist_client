@@ -10,8 +10,8 @@ import (
 )
 
 func TestMachineId(t *testing.T) {
-	value1,err1 := getMachineID()
-	value2,err2:= getMachineID()
+	value1,err1 := machineID()
+	value2,err2:= machineID()
 	assert.Equal(t, value1, value2)
 	assert.Equal(t, err1, nil)
 	assert.Equal(t, err2, nil)

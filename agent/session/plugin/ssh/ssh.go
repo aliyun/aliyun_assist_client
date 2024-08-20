@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,19 +15,22 @@ package ssh
 
 import (
 	"fmt"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
-	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
-	"github.com/aliyun/aliyun_assist_client/agent/log"
-	client "github.com/aliyun/aliyun_assist_client/agent/session/plugin"
-	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/cli"
-	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/config"
-	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/i18n"
-	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/session"
 	"os"
 	"os/signal"
 	"strconv"
 	"strings"
 	"syscall"
+
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/cli"
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/client"
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/config"
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/log"
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/session"
+
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/i18n"
+
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
+	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
 )
 
 func NewSshCommand() *cli.Command {
@@ -101,7 +104,7 @@ func doSession(ctx *cli.Context, instance_id string, wss_url string) error {
 	return nil
 }
 func waitSignals(done chan bool) error {
-    sigChan := make(chan os.Signal, 1)
+	sigChan := make(chan os.Signal, 1)
 	signal.Notify(
 		sigChan,
 		syscall.SIGHUP,
@@ -111,7 +114,7 @@ func waitSignals(done chan bool) error {
 	case s := <-sigChan:
 		log.GetLogger().Infoln("recv signal: ", s)
 		break
-	case <- done:
+	case <-done:
 		break
 	}
 	log.GetLogger().Infoln("waitSignals return")
