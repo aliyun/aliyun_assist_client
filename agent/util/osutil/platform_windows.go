@@ -10,6 +10,7 @@ import (
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/common/executil"
+	"golang.org/x/sys/windows/registry"
 )
 
 const caption = "Caption"
@@ -24,7 +25,15 @@ func getPlatformType() (value string, err error) {
 }
 
 func getPlatformVersion() (value string, err error) {
-	return getPlatformDetails(version)
+	value, err = getPlatformDetails(version)
+	if err != nil {
+		return
+	}
+	ubr := getUpdateBuildRevision()
+	if len(ubr) > 0 {
+		value = value + "." + ubr
+	}
+	return
 }
 
 func getPlatformDetails(property string) (value string, err error) {
@@ -56,4 +65,18 @@ func getPlatformDetails(property string) (value string, err error) {
 func getArch() (formatArch string) {
 	// 云助手的windows版架构只有amd64的
 	return ARCH_64
+}
+
+func getUpdateBuildRevision() string {
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\Microsoft\Windows NT\CurrentVersion`, registry.QUERY_VALUE|registry.WOW64_64KEY)
+	if err != nil {
+		return ""
+	}
+	defer k.Close()
+
+	ubr, _, err := k.GetIntegerValue("UBR")
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprint(ubr)
 }

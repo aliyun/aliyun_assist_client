@@ -10,3 +10,7 @@ func LocalToUTF8(local string) string {
 func UTF8ToLocal(utf8String string) string {
 	return utf8String
 }
+
+func NeedTransformEncoding() bool {
+	return false
+}

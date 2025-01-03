@@ -1,13 +1,13 @@
 package util
 
 import (
-	"crypto/x509"
+	"crypto/tls"
 	"reflect"
 	"testing"
 
 	gomonkey "github.com/agiledragon/gomonkey/v2"
-	"github.com/aliyun/aliyun_assist_client/common/apiserver"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/common/apiserver"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 	"github.com/kirinlabs/HttpRequest"
 	"github.com/stretchr/testify/assert"
@@ -33,7 +33,7 @@ func TestHttpGet(t *testing.T) {
 		if isCertRight {
 			return &HttpRequest.Response{}, nil
 		} else {
-			return nil, x509.UnknownAuthorityError{}
+			return nil, &tls.CertificateVerificationError{}
 		}
 	})
 	defer guard_httpGet.Reset()
@@ -41,7 +41,7 @@ func TestHttpGet(t *testing.T) {
 		if isCertRight {
 			return &HttpRequest.Response{}, nil
 		} else {
-			return nil, x509.UnknownAuthorityError{}
+			return nil, &tls.CertificateVerificationError{}
 		}
 	})
 	defer guard_httpPost.Reset()

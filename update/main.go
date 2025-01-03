@@ -1,3 +1,5 @@
+//go:generate goversioninfo -o=resource_windows.syso
+
 package main
 
 import (
@@ -7,6 +9,7 @@ import (
 	"github.com/marcsauter/single"
 	"github.com/spf13/pflag"
 
+	"github.com/aliyun/aliyun_assist_client/agent/flagging"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/version"
 	"github.com/aliyun/aliyun_assist_client/common/envutil"
@@ -88,6 +91,8 @@ func main() {
 	}
 	defer SingleAppLock.TryUnlock()
 
+	// Init config
+	flagging.InitConfig(log.GetLogger())
 	envutil.ClearExecErrDot()
 	if options.CheckUpdate {
 		// Exclusive options check

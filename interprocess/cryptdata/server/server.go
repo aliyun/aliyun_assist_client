@@ -28,7 +28,7 @@ func RegisterAssistAgentServer(sr grpc.ServiceRegistrar) {
 
 func (s *agentServer) GenRsaKeyPair(ctx context.Context, req *pb.GenRsaKeyPairReq) (*pb.GenRsaKeyPairResp, error) {
 	resp := &pb.GenRsaKeyPairResp{
-		Status: newRespStatus(),
+		Status:  newRespStatus(),
 		KeyInfo: &pb.KeyInfo{},
 	}
 	defer func() {
@@ -117,8 +117,8 @@ func (s *agentServer) CheckKey(ctx context.Context, req *pb.CheckKeyReq) (*pb.Ch
 			return resp, nil
 		}
 		resp.KeyInfos = append(resp.KeyInfos, &pb.KeyInfo{
-			KeyPairId: keyInfo.Id,
-			PublicKey: keyInfo.PublicKey,
+			KeyPairId:        keyInfo.Id,
+			PublicKey:        keyInfo.PublicKey,
 			CreatedTimestamp: keyInfo.CreatedTimestamp,
 			ExpiredTimestamp: keyInfo.ExpiredTimestamp,
 		})
@@ -126,8 +126,8 @@ func (s *agentServer) CheckKey(ctx context.Context, req *pb.CheckKeyReq) (*pb.Ch
 		keyList := cryptdata.CheckKeyList()
 		for _, keyInfo := range keyList {
 			resp.KeyInfos = append(resp.KeyInfos, &pb.KeyInfo{
-				KeyPairId: keyInfo.Id,
-				PublicKey: keyInfo.PublicKey,
+				KeyPairId:        keyInfo.Id,
+				PublicKey:        keyInfo.PublicKey,
 				CreatedTimestamp: keyInfo.CreatedTimestamp,
 				ExpiredTimestamp: keyInfo.ExpiredTimestamp,
 			})
@@ -138,7 +138,7 @@ func (s *agentServer) CheckKey(ctx context.Context, req *pb.CheckKeyReq) (*pb.Ch
 
 func (s *agentServer) CreateSecretParam(ctx context.Context, req *pb.CreateSecretParamReq) (*pb.CreateSecretParamResp, error) {
 	resp := &pb.CreateSecretParamResp{
-		Status: newRespStatus(),
+		Status:      newRespStatus(),
 		SecretParam: &pb.SecretParamInfo{},
 	}
 	defer func() {
@@ -150,7 +150,16 @@ func (s *agentServer) CreateSecretParam(ctx context.Context, req *pb.CreateSecre
 		resp.Status.ErrMessage = err.Error()
 		return resp, nil
 	}
-	paramInfo, err := cryptdata.CreateSecretParam(req.KeyPairId, req.SecretName, int64(req.Timeout), cipherText)
+	var cipherAesKey []byte
+	if len(req.CipherAesKey) > 0 {
+		cipherAesKey, err = base64.StdEncoding.DecodeString(req.CipherAesKey)
+		if err != nil {
+			resp.Status.StatusCode = int32(cryptdata.ErrToCode(err))
+			resp.Status.ErrMessage = err.Error()
+			return resp, nil
+		}
+	}
+	paramInfo, err := cryptdata.CreateSecretParam(req.KeyPairId, req.SecretName, int64(req.Timeout), cipherText, cipherAesKey)
 	if err != nil {
 		resp.Status.StatusCode = int32(cryptdata.ErrToCode(err))
 		resp.Status.ErrMessage = err.Error()
@@ -159,5 +168,69 @@ func (s *agentServer) CreateSecretParam(ctx context.Context, req *pb.CreateSecre
 	resp.SecretParam.SecretName = paramInfo.SecretName
 	resp.SecretParam.CreatedTimestamp = paramInfo.CreatedTimestamp
 	resp.SecretParam.ExpiredTimestamp = paramInfo.ExpiredTimestamp
+	return resp, nil
+}
+
+func (s *agentServer) GetSecretParamValue(ctx context.Context, req *pb.GetSecretParamValueReq) (*pb.GetSecretParamValueResp, error) {
+	resp := &pb.GetSecretParamValueResp{
+		Status:           newRespStatus(),
+		SecretParamValue: &pb.SecretParamValue{},
+	}
+	defer func() {
+		log.GetLogger().Infof("GetSecretParamValue secretName[%s] statusCode[%d] errMsg[%s]", req.SecretName, resp.Status.StatusCode, resp.Status.ErrMessage)
+	}()
+	paramValue, err := cryptdata.GetSecretParamValue(req.SecretName)
+	if err != nil {
+		resp.Status.StatusCode = int32(cryptdata.ErrToCode(err))
+		resp.Status.ErrMessage = err.Error()
+		return resp, nil
+	}
+	resp.SecretParamValue.SecretName = paramValue.SecretName
+	resp.SecretParamValue.SecretValue = paramValue.SecretValue
+	resp.SecretParamValue.CreatedTimestamp = paramValue.CreatedTimestamp
+	resp.SecretParamValue.ExpiredTimestamp = paramValue.ExpiredTimestamp
+	return resp, nil
+}
+
+func (s *agentServer) SignData(ctx context.Context, req *pb.SignDataReq) (*pb.SignDataResp, error) {
+	resp := &pb.SignDataResp{
+		Status: newRespStatus(),
+	}
+	defer func() {
+		log.GetLogger().Infof("SignData keyPairId[%s] plainText[%s] statusCode[%d] errMsg[%s]", req.KeyPairId, req.PlainText, resp.Status.StatusCode, resp.Status.ErrMessage)
+	}()
+	signature, err := cryptdata.SignData(req.KeyPairId, req.PlainText)
+	if err != nil {
+		resp.Status.StatusCode = int32(cryptdata.ErrToCode(err))
+		resp.Status.ErrMessage = err.Error()
+		return resp, nil
+	}
+	signEncoded := base64.StdEncoding.EncodeToString(signature)
+	resp.Signature = signEncoded
+	return resp, nil
+}
+
+func (s *agentServer) VerifySignature(ctx context.Context, req *pb.VerifySignatureReq) (*pb.VerifySignatureResp, error) {
+	resp := &pb.VerifySignatureResp{
+		Status: newRespStatus(),
+	}
+	defer func() {
+		log.GetLogger().Infof("VerifySignature keyPairId[%s] plainText[%s] signature[%s] statusCode[%d] errMsg[%s]", req.KeyPairId, req.PlainText, req.PlainText, resp.Status.StatusCode, resp.Status.ErrMessage)
+	}()
+	signature, err := base64.StdEncoding.DecodeString(req.Signature)
+	if err != nil {
+		resp.Status.StatusCode = int32(cryptdata.ErrToCode(err))
+		resp.Status.ErrMessage = err.Error()
+		return resp, nil
+	}
+
+	valid, err := cryptdata.VerifySignature(req.KeyPairId, req.PlainText, signature)
+	if err != nil {
+		resp.Status.StatusCode = int32(cryptdata.ErrToCode(err))
+		resp.Status.ErrMessage = err.Error()
+		return resp, nil
+	}
+	resp.Valid = valid
+
 	return resp, nil
 }

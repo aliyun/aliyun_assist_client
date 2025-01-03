@@ -1,6 +1,11 @@
 package util
 
-import "os"
+import (
+	"os"
+
+	"github.com/aliyun/aliyun_assist_client/common/apiserver"
+	"github.com/aliyun/aliyun_assist_client/agent/log"
+)
 
 // Copyright (c) 2017-2023 Alibaba Group Holding Limited.
 
@@ -16,7 +21,7 @@ func GetConnectDetectService() string {
 	return url
 }
 
-//New version 1.0
+// New version 1.0
 func GetInvalidTaskService() string {
 	url := "https://" + GetServerHost()
 	url += "/luban/api/v1/task/invalid"
@@ -156,10 +161,16 @@ func GetRegisterService(region, networkmode string) string {
 		host := os.Getenv("ALIYUN_ASSIST_SERVER_HOST")
 		return "https://" + host + "/luban/api/instance/register"
 	}
-	domain := HYBRID_DOMAIN
+	var domain string
 	if networkmode == "vpc" {
-		domain = HYBRID_DOMAIN_VPC
+		domain = region + HYBRID_DOMAIN_VPC
+	} else {
+		domain = region + apiserver.HybridDomainFirst
+		if err := apiserver.ConnectionDetect(log.GetLogger(), domain); err != nil {
+			domain = region + apiserver.HybridDomain
+		}
 	}
-	url := "https://" + region + domain + "/luban/api/instance/register"	
+
+	url := "https://" + domain + "/luban/api/instance/register"
 	return url
 }

@@ -107,7 +107,7 @@ func getLong(byteArray []byte, offset int) (result int64, err error) {
 
 func getInteger(byteArray []byte, offset int) (result int32, err error) {
 	byteArrayLength := len(byteArray)
-	if offset > byteArrayLength-1 || offset+4 > byteArrayLength-1 || offset < 0 {
+	if offset > byteArrayLength-1 || offset+4 > byteArrayLength || offset < 0 {
 		log.GetLogger().Error("getInteger failed: Offset is invalid.")
 		return 0, errors.New("Offset is bigger than the byte array.")
 	}

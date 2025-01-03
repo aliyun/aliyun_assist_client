@@ -5,18 +5,19 @@ import (
 	"sync"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/common/metaserver"
 	"github.com/aliyun/aliyun_assist_client/common/requester"
 )
 
 const (
-	HYBRID_DOMAIN     = ".axt.aliyuncs.com"
+	// HYBRID_DOMAIN_VPC is same as apiserver.IntranetDomain
 	HYBRID_DOMAIN_VPC = ".axt.aliyun.com"
 )
 
 var (
-	g_domainId                  = ""
-	g_azoneId                   = ""
-	g_instanceId                = ""
+	g_domainId           = ""
+	g_azoneId            = ""
+	g_instanceId         = ""
 	g_domainIdInitLock   sync.Mutex
 	g_azoneIdInitLock    sync.Mutex
 	g_instanceIdInitLock sync.Mutex
@@ -28,8 +29,8 @@ func GetAzoneId() string {
 	if len(g_azoneId) > 0 {
 		return g_azoneId
 	}
-	url := "http://100.100.100.200/latest/meta-data/zone-id"
-	err, azoneId := HttpGet(url)
+
+	azoneId, err := metaserver.GetZoneId(log.GetLogger())
 	if err != nil {
 		g_azoneId = "unknown"
 		return g_azoneId
@@ -44,8 +45,7 @@ func GetInstanceId() string {
 	if len(g_instanceId) > 0 {
 		return g_instanceId
 	}
-	url := "http://100.100.100.200/latest/meta-data/instance-id"
-	err, instanceId := HttpGet(url)
+	instanceId, err := metaserver.GetInstanceId(log.GetLogger())
 	if err != nil {
 		g_instanceId = "unknown"
 		return g_instanceId

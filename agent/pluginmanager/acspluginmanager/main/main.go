@@ -1,3 +1,5 @@
+//go:generate goversioninfo -o=resource_windows.syso
+
 // Copyright (c) 2009-present, Alibaba Cloud All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +20,7 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/aliyun/aliyun_assist_client/agent/flagging"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	pm "github.com/aliyun/aliyun_assist_client/agent/pluginmanager/acspluginmanager"
 	"github.com/aliyun/aliyun_assist_client/agent/pluginmanager/acspluginmanager/flag"
@@ -31,6 +34,8 @@ import (
 func main() {
 	cli.Version = versioning.AssistVersion
 	log.InitLog("acs_plugin_manager.log", "", true)
+	// Init config
+	flagging.InitConfig(log.GetLogger())
 	// If write log failed, do nothing
 	log.GetLogger().SetErrorCallback(func(error) {})
 	cli.PlatformCompatible()

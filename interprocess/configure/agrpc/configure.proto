@@ -1,0 +1,43 @@
+// protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative configure.proto
+syntax = "proto3";
+
+package configure;
+option go_package ="github.com/aliyun/aliyun_assist_client/interprocess/configure/agrpc";
+// The service definition.
+service AssistAgent {
+    rpc GetConf (GetConfReq) returns (GetConfResp) {}
+    rpc SetConf (SetConfReq) returns (SetConfResp) {}
+    rpc ReloadConf (ReloadConfReq) returns (ReloadConfResp) {}
+}
+
+message RespStatus {
+    int32 statusCode = 1;
+    string errMessage = 2;
+}
+
+message ConfItem {
+    string name = 1;
+    string value = 2;
+}
+
+message GetConfReq {
+    bool runtime = 1;
+}
+message GetConfResp {
+    RespStatus status = 1;
+    repeated ConfItem items = 2;
+}
+
+message SetConfReq {
+    bool runtime = 1;
+    bool crossVersion = 2;
+    repeated ConfItem items = 3;
+}
+message SetConfResp {
+    RespStatus status = 1;
+}
+
+message ReloadConfReq {}
+message ReloadConfResp{
+    RespStatus status = 1;
+}

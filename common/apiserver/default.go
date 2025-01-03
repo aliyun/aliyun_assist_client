@@ -7,30 +7,39 @@ import (
 var (
 	_envProvider = &EnvironmentVariableProvider{}
 	_externalExecutableProvider = &ExternalExecutableProvider{}
-	_hybridModeProvider = &HybridModeProvider{}
 	_generalProvider = &GeneralProvider{}
+	_hybridModeProvider = &HybridModeProvider{}
+	_inherentCAFileProvider = &InherentCAFileProvider{}
+	cachedCAFileProvider = &CachedCAFileProvider{}
+	metaserverProvider = &MetaserverProvider{}
+	regionidFileProvider = &RegionIdFileProvider{}
 
 	defaultRootCAProviders = []requester.CACertificateProvider{
 		_envProvider,
 		_externalExecutableProvider,
-		_generalProvider,
+		cachedCAFileProvider,
+		_inherentCAFileProvider,
+		metaserverProvider,
 	}
 
 	defaultAPIServerProviders = []requester.APIServerProvider{
+		_envProvider,
 		_externalExecutableProvider,
 		_hybridModeProvider,
+		metaserverProvider,
 		_generalProvider,
 	}
 
-	defaultRegionIdProviders = []requester.RegionIdProvider{
+	fallbackRegionIdProviders = []requester.RegionIdProvider{
 		_externalExecutableProvider,
 		_hybridModeProvider,
-		_generalProvider,
+		metaserverProvider,
+		regionidFileProvider,
 	}
 )
 
 func init() {
 	requester.SetRootCAProviders(defaultRootCAProviders)
 	requester.SetAPIServerProviders(defaultAPIServerProviders)
-	requester.SetRegionIdProviders(defaultRegionIdProviders)
+	requester.SetRegionIdProviders(fallbackRegionIdProviders)
 }

@@ -1,0 +1,9 @@
+{
+    "publisher": "aliyun",
+    "name": "config_ecs_instance_connect",
+    "version": "1.9",
+    "runPath": "config_ecs_instance_connect.sh",
+    "timeout": "60",
+    "osType": "linux",
+    "arch": "{{ ARCH }}"
+}

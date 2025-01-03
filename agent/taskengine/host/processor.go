@@ -6,13 +6,16 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"time"
 
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 	"github.com/hectane/go-acl"
 
+	"github.com/aliyun/aliyun_assist_client/agent/flagging"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
+	"github.com/aliyun/aliyun_assist_client/agent/pluginmanager/acspluginmanager"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/models"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/scriptmanager"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/taskerrors"
@@ -20,23 +23,27 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/util/powerutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/process"
 	"github.com/aliyun/aliyun_assist_client/common/executil"
+	"github.com/aliyun/aliyun_assist_client/common/langutil"
 	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 )
 
 type HostProcessor struct {
 	TaskId string
 	// Fundamental properties of command process
-	CommandType    string
-	CommandContent string
-	InvokeVersion  int
-	Repeat         models.RunTaskRepeatType
-	Timeout        int
+	CommandType     string
+	CommandContent  string
+	InvokeVersion   int
+	Repeat          models.RunTaskRepeatType
+	Timeout         int
 	TerminationMode string
 	// Additional attributes for command process in host
 	CommandName         string
 	WorkingDirectory    string
 	Username            string
 	WindowsUserPassword string
+
+	// Launcher params
+	Launcher string
 
 	// Detected properties for command process in host
 	envHomeDir     string
@@ -53,7 +60,17 @@ type HostProcessor struct {
 	// Generated variables from invoked command process
 	exitCode     int
 	resultStatus int
+
+	canceled bool
 }
+
+var (
+	launcherParamRe    = regexp.MustCompile(`'[^']*'|"[^"]*"|{{.*}}|\S+`)
+	scriptFileRe       = regexp.MustCompile(`(?i){{\s*ACS\s*::\s*ScriptFileName\s*(?:\|\s*ext\s*\(([\w-.]+)\)\s*)?\s*}}`)
+	environmentParamRe = regexp.MustCompile(`\{\{(.+?)\}\}`)
+	// scriptFileRe       = regexp.MustCompile(`{{\s*([\w-.]+)\s*::\s*([\w-.]+)\s*(?:\|\s*([\w-.]+)\s*\(\s*([\w-.]+)\s*\)\s*)*}}`)
+	pluginRe = regexp.MustCompile(`@(\S+)`)
+)
 
 func (p *HostProcessor) PreCheck() (string, error) {
 	taskLogger := log.GetLogger().WithFields(logrus.Fields{
@@ -90,6 +107,9 @@ func (p *HostProcessor) Prepare(commandContent string) error {
 		"TaskId": p.TaskId,
 		"Phase":  "HostProcessor-Preparing",
 	})
+	if langutil.NeedTransformEncoding() {
+		commandContent = langutil.UTF8ToLocal(commandContent)
+	}
 	p.CommandContent = commandContent
 
 	var processCmd *process.ProcessCmd
@@ -137,7 +157,27 @@ func (p *HostProcessor) Prepare(commandContent string) error {
 	default:
 		return taskerrors.NewUnknownCommandTypeError()
 	}
+	var launcherParams []string
+	// If launcher exists, scriptFileExtension is different
+	environmentParamExist := false
+	if p.Launcher != "" {
+		// If exists {{ACS::ScriptFileName}}, while without Ext
+		extensionMatches := scriptFileRe.FindStringSubmatch(p.Launcher)
+		if len(extensionMatches) == 2 {
+			scriptFileExtension = extensionMatches[1]
+		}
+		fileNameMatches := scriptFileRe.FindAllString(p.Launcher, -1)
 
+		environmentMatches := environmentParamRe.FindAllString(p.Launcher, -1)
+		// Launcher has other environment parameter and it's not {{ACS::ScriptFileName}} or {{ACS::ScriptFileName|Ext}}
+		if len(fileNameMatches) == 1 {
+			environmentParamExist = true
+		}
+		if len(fileNameMatches) > 1 || len(environmentMatches) != len(fileNameMatches) {
+			taskLogger.Errorf("Invalid match when resolving environment parameter in launcher %s", p.Launcher)
+			return taskerrors.NewInvalidEnvironmentParameterError(fmt.Sprintf(`Invalid match when resolving environment parameter in launcher %s`, p.Launcher))
+		}
+	}
 	if scriptDir == "" {
 		var err error
 		scriptDir, err = pathutil.GetScriptPath()
@@ -163,7 +203,13 @@ func (p *HostProcessor) Prepare(commandContent string) error {
 		}
 		p.scriptFilePath = filepath.Join(scriptDir, fmt.Sprintf("%s%s%s%s", commandName, p.TaskId, iVersion, scriptFileExtension))
 
-		if err := scriptmanager.SaveScriptFile(p.scriptFilePath, p.CommandContent); err != nil {
+		// In english environment PowerShell scripts need to be saved in utf8-bom format, 
+		// otherwise no-ASCII characters will not be recognized
+		commandContent = p.CommandContent
+		if p.CommandType == "RunPowerShellScript" && !langutil.NeedTransformEncoding() {
+			commandContent = string(append([]byte{0xEF, 0xBB, 0xBF}, []byte(commandContent)...))
+		}
+		if err := scriptmanager.SaveScriptFile(p.scriptFilePath, commandContent); err != nil {
 			// NOTE: Only non-repeated tasks need to check whether command script
 			// file exists.
 			taskLogger.Error("Save script file error: ", err)
@@ -184,7 +230,22 @@ func (p *HostProcessor) Prepare(commandContent string) error {
 			}
 		}
 	}
-
+	if p.Launcher != "" {
+		if !useScriptFile {
+			metrics.GetTaskFailedEvent(
+				"taskid", p.TaskId,
+				"errormsg", fmt.Sprintf("Can not use script file, so Launcher script cannot run"),
+				"reason", whyNoScriptFile.Error(),
+			).ReportEvent()
+			return whyNoScriptFile
+		}
+		launcher := scriptFileRe.ReplaceAllString(p.Launcher, p.scriptFilePath)
+		launcherParams = launcherParamRe.FindAllString(launcher, -1)
+		if !environmentParamExist {
+			launcherParams = append(launcherParams, p.scriptFilePath)
+		}
+	}
+	taskLogger.Infof("Launcher params: %v", launcherParams)
 	if useScriptFile {
 		if p.CommandType == "RunShellScript" {
 			if err := acl.Chmod(p.scriptFilePath, 0755); err != nil {
@@ -238,7 +299,79 @@ func (p *HostProcessor) Prepare(commandContent string) error {
 		return whyNoScriptFile
 	}
 
+	// For Launcher: change invokeCommand or invokeCommandArgs
+	if p.Launcher != "" && len(launcherParams) > 0 {
+		var cmdPath string
+		// Check if it's plugin or local launcher
+		if launcherParams[0][0] == '@' && len(launcherParams[0]) > 1 && launcherParams[0][1] != '@' {
+			//It's a plugin and install it
+			pluginName := matchPlugin(p.Launcher)
+
+			pluginManager, err := acspluginmanager.NewPluginManager(false)
+			if err != nil {
+				return taskerrors.NewPluginLoadFailedError(fmt.Errorf("Broken plugin management: %w", err))
+			}
+
+			pluginInfo, err := acspluginmanager.QueryPluginFromLocal(pluginName, "")
+			if pluginInfo == nil || err != nil {
+				err1 := err
+				pluginInfo, err = acspluginmanager.QueryPluginFromOnline(pluginName, "", "")
+				// Online query nil
+				if pluginInfo == nil || err != nil {
+					taskLogger.Error("Plugin not found online and local: ", launcherParams[0])
+					return taskerrors.NewPluginLoadFailedError(fmt.Errorf("query from local failed,%s; query from online failed,%s", err1, err))
+				}
+				err = pluginManager.InstallPluginFromOnline(pluginInfo, 20)
+				if err != nil {
+					taskLogger.Error("Plugin install error: ", err)
+					return taskerrors.NewPluginLoadFailedError(fmt.Errorf("Plugin install error: %s", err))
+				}
+			}
+			cmdPath = pluginManager.GetPluginCommandPath(pluginInfo)
+			if _, err := executil.LookPath(cmdPath); err != nil {
+				taskLogger.Error("LookPath error: ", err)
+				return taskerrors.NewPluginLoadFailedError(err)
+			}
+		} else {
+			if len(launcherParams[0]) > 1 && launcherParams[0][0] == '@' && launcherParams[0][1] == '@' {
+				// local launcher start with @
+				cmdPath = launcherParams[0][1:]
+			} else {
+				cmdPath = launcherParams[0]
+			}
+			if _, err := executil.LookPath(cmdPath); err != nil {
+				taskLogger.Error("LookPath error: ", err)
+				return taskerrors.NewLauncherNotFoundError(err)
+			}
+		}
+
+		if useScriptFile {
+			p.invokeCommand = cmdPath
+			p.invokeCommandArgs = launcherParams[1:]
+			taskLogger.Infof("InvokeCommand: %s ; InvokeCommandArgs: %s", p.invokeCommand, p.invokeCommandArgs)
+		} else {
+			metrics.GetTaskFailedEvent(
+				"taskid", p.TaskId,
+				"errormsg", fmt.Sprintf("Can not use script file, so Launcher script cannot run"),
+				"reason", whyNoScriptFile.Error(),
+			).ReportEvent()
+			return whyNoScriptFile
+
+		}
+
+	}
 	return nil
+}
+
+func matchPlugin(launcher string) string {
+
+	match := pluginRe.FindStringSubmatch(launcher)
+	if len(match) > 1 {
+		result := match[1]
+		return result
+	} else {
+		return ""
+	}
 }
 
 func (p *HostProcessor) SyncRun(
@@ -257,6 +390,7 @@ func (p *HostProcessor) SyncRun(
 	}
 
 	var err error
+
 	p.exitCode, p.resultStatus, err = p.processCmd.SyncRun(p.realWorkingDir, p.invokeCommand, p.invokeCommandArgs, stdoutWriter, stderrWriter, stdinReader, nil, p.Timeout)
 	if p.resultStatus == process.Fail && err != nil {
 		err = taskerrors.NewExecuteScriptError(err)
@@ -266,6 +400,18 @@ func (p *HostProcessor) SyncRun(
 }
 
 func (p *HostProcessor) Cancel() error {
+	if p.canceled {
+		return nil
+	}
+	p.canceled = true
+	// For periodic task, script is deleted when task canceled
+	if p.isPeriodic() && !flagging.GetTaskKeepScriptFile() {
+		os.Remove(p.scriptFilePath)
+	}
+	// For periodic task, p.Cancel() may be called before task.Run().
+	if p.processCmd == nil {
+		return nil
+	}
 	if err := p.processCmd.Cancel(); err != nil {
 		return err
 	}
@@ -273,12 +419,12 @@ func (p *HostProcessor) Cancel() error {
 }
 
 func (p *HostProcessor) Cleanup(removeScriptFile bool) error {
-	if removeScriptFile {
+	// For no-periodic task, script is deleted when task finished
+	if !p.isPeriodic() && removeScriptFile {
 		if err := os.Remove(p.scriptFilePath); err != nil {
 			return err
 		}
 	}
-
 	return nil
 }
 
@@ -304,4 +450,8 @@ func (p *HostProcessor) SideEffect() error {
 
 func (p *HostProcessor) ExtraLubanParams() string {
 	return ""
+}
+
+func (p *HostProcessor) isPeriodic() bool {
+	return (p.Repeat == models.RunTaskCron || p.Repeat == models.RunTaskRate || p.Repeat == models.RunTaskAt)
 }

@@ -44,6 +44,9 @@ type CancelFlag interface {
 	// In the go routine, once Wait returns, if the return value indicates that a cancel
 	// request has been received, the go routine wakes up the running job.
 	Wait() (state State)
+
+	// C returns a channel which will be closed after calling Set()
+	C() (chan struct{})
 }
 
 // ChanneledCancelFlag is a default implementation of the task.CancelFlag interface.
@@ -85,6 +88,10 @@ func (t *ChanneledCancelFlag) State() State {
 func (t *ChanneledCancelFlag) Wait() (state State) {
 	<-t.ch
 	return t.State()
+}
+
+func (t *ChanneledCancelFlag) C() chan struct{} {
+	return t.ch
 }
 
 // Set sets the state of this flag and wakes up waiting callers.

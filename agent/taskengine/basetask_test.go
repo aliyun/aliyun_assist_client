@@ -9,9 +9,11 @@ import (
 	"time"
 
 	"github.com/agiledragon/gomonkey/v2"
+	"github.com/aliyun/aliyun_assist_client/agent/flagging"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/models"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
 )
@@ -41,11 +43,12 @@ func TestRunTask(t *testing.T) {
 	defer util.NilRequest.Clear()
 	addMockServer()
 	defer removeMockServer()
-	guard := gomonkey.ApplyFunc(util.GetServerHost, func() string{
+	guard := gomonkey.ApplyFunc(util.GetServerHost, func() string {
 		return "cn-test.axt.aliyun.com"
 	})
 	defer guard.Reset()
 
+	flagging.InitConfig(logrus.New())
 	var commandType string
 	var content string
 	var workingDir string
@@ -84,6 +87,214 @@ func TestRunTask(t *testing.T) {
 		assert.Contains(t, output, "tmp")
 	}*/
 
-	assert.Equal(t, nil , err)
-	assert.Equal(t, 0 , int(errcode))
+	assert.Equal(t, nil, err)
+	assert.Equal(t, 0, int(errcode))
+}
+
+func TestLocalLauncher(t *testing.T) {
+	util.NilRequest.Set()
+	defer util.NilRequest.Clear()
+	addMockServer()
+	defer removeMockServer()
+	guard := gomonkey.ApplyFunc(util.GetServerHost, func() string {
+		return "cn-test.axt.aliyun.com"
+	})
+	defer guard.Reset()
+
+	var commandType string
+	var content string
+	var workingDir string
+	rand.Seed(time.Now().UnixNano())
+	rand_num := rand.Intn(10000000)
+	rand_str := strconv.Itoa(rand_num)
+	if osutil.GetOsType() == osutil.OSLinux || osutil.GetOsType() == osutil.OSFreebsd {
+		commandType = "RunShellScript"
+	} else if runtime.GOOS == "windows" {
+		commandType = "RunBatScript"
+	}
+	t.Run("NormalLocalLauncher", func(t *testing.T) {
+		content = base64.StdEncoding.EncodeToString([]byte("print(1)"))
+		info := models.RunTaskInfo{
+			InstanceId:  "i-test",
+			CommandType: commandType,
+			TaskId:      "t-test" + rand_str,
+			CommandId:   "c-test",
+			TimeOut:     "120",
+			WorkingDir:  workingDir,
+			Content:     content,
+			Launcher:    "python3",
+		}
+		task, _ := NewTask(info, nil, nil, nil)
+		errcode, err := task.Run()
+		assert.Equal(t, nil, err)
+		assert.Equal(t, 0, int(errcode))
+	})
+	t.Run("LocalLauncherNotExists", func(t *testing.T) {
+		content = base64.StdEncoding.EncodeToString([]byte("print(1)"))
+		info := models.RunTaskInfo{
+			InstanceId:  "i-test",
+			CommandType: commandType,
+			TaskId:      "t-test" + rand_str,
+			CommandId:   "c-test",
+			TimeOut:     "120",
+			WorkingDir:  workingDir,
+			Content:     content,
+			Launcher:    "pyxx {{ACS::ScriptFileName}}",
+		}
+		task, _ := NewTask(info, nil, nil, nil)
+		errcode, _ := task.Run()
+		assert.Equal(t, -23, int(errcode))
+	})
+	t.Run("LocalLauncherWithWrongParamCase1", func(t *testing.T) {
+		content = base64.StdEncoding.EncodeToString([]byte("print(1)"))
+		info := models.RunTaskInfo{
+			InstanceId:  "i-test",
+			CommandType: commandType,
+			TaskId:      "t-test" + rand_str,
+			CommandId:   "c-test",
+			TimeOut:     "120",
+			WorkingDir:  workingDir,
+			Content:     content,
+			Launcher:    "python3 {{ADB::ScriptFileName}}", // Wrong prefix
+		}
+		task, _ := NewTask(info, nil, nil, nil)
+		errcode, _ := task.Run()
+		assert.Equal(t, -12, int(errcode))
+	})
+	t.Run("LocalLauncherWithWrongParamCase2", func(t *testing.T) {
+		content = base64.StdEncoding.EncodeToString([]byte("print(1)"))
+		info := models.RunTaskInfo{
+			InstanceId:  "i-test",
+			CommandType: commandType,
+			TaskId:      "t-test" + rand_str,
+			CommandId:   "c-test",
+			TimeOut:     "120",
+			WorkingDir:  workingDir,
+			Content:     content,
+			Launcher:    "python3 {{ACS::InstanceID}}", // Do not support other param
+		}
+		task, _ := NewTask(info, nil, nil, nil)
+		errcode, _ := task.Run()
+		assert.Equal(t, -12, int(errcode))
+	})
+	t.Run("LocalLauncherWithWrongParamCase3", func(t *testing.T) {
+		content = base64.StdEncoding.EncodeToString([]byte("print(1)"))
+		info := models.RunTaskInfo{
+			InstanceId:  "i-test",
+			CommandType: commandType,
+			TaskId:      "t-test" + rand_str,
+			CommandId:   "c-test",
+			TimeOut:     "120",
+			WorkingDir:  workingDir,
+			Content:     content,
+			Launcher:    "python3 {{ACSSCRIPT}}", // Ok whatever
+		}
+		task, _ := NewTask(info, nil, nil, nil)
+		errcode, _ := task.Run()
+		assert.Equal(t, -12, int(errcode))
+	})
+	t.Run("LocalLauncherWithWrongParamCase4", func(t *testing.T) {
+		content = base64.StdEncoding.EncodeToString([]byte("print(1)"))
+		info := models.RunTaskInfo{
+			InstanceId:  "i-test",
+			CommandType: commandType,
+			TaskId:      "t-test" + rand_str,
+			CommandId:   "c-test",
+			TimeOut:     "120",
+			WorkingDir:  workingDir,
+			Content:     content,
+			Launcher:    "python3 {{ACS::ScriptFileName|Exx(.py)}}", // Wrong extension format
+		}
+		task, _ := NewTask(info, nil, nil, nil)
+		errcode, _ := task.Run()
+		assert.Equal(t, -12, int(errcode))
+	})
+	t.Run("LocalLauncherWithWrongParamCase5", func(t *testing.T) {
+		content = base64.StdEncoding.EncodeToString([]byte("print(1)"))
+		info := models.RunTaskInfo{
+			InstanceId:  "i-test",
+			CommandType: commandType,
+			TaskId:      "t-test" + rand_str,
+			CommandId:   "c-test",
+			TimeOut:     "120",
+			WorkingDir:  workingDir,
+			Content:     content,
+			Launcher:    "python3 {{ACS::ScriptFileName|Exx()}}", // Empty extension
+		}
+		task, _ := NewTask(info, nil, nil, nil)
+		errcode, _ := task.Run()
+		assert.Equal(t, -12, int(errcode))
+	})
+	t.Run("ErrorContent", func(t *testing.T) {
+		content = base64.StdEncoding.EncodeToString([]byte("print(1"))
+		info := models.RunTaskInfo{
+			InstanceId:  "i-test",
+			CommandType: commandType,
+			TaskId:      "t-test" + rand_str,
+			CommandId:   "c-test",
+			TimeOut:     "120",
+			WorkingDir:  workingDir,
+			Content:     content,
+			Launcher:    "python3 {{ACS::ScriptFileName}}",
+		}
+		task, _ := NewTask(info, nil, nil, nil)
+		errcode, err := task.Run()
+		assert.Equal(t, nil, err)
+		assert.Equal(t, 0, int(errcode))
+	})
+}
+
+func TestLauncher(t *testing.T) {
+	util.NilRequest.Set()
+	defer util.NilRequest.Clear()
+	addMockServer()
+	defer removeMockServer()
+	guard := gomonkey.ApplyFunc(util.GetServerHost, func() string {
+		return "cn-test.axt.aliyun.com"
+	})
+	defer guard.Reset()
+
+	var commandType string
+	var content string
+	var workingDir string
+	if osutil.GetOsType() == osutil.OSLinux || osutil.GetOsType() == osutil.OSFreebsd {
+		commandType = "RunShellScript"
+		// content = base64.StdEncoding.EncodeToString([]byte("filename='/home/fatdragonsxh/aliyun_assist_client/agent/taskengine/new_empty_file.txt'\nopen(filename,'w').close()\nprint(f\"'{filename}' created.\")"))
+		content = base64.StdEncoding.EncodeToString([]byte("print(1)"))
+		workingDir = "/tmp"
+	} else if runtime.GOOS == "windows" {
+		commandType = "RunBatScript"
+		content = base64.StdEncoding.EncodeToString([]byte("chdir"))
+		workingDir = "C:\\Users"
+	}
+
+	rand.Seed(time.Now().UnixNano())
+	rand_num := rand.Intn(10000000)
+	rand_str := strconv.Itoa(rand_num)
+
+	info := models.RunTaskInfo{
+		InstanceId:  "i-test",
+		CommandType: commandType,
+		TaskId:      "t-test" + rand_str,
+		CommandId:   "c-test",
+		TimeOut:     "120",
+		WorkingDir:  workingDir,
+		Content:     content,
+		Launcher:    "python3 {{ABS::xxx}}",
+	}
+	task, _ := NewTask(info, nil, nil, nil)
+
+	errcode, err := task.Run()
+
+	/*if runtime.GOOS == "windows" {
+		assert.Contains(t, output, "Users")
+	}
+
+	if runtime.GOOS == "linux" {
+		assert.Contains(t, output, "tmp")
+	}*/
+
+	assert.Equal(t, nil, err)
+	assert.Equal(t, 0, int(errcode))
+
 }

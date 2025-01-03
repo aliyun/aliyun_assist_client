@@ -49,6 +49,8 @@ func ParseOption(input string) KickHandle {
 		handle = NewFileHandle(arrays[2],arrays[3:])
 	} else if arrays[1] == "status" {
 		handle = NewStatusHandle(arrays[2], arrays[3:])
+	} else if arrays[1] == "verify" {
+		handle = NewVerifyHandle(arrays[2])
 	}
 
 	return handle

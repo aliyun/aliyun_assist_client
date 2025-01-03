@@ -11,6 +11,9 @@ service AssistAgent {
     rpc DecryptText (DecryptReq) returns (DecryptResp) {}
     rpc CheckKey (CheckKeyReq) returns (CheckKeyResp) {}
     rpc CreateSecretParam (CreateSecretParamReq) returns (CreateSecretParamResp) {}
+    rpc GetSecretParamValue (GetSecretParamValueReq) returns (GetSecretParamValueResp) {}
+    rpc SignData (SignDataReq) returns (SignDataResp) {}
+    rpc VerifySignature (VerifySignatureReq) returns (VerifySignatureResp) {}
 }
 
 message RespStatus {
@@ -84,8 +87,46 @@ message CreateSecretParamReq {
     string cipherText = 2;
     string secretName = 3;
     int32 timeout = 4;
+    string cipherAesKey = 5;
 }
 message CreateSecretParamResp {
     RespStatus status = 1;
     SecretParamInfo secretParam = 2;
+}
+
+message SecretParamValue {
+    string secretName = 1;
+    string secretValue = 2;
+    int64 createdTimestamp = 3;
+    int64 expiredTimestamp = 4;
+}
+
+// GetSecretValue
+message GetSecretParamValueReq {
+    string secretName = 1;
+}
+message GetSecretParamValueResp {
+    RespStatus status = 1;
+    SecretParamValue secretParamValue = 2;
+}
+
+// SignData
+message SignDataReq {
+    string keyPairId = 1;
+    string plainText = 2;
+}
+message SignDataResp {
+    RespStatus status = 1;
+    string signature = 2;
+}
+
+// VerifySignature
+message VerifySignatureReq {
+    string keyPairId = 1;
+    string plainText = 2;
+    string signature = 3;
+}
+message VerifySignatureResp {
+    RespStatus status = 1;
+    bool valid = 2;
 }

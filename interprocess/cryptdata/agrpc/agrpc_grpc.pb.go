@@ -28,6 +28,9 @@ type AssistAgentClient interface {
 	DecryptText(ctx context.Context, in *DecryptReq, opts ...grpc.CallOption) (*DecryptResp, error)
 	CheckKey(ctx context.Context, in *CheckKeyReq, opts ...grpc.CallOption) (*CheckKeyResp, error)
 	CreateSecretParam(ctx context.Context, in *CreateSecretParamReq, opts ...grpc.CallOption) (*CreateSecretParamResp, error)
+	GetSecretParamValue(ctx context.Context, in *GetSecretParamValueReq, opts ...grpc.CallOption) (*GetSecretParamValueResp, error)
+	SignData(ctx context.Context, in *SignDataReq, opts ...grpc.CallOption) (*SignDataResp, error)
+	VerifySignature(ctx context.Context, in *VerifySignatureReq, opts ...grpc.CallOption) (*VerifySignatureResp, error)
 }
 
 type assistAgentClient struct {
@@ -92,6 +95,33 @@ func (c *assistAgentClient) CreateSecretParam(ctx context.Context, in *CreateSec
 	return out, nil
 }
 
+func (c *assistAgentClient) GetSecretParamValue(ctx context.Context, in *GetSecretParamValueReq, opts ...grpc.CallOption) (*GetSecretParamValueResp, error) {
+	out := new(GetSecretParamValueResp)
+	err := c.cc.Invoke(ctx, "/protos.AssistAgent/GetSecretParamValue", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *assistAgentClient) SignData(ctx context.Context, in *SignDataReq, opts ...grpc.CallOption) (*SignDataResp, error) {
+	out := new(SignDataResp)
+	err := c.cc.Invoke(ctx, "/protos.AssistAgent/SignData", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *assistAgentClient) VerifySignature(ctx context.Context, in *VerifySignatureReq, opts ...grpc.CallOption) (*VerifySignatureResp, error) {
+	out := new(VerifySignatureResp)
+	err := c.cc.Invoke(ctx, "/protos.AssistAgent/VerifySignature", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AssistAgentServer is the server API for AssistAgent service.
 // All implementations must embed UnimplementedAssistAgentServer
 // for forward compatibility
@@ -102,6 +132,9 @@ type AssistAgentServer interface {
 	DecryptText(context.Context, *DecryptReq) (*DecryptResp, error)
 	CheckKey(context.Context, *CheckKeyReq) (*CheckKeyResp, error)
 	CreateSecretParam(context.Context, *CreateSecretParamReq) (*CreateSecretParamResp, error)
+	GetSecretParamValue(context.Context, *GetSecretParamValueReq) (*GetSecretParamValueResp, error)
+	SignData(context.Context, *SignDataReq) (*SignDataResp, error)
+	VerifySignature(context.Context, *VerifySignatureReq) (*VerifySignatureResp, error)
 	mustEmbedUnimplementedAssistAgentServer()
 }
 
@@ -126,6 +159,15 @@ func (UnimplementedAssistAgentServer) CheckKey(context.Context, *CheckKeyReq) (*
 }
 func (UnimplementedAssistAgentServer) CreateSecretParam(context.Context, *CreateSecretParamReq) (*CreateSecretParamResp, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateSecretParam not implemented")
+}
+func (UnimplementedAssistAgentServer) GetSecretParamValue(context.Context, *GetSecretParamValueReq) (*GetSecretParamValueResp, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetSecretParamValue not implemented")
+}
+func (UnimplementedAssistAgentServer) SignData(context.Context, *SignDataReq) (*SignDataResp, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SignData not implemented")
+}
+func (UnimplementedAssistAgentServer) VerifySignature(context.Context, *VerifySignatureReq) (*VerifySignatureResp, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method VerifySignature not implemented")
 }
 func (UnimplementedAssistAgentServer) mustEmbedUnimplementedAssistAgentServer() {}
 
@@ -248,6 +290,60 @@ func _AssistAgent_CreateSecretParam_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AssistAgent_GetSecretParamValue_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSecretParamValueReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AssistAgentServer).GetSecretParamValue(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/protos.AssistAgent/GetSecretParamValue",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AssistAgentServer).GetSecretParamValue(ctx, req.(*GetSecretParamValueReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AssistAgent_SignData_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SignDataReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AssistAgentServer).SignData(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/protos.AssistAgent/SignData",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AssistAgentServer).SignData(ctx, req.(*SignDataReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AssistAgent_VerifySignature_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(VerifySignatureReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AssistAgentServer).VerifySignature(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/protos.AssistAgent/VerifySignature",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AssistAgentServer).VerifySignature(ctx, req.(*VerifySignatureReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AssistAgent_ServiceDesc is the grpc.ServiceDesc for AssistAgent service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -278,6 +374,18 @@ var AssistAgent_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CreateSecretParam",
 			Handler:    _AssistAgent_CreateSecretParam_Handler,
+		},
+		{
+			MethodName: "GetSecretParamValue",
+			Handler:    _AssistAgent_GetSecretParamValue_Handler,
+		},
+		{
+			MethodName: "SignData",
+			Handler:    _AssistAgent_SignData_Handler,
+		},
+		{
+			MethodName: "VerifySignature",
+			Handler:    _AssistAgent_VerifySignature_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

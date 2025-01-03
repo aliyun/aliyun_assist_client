@@ -229,11 +229,13 @@ func (message *Message) Serialize() (result []byte, err error) {
 		return make([]byte, 1), err
 	}
 
-	startPosition = AgentMessage_PayloadOffset
-	endPosition = AgentMessage_PayloadOffset + int(payloadLength) - 1
-	if err = putBytes(result, startPosition, endPosition, message.Payload); err != nil {
-		log.GetLogger().Errorf("Could not serialize Payload with error: %v", err)
-		return make([]byte, 1), err
+	if payloadLength > 0 {
+		startPosition = AgentMessage_PayloadOffset
+		endPosition = AgentMessage_PayloadOffset + int(payloadLength) - 1
+		if err = putBytes(result, startPosition, endPosition, message.Payload); err != nil {
+			log.GetLogger().Errorf("Could not serialize Payload with error: %v", err)
+			return make([]byte, 1), err
+		}
 	}
 
 	return result, nil
@@ -289,7 +291,7 @@ func putULong(byteArray []byte, offset int, value uint64) (err error) {
 
 func putInteger(byteArray []byte, offset int, value int32) (err error) {
 	byteArrayLength := len(byteArray)
-	if offset > byteArrayLength-1 || offset+4 > byteArrayLength-1 || offset < 0 {
+	if offset > byteArrayLength-1 || offset+4 > byteArrayLength || offset < 0 {
 		log.GetLogger().Error("putInteger failed: Offset is invalid.")
 		return errors.New("Offset is outside the byte array.")
 	}

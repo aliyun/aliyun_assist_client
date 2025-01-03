@@ -14,6 +14,10 @@ type APIServerProvider interface {
 	ExtraHTTPHeaders(logger logrus.FieldLogger) (map[string]string, error)
 }
 
+type ExtraHTTPHeadersProvider interface {
+	ExtraHTTPHeaders(logger logrus.FieldLogger) (map[string]string, error)
+}
+
 type CACertificateProvider interface {
 	Name() string
 

@@ -24,7 +24,8 @@ var (
 
 func init() {
 	statusRoute = map[string]handleFunc{
-		"network": requestNetworkStatus,
+		"network":        requestNetworkStatus,
+		"collectNetConf": requestCollectNetConf,
 	}
 }
 
@@ -58,6 +59,7 @@ func requestNetworkStatus(params []string) error {
 	// REMEMBER: All actions in all kick_vm option handlers are not able to
 	// return results simultaneously.
 
+	logger.Info("params: ", params)
 	flags := pflag.NewFlagSet("network", pflag.ContinueOnError)
 	needToRefresh := flags.Bool("refresh", false, "Request to refresh the network diagnostic result")
 	isVPCNetwork := flags.Bool("vpc", false, "Declare the instance running in VPC network")
@@ -114,4 +116,33 @@ func requestNetworkStatus(params []string) error {
 	// safe.
 	checknet.RequestNetcheck(checknet.NetcheckRequestForceOnce)
 	return nil
+}
+
+func requestCollectNetConf(params []string) error {
+	logger := log.GetLogger().WithFields(logrus.Fields{
+		"module": "requestCollectNetConf",
+	})
+	// REMEMBER: All actions in all kick_vm option handlers are not able to
+	// return results simultaneously.
+
+	flags := pflag.NewFlagSet("collectNetConf", pflag.ContinueOnError)
+	taskId := flags.String("taskId", "", "Set the taskId for the task of probing configurations of network")
+	// Disable unexpected usage printing when failing to parse kick_vm parameters
+	flags.Usage = func() {}
+
+	if err := flags.Parse(params); err != nil {
+		logger.WithFields(logrus.Fields{
+			"params": params,
+		}).WithError(err).Errorln("Failed to parse parameters of `kick_vm status collectNetConf` action")
+		return ErrStatusNetworkInvalidParameters
+	}
+
+	if len(*taskId) == 0 {
+		logger.Error("`taskId` missing")
+		return errors.New("param `taskId` missing")
+	}
+	exitCode, err := checknet.CollectNetworkConfiguration(logger, *taskId)
+	logger.Infof("exit code %d, err: %v", exitCode, err)
+	return nil
+
 }

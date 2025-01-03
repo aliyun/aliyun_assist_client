@@ -7,6 +7,7 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/inventory/model"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
+	"github.com/aliyun/aliyun_assist_client/agent/util/paramstore"
 	"github.com/aliyun/aliyun_assist_client/agent/version"
 )
 
@@ -31,6 +32,6 @@ func GetInstanceInfo() (info *model.InstanceInformation, err error) {
 	if ip != nil {
 		i.IpAddress = ip.String()
 	}
-	i.RamRole, _ = util.GetRoleNameTtl(time.Duration(5) * time.Hour)
+	i.RamRole, _ = paramstore.GetRoleNameTtl(time.Duration(5) * time.Hour)
 	return &i, nil
 }

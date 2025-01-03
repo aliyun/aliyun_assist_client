@@ -31,7 +31,7 @@ const (
 )
 
 func newClient() (*agentClient, error) {
-	conn, err := messagebus_client.ConnectWithTimeout(log.GetLogger(), buses.GetCentralEndpoint(false), time.Duration(dialTimeout) * time.Second)
+	conn, err := messagebus_client.ConnectWithTimeout(log.GetLogger(), buses.GetCentralEndpoint(false), time.Duration(dialTimeout)*time.Second)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +93,7 @@ func RmRsaKeyPair(keyId string) (errCode int32, err error) {
 		client.Conn.Close()
 		client.Cancel()
 	}()
-	req := &pb.RemoveRsaKeyPairReq {
+	req := &pb.RemoveRsaKeyPairReq{
 		KeyPairId: keyId,
 	}
 	var resp *pb.RemoveRsaKeyPairResp
@@ -211,11 +211,11 @@ func CheckKey(keyId string, jsonFlag bool) (output string, errCode int32, err er
 	}
 	if keyId != "" {
 		keyInfo := cryptdata.KeyInfo{
-				Id: resp.KeyInfos[0].KeyPairId,
-				PublicKey: resp.KeyInfos[0].PublicKey,
-				CreatedTimestamp: resp.KeyInfos[0].CreatedTimestamp,
-				ExpiredTimestamp: resp.KeyInfos[0].ExpiredTimestamp,
-			}
+			Id:               resp.KeyInfos[0].KeyPairId,
+			PublicKey:        resp.KeyInfos[0].PublicKey,
+			CreatedTimestamp: resp.KeyInfos[0].CreatedTimestamp,
+			ExpiredTimestamp: resp.KeyInfos[0].ExpiredTimestamp,
+		}
 		if jsonFlag {
 			var content []byte
 			if content, err = json.MarshalIndent(keyInfo, "", "\t"); err != nil {
@@ -231,8 +231,8 @@ func CheckKey(keyId string, jsonFlag bool) (output string, errCode int32, err er
 			keyInfos := cryptdata.KeyInfos{}
 			for _, k := range resp.KeyInfos {
 				keyInfos = append(keyInfos, cryptdata.KeyInfo{
-					Id: k.KeyPairId,
-					PublicKey: k.PublicKey,
+					Id:               k.KeyPairId,
+					PublicKey:        k.PublicKey,
 					CreatedTimestamp: k.CreatedTimestamp,
 					ExpiredTimestamp: k.ExpiredTimestamp,
 				})
@@ -264,7 +264,7 @@ func CheckKey(keyId string, jsonFlag bool) (output string, errCode int32, err er
 	return
 }
 
-func CreateSecretParam(keyId, secretName, cipherText string, timeout int64) (paramInfo *cryptdata.ParamInfo, errCode int32, err error) {
+func CreateSecretParam(keyId, secretName, cipherText, cipherAesKey string, timeout int64) (paramInfo *cryptdata.ParamInfo, errCode int32, err error) {
 	var client *agentClient
 	errCode = 1
 	client, err = newClient()
@@ -277,10 +277,11 @@ func CreateSecretParam(keyId, secretName, cipherText string, timeout int64) (par
 		client.Cancel()
 	}()
 	req := &pb.CreateSecretParamReq{
-		KeyPairId: keyId,
+		KeyPairId:  keyId,
 		CipherText: cipherText,
 		SecretName: secretName,
-		Timeout: int32(timeout),
+		Timeout:    int32(timeout),
+		CipherAesKey: cipherAesKey,
 	}
 	var resp *pb.CreateSecretParamResp
 	resp, err = client.Client.CreateSecretParam(client.Ctx, req)
@@ -295,10 +296,116 @@ func CreateSecretParam(keyId, secretName, cipherText string, timeout int64) (par
 		return
 	}
 	paramInfo = &cryptdata.ParamInfo{
-		SecretName: resp.SecretParam.SecretName,
+		SecretName:       resp.SecretParam.SecretName,
 		CreatedTimestamp: resp.SecretParam.CreatedTimestamp,
 		ExpiredTimestamp: resp.SecretParam.ExpiredTimestamp,
 	}
 	log.GetLogger().Infof("CreateSecretParam success, keyPairId[%s], secretName[%s]", keyId, secretName)
+	return
+}
+
+func GetSecretParamValue(secretName string) (paramValueInfo *cryptdata.ParamValueInfo, errCode int32, err error) {
+	var client *agentClient
+	errCode = 1
+	client, err = newClient()
+	if err != nil {
+		log.GetLogger().Error("Create client failed: ", err)
+		return
+	}
+	defer func() {
+		client.Conn.Close()
+		client.Cancel()
+	}()
+	req := &pb.GetSecretParamValueReq{
+		SecretName: secretName,
+	}
+	var resp *pb.GetSecretParamValueResp
+	resp, err = client.Client.GetSecretParamValue(client.Ctx, req)
+	if err != nil {
+		log.GetLogger().Error("Client request GetSecretParamValue failed: ", err)
+		return
+	}
+	errCode = resp.Status.StatusCode
+	if resp.Status.StatusCode != 0 {
+		err = errors.New(resp.Status.ErrMessage)
+		log.GetLogger().Errorf("GetSecretParamValue failed, secretName[%s], StatusCode[%d], errMsg[%s]: ", secretName, resp.Status.StatusCode, resp.Status.ErrMessage)
+		return
+	}
+	paramValueInfo = &cryptdata.ParamValueInfo{
+		SecretName:       resp.SecretParamValue.SecretName,
+		SecretValue:      resp.SecretParamValue.SecretValue,
+		CreatedTimestamp: resp.SecretParamValue.CreatedTimestamp,
+		ExpiredTimestamp: resp.SecretParamValue.ExpiredTimestamp,
+	}
+	log.GetLogger().Infof("GetSecretParamValue success, secretName[%s]", secretName)
+	return
+}
+
+func SignData(keyPairId, plainText string) (signature string, errCode int32, err error) {
+	var client *agentClient
+	errCode = 1
+	client, err = newClient()
+	if err != nil {
+		log.GetLogger().Error("Create client failed: ", err)
+		return
+	}
+	defer func() {
+		client.Conn.Close()
+		client.Cancel()
+	}()
+	req := &pb.SignDataReq{
+		KeyPairId: keyPairId,
+		PlainText: plainText,
+	}
+	var resp *pb.SignDataResp
+	resp, err = client.Client.SignData(client.Ctx, req)
+	if err != nil {
+		log.GetLogger().Error("Client request SignData failed: ", err)
+		return
+	}
+	errCode = resp.Status.StatusCode
+	if resp.Status.StatusCode != 0 {
+		err = errors.New(resp.Status.ErrMessage)
+		log.GetLogger().Errorf("SignData failed, keyPaidId[%s], plainText[%s] StatusCode[%d], errMsg[%s]: ", keyPairId, plainText, resp.Status.StatusCode, resp.Status.ErrMessage)
+		return
+	}
+	signature = resp.Signature
+
+	log.GetLogger().Infof("SignData success, keyPaidId[%s], plainText[%s]", keyPairId, plainText)
+	return
+}
+
+func VerifySignature(keyPairId, plainText, signature string) (valid bool, errCode int32, err error) {
+	var client *agentClient
+	errCode = 1
+	client, err = newClient()
+	if err != nil {
+		log.GetLogger().Error("Create client failed: ", err)
+		return
+	}
+	defer func() {
+		client.Conn.Close()
+		client.Cancel()
+	}()
+	req := &pb.VerifySignatureReq{
+		KeyPairId: keyPairId,
+		PlainText: plainText,
+		Signature: signature,
+	}
+	var resp *pb.VerifySignatureResp
+	resp, err = client.Client.VerifySignature(client.Ctx, req)
+	if err != nil {
+		log.GetLogger().Error("Client request VerifySignature failed: ", err)
+		return
+	}
+	errCode = resp.Status.StatusCode
+	if resp.Status.StatusCode != 0 {
+		err = errors.New(resp.Status.ErrMessage)
+		log.GetLogger().Errorf("VerifySignature failed, keyPaidId[%s], plainText[%s], signature[%s] StatusCode[%d], errMsg[%s]: ", keyPairId, plainText, signature, resp.Status.StatusCode, resp.Status.ErrMessage)
+		return
+	}
+	valid = resp.Valid
+
+	log.GetLogger().Infof("VerifySignature success, keyPaidId[%s], plainText[%s], signature[%s]", keyPairId, plainText, signature)
 	return
 }

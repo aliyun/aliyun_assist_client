@@ -7,7 +7,7 @@ import (
 
 var (
 	scriptPath = ""
-	logPath = ""
+	logPath    = ""
 )
 
 func MakeSurePath(path string) error {
@@ -153,12 +153,22 @@ func GetCachePath() (string, error) {
 	return path, err
 }
 
-func GetPluginPath() (string , error) {
+func GetPluginPath() (string, error) {
 	cur, err := GetCurrentPath()
 	if err != nil {
 		return "", err
 	}
 	path := filepath.Join(filepath.Dir(cur), "plugin")
+	err = MakeSurePath(path)
+	return path, err
+}
+
+func GetPreInstalledPluginPath() (string, error) {
+	cur, err := GetCurrentPath()
+	if err != nil {
+		return "", err
+	}
+	path := filepath.Join(cur, "plugin")
 	err = MakeSurePath(path)
 	return path, err
 }

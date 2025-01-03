@@ -12,7 +12,6 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/pluginmanager/acspluginmanager"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/taskerrors"
 	"github.com/aliyun/aliyun_assist_client/common/fileutil"
-	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 	"github.com/aliyun/aliyun_assist_client/interprocess/messagebus/buses"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 	"github.com/google/uuid"
@@ -26,6 +25,9 @@ type CommanderManager struct {
 
 	// name -> handshaketoken
 	handshakeToken sync.Map
+
+	// underlying plugin manager
+	pluginManager *acspluginmanager.PluginManager
 
 	l sync.Mutex
 }
@@ -46,12 +48,13 @@ func InitCommanderManager(commanderName string) {
 	_cm.commanders = make(map[string]*Commander)
 	_cm.needUpdate = make(map[string]string)
 
-	var err error
-	acspluginmanager.PLUGINDIR, err = pathutil.GetPluginPath()
+	pluginManager, err := acspluginmanager.NewPluginManager(false)
 	if err != nil {
 		log.GetLogger().WithError(err).Error("InitCommanderManager: get PLUGINDIR failed.")
 		return
 	}
+	_cm.pluginManager = pluginManager
+
 	_cm.loadCommanderFromLocal(commanderName)
 	pluginmanager.SetUpdateHandler(func(name, version string) bool {
 		return _cm.markUpdate(name, version)
@@ -92,12 +95,15 @@ func (m *CommanderManager) loadCommanderFromLocal(name string) error {
 		if name != "" && c.Name != name {
 			continue
 		}
-		cmdPath := filepath.Join(acspluginmanager.PLUGINDIR, c.Name, c.Version, c.RunPath)
+		cmdPath := m.pluginManager.GetPluginCommandPath(&c)
 		if !fileutil.CheckFileIsExist(cmdPath) {
 			log.GetLogger().Errorf("Commander %s found in local but the cmdPath[%s] not exist", c.Name, cmdPath)
 			continue
 		}
 		endpoint := buses.NewEndpoint(c.CommanderInfo.EndpointType, filepath.Join(os.TempDir(), c.CommanderInfo.EndpointFile))
+		if c.CommanderInfo.EndpointType == "npipe" {
+			endpoint = buses.NewEndpoint(c.CommanderInfo.EndpointType, c.CommanderInfo.EndpointFile)
+		}
 		pidFile := filepath.Join(os.TempDir(), c.CommanderInfo.PidFile)
 		cfg := &CommanderConfig{
 			CommanderName: c.Name,
@@ -121,7 +127,7 @@ func (m *CommanderManager) loadCommanderFromLocal(name string) error {
 		}).Info("commander loaded")
 	}
 	if name != "" && !found {
-		return fmt.Errorf("not found") 
+		return fmt.Errorf("not found")
 	}
 	return nil
 }
@@ -136,7 +142,7 @@ func (m *CommanderManager) installCommanderFromOnline(name, version string) erro
 		return err
 	}
 	// TODO: timeout for installing plugin from online
-	if err := acspluginmanager.InstallPluginFromOnline(pluginInfo, 30); err != nil {
+	if err := m.pluginManager.InstallPluginFromOnline(pluginInfo, 30); err != nil {
 		log.GetLogger().WithFields(logrus.Fields{
 			"name":    name,
 			"version": version,

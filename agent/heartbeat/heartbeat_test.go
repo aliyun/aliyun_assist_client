@@ -20,6 +20,7 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/timermanager"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/common/httpbase"
 	"github.com/aliyun/aliyun_assist_client/common/requester"
 	"github.com/aliyun/aliyun_assist_client/internal/testutil"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
@@ -468,7 +469,7 @@ func Test_doPingSwitchProtocol(t *testing.T) {
 	disableHttpx("https", mockRegion)
 	_retryCounter = 0
 	err = doPing()
-	assert.EqualError(t, err, requester.NewHttpErrorCode(500).Error())
+	assert.EqualError(t, err, httpbase.NewStatusCodeError(500).Error())
 
 	// default protocol is http
 	log.GetLogger().Info("Test: default protocol is http")
@@ -545,7 +546,7 @@ func Test_doPingSwitchProtocol(t *testing.T) {
 		enableHttpx("http", mockRegion)
 		_retryCounter = 0
 		err = doPing()
-		assert.EqualError(t, err, requester.NewHttpErrorCode(500).Error())
+		assert.EqualError(t, err, httpbase.NewStatusCodeError(500).Error())
 	}
 	enableHttpx("https", mockRegion)
 	_retryCounter = 0

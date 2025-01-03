@@ -4,15 +4,16 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
+	"math/rand"
 	"os"
 	"runtime"
 	"runtime/pprof"
 	"strconv"
 	"sync"
 	"time"
-	"math/rand"
 
 	"github.com/aliyun/aliyun_assist_client/agent/clientreport"
+	"github.com/aliyun/aliyun_assist_client/agent/flagging"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	"github.com/aliyun/aliyun_assist_client/agent/statemanager"
@@ -21,12 +22,6 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/update"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 	"github.com/shirou/gopsutil/v3/process"
-)
-
-const (
-	CPU_LIMIT      = 20.0
-	MEM_LIMIT      = 1024 * 1024 * 50 // byte
-	OVERLAOD_LIMIT = 3
 )
 
 var (
@@ -154,7 +149,7 @@ func checkCpuMemLoad(cpuUsage float64, memory int64) {
 		// 拉取并解析终态配置时、应用或监控终态配置时不监控性能
 		return
 	}
-	if cpuUsage >= CPU_LIMIT {
+	if cpuUsage >= flagging.GetResourceCpuLimit() {
 		cpu_overload_count += 1
 		go func(cpuUsageNow float64, cpuOverLoadCount int) {
 			var profileBuf bytes.Buffer
@@ -181,7 +176,7 @@ func checkCpuMemLoad(cpuUsage float64, memory int64) {
 	} else {
 		cpu_overload_count = 0
 	}
-	if memory >= MEM_LIMIT {
+	if memory >= flagging.GetResourceMemLimit() {
 		// 上报memStats
 		mem_overload_count += 1
 		memStats := &runtime.MemStats{}
@@ -200,10 +195,12 @@ func checkCpuMemLoad(cpuUsage float64, memory int64) {
 	} else {
 		mem_overload_count = 0
 	}
-	if cpu_overload_count >= OVERLAOD_LIMIT {
+
+	limit := int(flagging.GetResourceOverloadLimit())
+	if cpu_overload_count >= limit {
 		cpu_overload_count = reachCpuOverloadLimit(cpu_overload_count, cpuUsage)
 	}
-	if mem_overload_count >= OVERLAOD_LIMIT {
+	if mem_overload_count >= limit {
 		report := clientreport.ClientReport{
 			ReportType: "self_kill",
 			Info:       fmt.Sprintf("mem=%f", float64(memory)),

@@ -9,7 +9,7 @@ import (
 
 	"github.com/aliyun/aliyun_assist_client/agent/cryptdata"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
-	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/agent/util/paramstore"
 	"golang.org/x/sys/windows"
 )
 
@@ -145,13 +145,17 @@ func revertToSelf() error {
 
 func getSecretParam(secretName string) (string, error) {
 	var value string
+	var paramValueInfo *cryptdata.ParamValueInfo
 	var err_1, err_2 error
-	if value, err_1 = cryptdata.GetSecretParam(secretName); err_1 != nil {
-		if value, err_2 = util.GetSecretParam(secretName); err_2 != nil {
+	if paramValueInfo, err_1 = cryptdata.GetSecretParamValue(secretName); err_1 != nil {
+		if value, err_2 = paramstore.GetSecretParam(secretName); err_2 != nil {
 			log.GetLogger().Errorf("Secret param '%s' not found in agent [%v] and oos[%v]", secretName, err_1, err_2)
 			err := errors.New(fmt.Sprintf("Secret param '%s' not found in agent [%v] and oos[%v]", secretName, err_1, err_2))
 			return "", err
 		}
+	} else {
+		value = paramValueInfo.SecretValue
 	}
+	
 	return value, nil
 }

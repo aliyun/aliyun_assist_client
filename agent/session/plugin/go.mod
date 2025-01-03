@@ -17,6 +17,7 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.9.0
+	go.uber.org/atomic v1.11.0
 	golang.org/x/crypto v0.21.0
 	gopkg.in/ini.v1 v1.67.0
 )
@@ -34,7 +35,6 @@ require (
 	github.com/nxadm/tail v1.4.8 // indirect
 	github.com/opentracing/opentracing-go v1.2.1-0.20220228012449-10b1cf09e00b // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	go.uber.org/atomic v1.11.0 // indirect
 	golang.org/x/net v0.21.0 // indirect
 	golang.org/x/sys v0.18.0 // indirect
 	golang.org/x/term v0.18.0 // indirect

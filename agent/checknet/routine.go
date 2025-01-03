@@ -1,7 +1,8 @@
 package checknet
 
 type NetcheckRequestType string
+
 const (
-	NetcheckRequestNormal NetcheckRequestType = "normal"
+	NetcheckRequestNormal    NetcheckRequestType = "normal"
 	NetcheckRequestForceOnce NetcheckRequestType = "forceOnce"
 )

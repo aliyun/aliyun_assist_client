@@ -32,69 +32,66 @@ func GetRootCAs(logger logrus.FieldLogger) *x509.CertPool {
 	if _rootCAsInited {
 		return _rootCAs
 	}
-	defer func () {
+	defer func() {
 		_rootCAsInited = true
 	}()
 
-	var pemCerts []byte
-	var err error
-	for _, provider := range _rootCAProviders {
-		pemCerts, err = provider.CACertificate(logger, false)
-		if err != nil {
-			logger.WithError(err).Errorf("Failed to get preferred Root CA certificate from %s", provider.Name())
-		} else {
-			logger.Infof("Selected %s for preferred Root CA certificate", provider.Name())
-			break
-		}
-	}
-	if pemCerts == nil {
-		logger.Warning("No preferred Root CA certificate is provided. Only system CAs would be certified.")
-		_rootCAs = nil
-		return nil
-	}
+	AccumulateRootCAs(logger)(func(cp *x509.CertPool) bool {
+		_rootCAs = cp
+		return false
+	})
 
-	certPool, err := x509.SystemCertPool()
-	if err != nil {
-		logger.Warning("No system CAs can be retrieved. Only provided Root CA certificate is used")
-		certPool = x509.NewCertPool()
-	}
-	certPool.AppendCertsFromPEM(pemCerts)
-
-	_rootCAs = certPool
 	return _rootCAs
 }
 
-// PeekRefreshedRootCAs returns refreshed certs instead cached, and won't modify the certs cache
-func PeekRefreshedRootCAs(logger logrus.FieldLogger) *x509.CertPool {
-	logger = logger.WithField("action", "PeekRefreshedRootCAs")
-	var pemCerts []byte
-	var err error
-	for _, provider := range _rootCAProviders {
-		// In fact, parameter refresh is only valid for ExternalExecutableProvider.CACertificate, 
-		// other provider.CACertificate always do refresh
-		pemCerts, err = provider.CACertificate(logger, true)
-		if err != nil {
-			logger.WithError(err).Errorf("Failed to get preferred Root CA certificate from %s", provider.Name())
-		} else {
+// AccumulateRootCAs gives each root CA certificate provider a try, accumulates
+// the provided certficate into the pool, and then calls the passed-in yield
+// function to validate the pool.
+//
+// The yield function passed MUST return true if accumulation need to continue,
+// i.e., validation failed. Otherwise false, and the loop would break.
+//
+// When no root CA certificate provided by any provider, the default root CA
+// certificate pool based on the system pool, represented by `nil`, would be
+// yielded to give it a try.
+func AccumulateRootCAs(logger logrus.FieldLogger) func (yield func (*x509.CertPool) bool) {
+	return func(yield func(*x509.CertPool) bool) {
+		var certPool *x509.CertPool
+		var pemCerts []byte
+		var err error
+		for _, provider := range _rootCAProviders {
+			// In fact, parameter refresh is only valid for
+			// ExternalExecutableProvider.CACertificate, other
+			// provider.CACertificate always do refresh
+			pemCerts, err = provider.CACertificate(logger, true)
+			if err != nil {
+				logger.WithError(err).Errorf("Failed to get preferred Root CA certificate from %s", provider.Name())
+				continue
+			}
+
 			logger.Infof("Selected %s for preferred Root CA certificate", provider.Name())
-			break
+			if certPool == nil {
+				certPool, err = x509.SystemCertPool()
+				if err != nil {
+					logger.WithError(err).Warning("No system CAs can be retrieved. Only provided Root CA certificate is used")
+					certPool = x509.NewCertPool()
+				} else {
+					certPool = certPool.Clone()
+				}
+			}
+			certPool.AppendCertsFromPEM(pemCerts)
+			if !yield(certPool) {
+				return
+			}
+		}
+
+		// No preferred Root CA certificate provided, give back the default
+		// root CA certificate pool based on system pool and then give up
+		if pemCerts == nil {
+			logger.Warning("No preferred Root CA certificate is provided. Only system CAs would be certified.")
+			yield(nil)
 		}
 	}
-	if pemCerts == nil {
-		logger.Warning("No preferred Root CA certificate is provided. Only system CAs would be certified.")
-		return nil
-	}
-
-	certPool, err := x509.SystemCertPool()
-	if err != nil {
-		logger.Warning("No system CAs can be retrieved. Only provided Root CA certificate is used")
-		certPool = x509.NewCertPool()
-	} else {
-		certPool = certPool.Clone()
-	}
-	certPool.AppendCertsFromPEM(pemCerts)
-
-	return certPool
 }
 
 func UpdateRootCAs(logger logrus.FieldLogger, certPool *x509.CertPool) {

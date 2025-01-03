@@ -8,9 +8,6 @@ import (
 	"github.com/aliyun/aliyun_assist_client/thirdparty/aliyun-cli/i18n"
 )
 
-var Version string = "1.0.0.1"
-var GitCommitHash string = ""
-
 func main() {
 	cli.PlatformCompatible()
 

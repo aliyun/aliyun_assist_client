@@ -50,21 +50,13 @@ func TestMetrics(t *testing.T) {
 	).ReportEvent()
 
 	GetHybridRegisterEvent(
-		true,
-		"key", "value",
 	).ReportEvent()
 	GetHybridRegisterEvent(
-		false,
-		"key", "value",
 	).ReportEvent()
 
 	GetHybridUnregisterEvent(
-		true,
-		"key", "value",
 	).ReportEvent()
 	GetHybridUnregisterEvent(
-		false,
-		"key", "value",
 	).ReportEvent()
 
 	GetSessionFailedEvent(

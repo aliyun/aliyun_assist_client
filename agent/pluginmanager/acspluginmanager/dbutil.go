@@ -15,6 +15,17 @@ func getAllInstalledPlugins() ([]pluginmanager.PluginInfo, error) {
 	return plugins, err
 }
 
+func getAllPreInstalledPlugins() ([]pluginmanager.PluginInfo, error) {
+	installedPlugins, err := pluginmanager.LoadPreInstalledPlugins()
+	if err != nil {
+		return nil, err
+	}
+	defer installedPlugins.Close()
+
+	_, plugins, err := installedPlugins.FindAll()
+	return plugins, err
+}
+
 func getInstalledPluginsByName(name string) ([]pluginmanager.PluginInfo, error) {
 	installedPlugins, err := pluginmanager.LoadInstalledPlugins()
 	if err != nil {

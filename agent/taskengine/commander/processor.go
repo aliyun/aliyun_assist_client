@@ -126,7 +126,6 @@ func (p *CommanderProcessor) SyncRun(
 	stdoutWriter io.Writer,
 	stderrWriter io.Writer,
 	stdinReader io.Reader) (exitCode int, resStatus int, resError error) {
-
 	p.stdoutWriter = stdoutWriter
 	p.stderrWriter = stderrWriter
 	p.done, p.doneFunc = context.WithCancel(context.Background())

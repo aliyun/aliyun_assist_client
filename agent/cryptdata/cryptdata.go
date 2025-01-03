@@ -2,6 +2,9 @@ package cryptdata
 
 import (
 	"bytes"
+	"crypto"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -23,6 +26,8 @@ var (
 	ErrKeyIdNotExist   = errors.New("Key id not exist")
 	ErrKeyIdDuplicated = errors.New("Key id is duplicated")
 	ErrParamNotExist   = errors.New("Secret param not exist")
+	// The ciphertext length cannot be less than the AES key length
+	ErrCipherTextTooShort = errors.New("ciphertext too short")
 )
 
 const (
@@ -116,6 +121,27 @@ func DecryptWithRsa(keyId string, encrypted []byte) ([]byte, error) {
 	}
 }
 
+func decryptWithAes(encrypted []byte, aesKey []byte) ([]byte, error) {
+	var err error
+	block, err := aes.NewCipher(aesKey)
+	if err != nil {
+		return nil, err
+	}
+
+	blockSize := block.BlockSize()
+	if len(encrypted) < blockSize {
+		return nil, ErrCipherTextTooShort
+	}
+	iv := encrypted[:blockSize]
+	encrypted = encrypted[blockSize:]
+
+	mode := cipher.NewCBCDecrypter(block, iv)
+	mode.CryptBlocks(encrypted, encrypted)
+
+	encrypted = pkcs7UnPadding(encrypted)
+	return encrypted, nil
+}
+
 func CheckKey(keyId string) (*KeyInfo, error) {
 	if privateKey, err := loadKey(keyId); err != nil {
 		return nil, err
@@ -146,6 +172,44 @@ func CheckKeyList() (keyList KeyInfos) {
 	}
 	sort.Sort(keyList)
 	return
+}
+
+func SignData(keyId, data string) ([]byte, error) {
+	privateKey, err := loadKey(keyId)
+	if err != nil {
+		return nil, err
+	}
+	// Hash data before signing.
+	msgHash := crypto.SHA256.New()
+	if _, err := msgHash.Write([]byte(data)); err != nil {
+		return nil, err
+	}
+	msgHashSum := msgHash.Sum(nil)
+	signature, err := rsa.SignPSS(rand.Reader, privateKey.PrivateKey, crypto.SHA256, msgHashSum, nil)
+	if err != nil {
+		return nil, err
+	}
+	return signature, nil
+}
+
+func VerifySignature(keyId, data string, signature []byte) (bool, error) {
+	if privateKey, err := loadKey(keyId); err != nil {
+		return false, err
+	} else {
+		// Hash data before verifying signature.
+		msgHash := crypto.SHA256.New()
+		if _, err := msgHash.Write([]byte(data)); err != nil {
+			return false, err
+		}
+		msgHashSum := msgHash.Sum(nil)
+		err = rsa.VerifyPSS(&privateKey.PrivateKey.PublicKey, crypto.SHA256, msgHashSum, signature, nil)
+		if errors.Is(err, rsa.ErrVerification) {
+			return false, nil
+		} else if err != nil {
+			return false, err
+		}
+		return true, nil
+	}
 }
 
 func clearExpiredKey() {
@@ -209,4 +273,10 @@ func ErrToCode(err error) int {
 		return ERR_PARAM_NOTEXIST_CODE
 	}
 	return ERR_OTHER_CODE
+}
+
+func pkcs7UnPadding(origData []byte) []byte {
+	length := len(origData)
+	unpadding := int(origData[length-1])
+	return origData[:(length - unpadding)]
 }

@@ -8,14 +8,14 @@ require (
 	github.com/agiledragon/gomonkey/v2 v2.11.0
 	github.com/aliyun/alibaba-cloud-sdk-go v1.61.1491
 	github.com/coreos/go-systemd/v22 v22.3.2
-	github.com/creack/pty v1.1.11
+	github.com/creack/pty v1.1.15
 	github.com/docker/docker v24.0.4+incompatible
 	github.com/fabiokung/shm v0.0.0-20150728212823-2852b0d79bae
 	github.com/go-logr/logr v1.2.3
 	github.com/godbus/dbus/v5 v5.0.6
 	github.com/golang/protobuf v1.5.2
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
-	github.com/google/uuid v1.2.0
+	github.com/google/uuid v1.3.0
 	github.com/gorhill/cronexpr v0.0.0-20180427100037-88b0669f7d75
 	github.com/gorilla/websocket v1.4.2
 	github.com/hectane/go-acl v0.0.0-20190604041725-da78bae5fc95
@@ -70,6 +70,7 @@ require (
 	github.com/tklauser/numcpus v0.4.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.2 // indirect
 	golang.org/x/sync v0.1.0 // indirect
+	golang.org/x/time v0.2.0 // indirect
 	google.golang.org/genproto v0.0.0-20220107163113-42d7afdf6368 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

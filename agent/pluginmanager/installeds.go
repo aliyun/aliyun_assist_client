@@ -31,13 +31,31 @@ type InstalledPlugins struct {
 	boltdb *bolt.DB
 }
 
+func LoadInstalledPlugins() (*InstalledPlugins, error) {
+	return loadInstalledPlugins(false)
+}
+
+func LoadPreInstalledPlugins() (*InstalledPlugins, error) {
+	return loadInstalledPlugins(true)
+}
+
 // TODO-FIXME: Should LoadInstalledPlugins has a timeout limit? Now it simply
 // waits indefinitely.
-func LoadInstalledPlugins() (*InstalledPlugins, error) {
-	boltPath, err := getInstalledPluginsBoltPath()
-	if err != nil {
-		return nil, err
+func loadInstalledPlugins(isPreInstalled bool) (*InstalledPlugins, error) {
+	var boltPath string
+	var err error
+	if isPreInstalled {
+		boltPath, err = getPreInstalledPluginsBoltPath()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		boltPath, err = getInstalledPluginsBoltPath()
+		if err != nil {
+			return nil, err
+		}
 	}
+
 	// 1. Just use the new BoltDB file if existed, but NEVER AUTO-CREATE IT if
 	// not existed
 	boltdb, err := bolt.Open(boltPath, os.FileMode(0o0640), &bolt.Options{
@@ -81,7 +99,7 @@ func LoadInstalledPlugins() (*InstalledPlugins, error) {
 
 	boltdb, err = bolt.Open(boltPath, os.FileMode(0o0640), &bolt.Options{
 		OpenFile: func(name string, flag int, perm os.FileMode) (*os.File, error) {
-			return os.OpenFile(name, flag | os.O_EXCL, perm)
+			return os.OpenFile(name, flag|os.O_EXCL, perm)
 		},
 	})
 	if err != nil {
@@ -229,7 +247,7 @@ func (ip *InstalledPlugins) FindManyByName(name string) ([]int, []PluginInfo, er
 	return foundKeys, foundValues, nil
 }
 
-func (ip *InstalledPlugins) FindOneWithPredicate(predicate func (plugin *PluginInfo) bool) (int, *PluginInfo, error) {
+func (ip *InstalledPlugins) FindOneWithPredicate(predicate func(plugin *PluginInfo) bool) (int, *PluginInfo, error) {
 	var foundKey int = -1
 	var foundValue *PluginInfo
 
@@ -280,10 +298,10 @@ func (ip *InstalledPlugins) Insert(value *PluginInfo) (int, error) {
 
 		// Generate auto-incremental ID for the plugin information.
 		// According to the documentation of https://github.com/etcd-io/bbolt,
-        // the NextSequence() method returns an error only if the Tx is closed
+		// the NextSequence() method returns an error only if the Tx is closed
 		// or not writeable. That can't happen in an Update() call, so the error
 		// check can be safely ignored.
-        id, _ := bucket.NextSequence()
+		id, _ := bucket.NextSequence()
 		insertedKey = int(id)
 
 		return bucket.Put(_itob(insertedKey), []byte(content))
@@ -326,9 +344,9 @@ func (ip *InstalledPlugins) DeleteByKey(key int) error {
 
 // _itob returns an 8-byte little endian representation of v.
 func _itob(v int) []byte {
-    b := make([]byte, 8)
-    binary.LittleEndian.PutUint64(b, uint64(v))
-    return b
+	b := make([]byte, 8)
+	binary.LittleEndian.PutUint64(b, uint64(v))
+	return b
 }
 
 func _b8toi(b []byte) int {

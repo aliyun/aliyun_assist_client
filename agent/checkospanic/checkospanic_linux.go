@@ -14,23 +14,23 @@ import (
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
-	"github.com/aliyun/aliyun_assist_client/common/fileutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/timetool"
+	"github.com/aliyun/aliyun_assist_client/common/fileutil"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 )
 
 const (
-	kdumpPath            = "/var/crash"
-	kdumpConfigPath      = "/etc/kdump.conf"
-	vmcoreDmesgFile      = "vmcore-dmesg.txt"
+	kdumpPath       = "/var/crash"
+	kdumpConfigPath = "/etc/kdump.conf"
+	vmcoreDmesgFile = "vmcore-dmesg.txt"
 
-	maxLinesBeforePanicInfo  = 200
-	maxLinesAfterPanicInfo   = 300
+	maxLinesBeforePanicInfo = 200
+	maxLinesAfterPanicInfo  = 300
 )
 
 var (
 	// 127.0.0.1-2023-07-05-20:51:21 or <hostname>-2023-07-05-20:51:21
-	vmcorePathRegex      = regexp.MustCompile(`^(?:[\w.-]+)-(\d{4}-\d{2}-\d{2}-\d{2}:\d{2}:\d{2})$`)
+	vmcorePathRegex = regexp.MustCompile(`^(?:[\w.-]+)-(\d{4}-\d{2}-\d{2}-\d{2}:\d{2}:\d{2})$`)
 
 	rePanicInfoMatch      = regexp.MustCompile(`(?:\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}[+-]\d{4})?(?:\[\s*\d+\.\d+\])?\s*([^\n]+)`)
 	reRIPMatch            = regexp.MustCompile(`RIP.*?([\w-.]+\+0x\w+)/0x`)
@@ -40,7 +40,7 @@ var (
 		"SysRq : Crash",
 		"SysRq : Trigger a crash",
 		"SysRq : Netdump",
-		"general protection fault: ",
+		"general protection fault",
 		"double fault: ",
 		"divide error: ",
 		"stack segment: ",
@@ -53,7 +53,7 @@ var (
 		"Unable to handle kernel NULL pointer dereference",
 		"Kernel panic: ",
 		"Kernel panic - ",
-		"[Hardware Error]: ",
+		//"[Hardware Error]: ",
 		"Bad mode in ",
 	}
 )
@@ -244,10 +244,10 @@ func parsePanicInfo(scanner *bufio.Scanner, n int) (panicInfo string, content []
 	for !found && scanner.Scan() {
 		line := scanner.Text()
 		select {
-		case ringbuf<-line:
+		case ringbuf <- line:
 		default:
 			<-ringbuf
-			ringbuf<-line
+			ringbuf <- line
 		}
 		for _, panicMsg := range panicMsgs {
 			if strings.Contains(line, panicMsg) {

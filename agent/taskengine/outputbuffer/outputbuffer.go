@@ -8,6 +8,22 @@ import (
 	"sync/atomic"
 )
 
+type OutputBuf interface {
+	// Need to initialize before use
+	Init(preQuota, postQuota int) (io.Writer, error)
+	// Need to be reset after use
+	Uninit() error
+	// Read pre-part content
+	ReadPre() []byte
+	// Read all content
+	ReadAll() []byte
+	// How many bytes were dropped
+	Dropped() int
+	// Set the encoding transform function, which will be used to process the
+	// return content of the ReadXXX function
+	SetTransformer(f transformFunc)
+}
+
 // OutputBuffer is specially used to store the output content of task execution.
 // It only stores the beginning and end of the output.
 type OutputBuffer struct {
@@ -24,8 +40,11 @@ type OutputBuffer struct {
 
 	putCount atomic.Int64
 
-	inited   bool
+	inited   atomic.Bool
 	scanDone chan int
+
+	transformer     func([]byte) []byte
+	transformerLock sync.RWMutex
 
 	err error
 }
@@ -35,14 +54,15 @@ var (
 	ErrUninited     = errors.New("Uninited")
 )
 
-func (b *OutputBuffer) Init(preQuota, postQuota int) (*os.File, error) {
-	if b.inited {
+func (b *OutputBuffer) Init(preQuota, postQuota int) (io.Writer, error) {
+	if !b.inited.CompareAndSwap(false, true) {
 		return b.w, nil
 	}
 
 	var err error
 	b.r, b.w, err = os.Pipe()
 	if err != nil {
+		b.inited.Store(false)
 		return nil, err
 	}
 	b.preQuota, b.postQuota = preQuota, postQuota
@@ -54,7 +74,6 @@ func (b *OutputBuffer) Init(preQuota, postQuota int) (*os.File, error) {
 	b.prePartStart.Store(0)
 	b.prePart = make([]byte, b.preQuota)
 
-	b.inited = true
 	b.scanDone = make(chan int)
 	b.err = nil
 	go b.scan()
@@ -63,7 +82,7 @@ func (b *OutputBuffer) Init(preQuota, postQuota int) (*os.File, error) {
 
 // clean all buf and close pipe, wait scan return
 func (b *OutputBuffer) Uninit() error {
-	if !b.inited {
+	if !b.inited.CompareAndSwap(true, false) {
 		return ErrUninited
 	}
 	b.w.Close()
@@ -80,10 +99,22 @@ func (b *OutputBuffer) Uninit() error {
 
 	b.putCount.Store(0)
 
-	b.inited = false
 	b.scanDone = nil
 
 	return b.err
+}
+
+func (b *OutputBuffer) SetTransformer(f transformFunc) {
+	b.transformerLock.Lock()
+	defer b.transformerLock.Unlock()
+
+	b.transformer = f
+}
+func (b *OutputBuffer) getTransformer() transformFunc {
+	b.transformerLock.RLock()
+	defer b.transformerLock.RUnlock()
+
+	return b.transformer
 }
 
 // Scan will run a loop to read content from r and store content into prePart or postPart, until EOF or
@@ -112,7 +143,7 @@ func (b *OutputBuffer) scan() {
 		if start < end {
 			b.lockPost.Lock()
 			b.postPart.Put(buf[start:end])
-			b.putCount.Add(int64(end-start))
+			b.putCount.Add(int64(end - start))
 			start = end
 			b.lockPost.Unlock()
 		}
@@ -152,9 +183,7 @@ func (b *OutputBuffer) readPost() []byte {
 	return nil
 }
 
-// Read from prePart, the content in b.prePart will only returned once,
-// b.prePart will be set to nil after all content returned
-func (b *OutputBuffer) ReadPre() []byte {
+func (b *OutputBuffer) readPre() []byte {
 	if b.prePart == nil {
 		return nil
 	}
@@ -180,9 +209,32 @@ func (b *OutputBuffer) ReadPre() []byte {
 	return nil
 }
 
+// Read from prePart, the content in b.prePart will only returned once,
+// b.prePart will be set to nil after all content returned
+func (b *OutputBuffer) ReadPre() []byte {
+	r := b.readPre()
+	if r == nil {
+		return nil
+	}
+	if f := b.getTransformer(); f != nil {
+		return f(r)
+	}
+	return r
+}
+
 // Read from b.prePart and b.postPart, the content will only returned once
-func (b *OutputBuffer) ReadAll() (res []byte) {
-	prePart := b.ReadPre()
+func (b *OutputBuffer) ReadAll() []byte {
+	r := b.readAll()
+	if r == nil {
+		return nil
+	}
+	if f := b.getTransformer(); f != nil {
+		return f(r)
+	}
+	return r
+}
+func (b *OutputBuffer) readAll() (res []byte) {
+	prePart := b.readPre()
 	postPart := b.readPost()
 
 	if prePart == nil {
@@ -195,17 +247,16 @@ func (b *OutputBuffer) ReadAll() (res []byte) {
 	res = make([]byte, len(prePart)+len(postPart))
 	n := copy(res, prePart)
 	copy(res[n:], postPart)
-
 	return
 }
 
 func (b *OutputBuffer) Dropped() int {
-	if !b.inited {
+	if !b.inited.Load() {
 		return 0
 	}
 	putCount := b.putCount.Load()
-	if putCount<= int64(b.preQuota + b.postQuota) {
+	if putCount <= int64(b.preQuota+b.postQuota) {
 		return 0
 	}
-	return int(putCount - int64(b.preQuota)-int64(b.postQuota))
+	return int(putCount - int64(b.preQuota) - int64(b.postQuota))
 }

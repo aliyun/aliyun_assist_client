@@ -10,13 +10,15 @@ import (
 	"time"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/agent/version"
+	"github.com/aliyun/aliyun_assist_client/commander/interceptor"
+	"github.com/aliyun/aliyun_assist_client/commander/ipc/client"
+	"github.com/aliyun/aliyun_assist_client/commander/ipc/endpoint"
+	"github.com/aliyun/aliyun_assist_client/commander/ipc/server"
+	"github.com/aliyun/aliyun_assist_client/commander/model"
 	"github.com/aliyun/aliyun_assist_client/interprocess/messagebus/buses"
 	messagebus_server "github.com/aliyun/aliyun_assist_client/interprocess/messagebus/server"
 	"github.com/aliyun/aliyun_assist_client/plugin/commander/container/idlecheck"
-	"github.com/aliyun/aliyun_assist_client/plugin/commander/container/ipc/client"
-	"github.com/aliyun/aliyun_assist_client/plugin/commander/container/ipc/endpoint"
-	"github.com/aliyun/aliyun_assist_client/plugin/commander/container/ipc/interceptor"
-	"github.com/aliyun/aliyun_assist_client/plugin/commander/container/ipc/server"
 	"github.com/aliyun/aliyun_assist_client/plugin/commander/container/taskmanager"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/aliyun-cli/cli"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/aliyun-cli/i18n"
@@ -33,6 +35,16 @@ const (
 
 	defaultWaitTime = 10
 	defaultPidFile  = "container_commander.pid"
+
+	commanderName                = "ACS-ECS-ContainerCommander"
+	commanderSupportedApiVersion = "v1"
+	commanderSocketName          = "container_commander.sock"
+	commanderProtocol            = "unix"
+)
+const ()
+
+var (
+	taskManager = taskmanager.GetTaskManager()
 )
 
 var (
@@ -104,9 +116,9 @@ func runServerCmd(ctx *cli.Context, args []string) error {
 		}
 		idlecheck.SetExtendSecond(int(waitTime))
 	}
-
 	log.InitLog("container_commander.log", logPath, true)
-
+	model.SetCommanderBaseInfo(commanderName, commanderSupportedApiVersion)
+	server.InitCommanderServer(taskManager)
 	go checkIdle(log.GetLogger())
 
 	// write pid file
@@ -117,7 +129,6 @@ func runServerCmd(ctx *cli.Context, args []string) error {
 		fmt.Fprintln(os.Stderr, "Write pid file failed: ", err)
 		cli.Exit(1)
 	}
-
 	var ep *buses.Endpoint
 	if endpointStr != "" {
 		ep = &buses.Endpoint{}
@@ -126,8 +137,9 @@ func runServerCmd(ctx *cli.Context, args []string) error {
 			cli.Exit(1)
 		}
 		endpoint.SetEndpoint(ep)
+	} else {
+		endpoint.SetSocketAndProtocol(commanderSocketName, commanderProtocol)
 	}
-
 	// register commander to agent
 	go func() {
 		// wait for server listening
@@ -150,7 +162,7 @@ func runServerCmd(ctx *cli.Context, args []string) error {
 
 		log.GetLogger().Info("Register commander done")
 	}()
-	log.GetLogger().Infof("Starting...... version: %s githash: %s", Version, GitCommitHash)
+	log.GetLogger().Infof("Starting...... version: %s githash: %s", version.AssistVersion, version.GitCommitHash)
 
 	signalCh := listenSignal()
 	for {
@@ -197,7 +209,7 @@ func listenSignal() chan os.Signal {
 func checkIdle(logger logrus.FieldLogger) {
 	idlecheck.ExtendLive()
 	idlecheck.SetChecker("TaskCount", func() bool {
-		return taskmanager.TaskCount() == 0
+		return taskManager.TaskCount() == 0
 	})
 	for {
 		when, canExit := idlecheck.TimeToExit()
