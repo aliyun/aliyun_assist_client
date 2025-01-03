@@ -50,9 +50,13 @@ func doPortForward(ctx *cli.Context, instance_id string, local_port string, remo
 	session.CheckSessionEnabled(ctx)
 	var remote_host string
 	var err error
-	remote_host, remote_port, err = net.SplitHostPort(remote_port)
-	if err != nil {
-		return fmt.Errorf("parse remote host and port failed: %v", err)
+	// If remote_port contains ":" then remote host and port are parsed from it,
+	// otherwise remote_port is used directly as the remote port.
+	if strings.Contains(remote_port, ":") {
+		remote_host, remote_port, err = net.SplitHostPort(remote_port)
+		if err != nil {
+			return fmt.Errorf("parse remote host and port failed: %v", err)
+		}
 	}
 	var websocket_url string
 	var session_id string
@@ -164,7 +168,7 @@ func callComputeNestStartTerminalSession(ctx *cli.Context, service_instance stri
 }
 
 func handleConnect(local_connect net.Conn, url string, ctx *cli.Context) {
-	client, err := client.NewClient(url, local_connect, local_connect, true, "", true, config.VerboseFlag(ctx.Flags()).IsAssigned())
+	client, err := client.NewClient(url, local_connect, local_connect, true, "", true, config.VerboseFlag(ctx.Flags()).IsAssigned(), 0)
 	if err = client.Loop(); err != nil {
 		fmt.Printf("connection[%s %s] err: %v\n", local_connect.RemoteAddr().Network(), local_connect.RemoteAddr().String(), err)
 		log.GetLogger().Infof("connection[%s %s] err: %v\n", local_connect.RemoteAddr().Network(), local_connect.RemoteAddr().String(), err)

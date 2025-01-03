@@ -15,6 +15,15 @@ func getInstalledPluginsBoltPath() (string, error) {
 	return filepath.Join(pluginPath, "installed_plugins.db"), nil
 }
 
+func getPreInstalledPluginsBoltPath() (string, error) {
+	pluginPath, err := pathutil.GetPreInstalledPluginPath()
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(pluginPath, "installed_plugins.db"), nil
+}
+
 func getInstalledPluginsJSONPath() (string, error) {
 	pluginPath, err := pathutil.GetPluginPath()
 	if err != nil {

@@ -51,7 +51,7 @@ var (
 	pluginListReportInterval = 3600 * 24
 )
 
-type UpdateHandler func(name, version string) bool 
+type UpdateHandler func(name, version string) bool
 
 var (
 	pluginHealthScanTimer *timermanager.Timer
@@ -59,7 +59,7 @@ var (
 	pluginListReportTimer *timermanager.Timer
 	pluginUpdateTimer     *timermanager.Timer
 
-	updateHandler UpdateHandler
+	updateHandler     UpdateHandler
 	updateHandlerLock sync.Mutex
 )
 
@@ -452,10 +452,10 @@ func pluginUpdateCheck() {
 	}
 	pluginList := []PluginUpdateCheck{}
 	for _, pluginInfo := range pluginInfoList {
-		if (pluginInfo.PluginType() == PLUGIN_PERSIST || pluginInfo.PluginType() == PLUGIN_COMMANDER) && !pluginInfo.IsRemoved{
+		if (pluginInfo.PluginType() == PLUGIN_PERSIST || pluginInfo.PluginType() == PLUGIN_COMMANDER) && !pluginInfo.IsRemoved {
 			pluginList = append(pluginList, PluginUpdateCheck{
-				Name:     pluginInfo.Name,
-				Version:  pluginInfo.Version,
+				Name:    pluginInfo.Name,
+				Version: pluginInfo.Version,
 			})
 		}
 	}
@@ -467,8 +467,8 @@ func pluginUpdateCheck() {
 	osType := osutil.GetOsType()
 	arch, _ := GetArch()
 	pluginUpdateCheckRequest := PluginUpdateCheckRequest{
-		Os:   osType,
-		Arch: arch,
+		Os:     osType,
+		Arch:   arch,
 		Plugin: pluginList,
 	}
 
@@ -504,7 +504,7 @@ func pluginUpdateCheck() {
 		command := "acs-plugin-manager"
 		arguments := []string{"--exec", "-P", plugin.Name, "-n", plugin.Version, "-p", "--upgrade"}
 		mixedOutput := bytes.Buffer{}
-		exitCode, status, err := syncRunKillGroup("", command, arguments, &mixedOutput, &mixedOutput, plugin.Timeout + 5)
+		exitCode, status, err := syncRunKillGroup("", command, arguments, &mixedOutput, &mixedOutput, plugin.Timeout+5)
 		output := mixedOutput.String()
 		if len(output) > 1024 {
 			output = output[:1024]
@@ -609,7 +609,7 @@ func refreshTimer(timer *timermanager.Timer, nextInterval int) error {
 	return nil
 }
 
-func _findAllInstalledPlugins() ([]PluginInfo, error){
+func _findAllInstalledPlugins() ([]PluginInfo, error) {
 	installedPlugins, err := LoadInstalledPlugins()
 	if err != nil {
 		return nil, err

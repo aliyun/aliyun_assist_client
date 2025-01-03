@@ -12,15 +12,18 @@ import (
 
 	gomonkey "github.com/agiledragon/gomonkey/v2"
 	"github.com/aliyun/aliyun_assist_client/agent/clientreport"
+	"github.com/aliyun/aliyun_assist_client/agent/flagging"
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/common/fileutil"
 	libupdate "github.com/aliyun/aliyun_assist_client/common/update"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
 )
 
 func Test_safeUpdate(t *testing.T) {
+	flagging.InitConfig(logrus.New())
 	httpmock.Activate()
 	util.NilRequest.Set()
 	defer httpmock.DeactivateAndReset()
@@ -127,7 +130,7 @@ func Test_safeUpdate(t *testing.T) {
 			args:    theArgs,
 		},
 	}
-	guardDisableUpdate := gomonkey.ApplyFunc(isUpdatingDisabled, func() (bool, error) { return false, nil })
+	guardDisableUpdate := gomonkey.ApplyFunc(flagging.GetUpdatorUpdate, func() bool { return true })
 	guardDownloadPackage := gomonkey.ApplyFunc(libupdate.DownloadPackage, func(string, string, time.Duration) error { return nil })
 	guardCompareFileMD5 := gomonkey.ApplyFunc(libupdate.CompareFileMD5, func(string, string) error { return nil })
 	guardRemoveOldVersion := gomonkey.ApplyFunc(libupdate.RemoveOldVersion, func(string) error { return nil })
@@ -159,8 +162,8 @@ func Test_safeUpdate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.name == "disableUpdate" {
 				guardDisableUpdate.Reset()
-				guardDisableUpdate = gomonkey.ApplyFunc(isUpdatingDisabled, func() (bool, error) {
-					return true, errors.New("some error")
+				guardDisableUpdate = gomonkey.ApplyFunc(flagging.GetUpdatorUpdate, func() bool {
+					return false
 				})
 			}
 
@@ -218,7 +221,7 @@ func Test_safeUpdate(t *testing.T) {
 			// // 恢复
 			if tt.name == "disableUpdate" {
 				guardDisableUpdate.Reset()
-				guardDisableUpdate = gomonkey.ApplyFunc(isUpdatingDisabled, func() (bool, error) { return false, nil })
+				guardDisableUpdate = gomonkey.ApplyFunc(flagging.GetUpdatorUpdate, func() bool { return true })
 			}
 
 			if tt.name == "updatePathNotExist" {

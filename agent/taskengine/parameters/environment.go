@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"regexp"
 
+	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/taskerrors"
-	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/common/metaserver"
 	"github.com/aliyun/aliyun_assist_client/common/networkcategory"
 )
 
@@ -57,6 +58,5 @@ func retrieveInstanceName() (string, error) {
 		return "", fmt.Errorf("Agent is not able to retrieve instance name")
 	}
 
-	err, instanceName := util.HttpGet("http://100.100.100.200/latest/meta-data/instance/instance-name")
-	return instanceName, err
+	return metaserver.GetInstanceName(log.GetLogger())
 }

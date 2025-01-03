@@ -168,7 +168,7 @@ func dispatchRunTask(taskInfo models.RunTaskInfo) {
 				existedTask.taskInfo.InvokeVersion)
 			switch taskInfo.Repeat {
 			case models.RunTaskCron, models.RunTaskRate, models.RunTaskAt:
-				fetchLogger.Infof("Cancel periodic task with invocaVersion[%d] quietly", existedTask.taskInfo.InvokeVersion)
+				fetchLogger.Infof("Cancel periodic task with InvokeVersion[%d] quietly", existedTask.taskInfo.InvokeVersion)
 				cancelPeriodicTask(existedTask.taskInfo, true)
 			default:
 				fetchLogger.Warning("Existed task is not Period. New task is duplicately fetched, ignore it")
@@ -201,8 +201,8 @@ func dispatchRunTask(taskInfo models.RunTaskInfo) {
 			scheduleLogger.Error("Add task failed: ", err.Error())
 			return
 		}
-		pool := GetPool()
-		pool.RunTask(func() {
+		pool := GetDispatcher()
+		pool.PutTask(func() {
 			code, err := t.Run()
 			if code != 0 || err != nil {
 				metrics.GetTaskFailedEvent(
@@ -251,7 +251,7 @@ func dispatchStopTask(taskInfo models.RunTaskInfo) {
 		scheduledTask, ok := taskFactory.GetTask(taskInfo.TaskId)
 		if ok {
 			cancelLogger.Info("Cancel task and invocation")
-			scheduledTask.Cancel(false)
+			scheduledTask.Cancel(false, ok)
 			cancelLogger.Info("Canceled task and invocation")
 		} else {
 			response, err := sendStoppedOutput(taskInfo.TaskId, taskInfo.InvokeVersion, 0, 0, 0, 0, "", stopReasonKilled, nil)
@@ -306,8 +306,8 @@ func dispatchTestTask(taskInfo models.RunTaskInfo) {
 		}
 
 		scheduleLogger.Info("Schedule testing task to be pre-checked")
-		pool := GetPrecheckPool()
-		pool.RunTask(func() {
+		pool := GetDispatcher()
+		pool.PutTask(func() {
 			t.PreCheck(true)
 		})
 		scheduleLogger.Info("Scheduled testing task to be pre-checked")
@@ -337,8 +337,8 @@ func (s *PeriodicTaskSchedule) startExclusiveInvocation() {
 	invocateLogger.Info("Schedule new invocation of periodic task")
 	// (2) Every time of invocation need to add itself into TaskFactory at first.
 	taskFactory.AddTask(s.reusableInvocation)
-	pool := GetPool()
-	pool.RunTask(func() {
+	pool := GetDispatcher()
+	pool.PutTask(func() {
 		// reusableInvocation may be canceled in previous Run,
 		// reusableInvocation.ResetCancel() is called to reset the canceled flag.
 		s.reusableInvocation.ResetCancel()
@@ -507,7 +507,7 @@ func cancelPeriodicTask(taskInfo models.RunTaskInfo, quietly bool) error {
 
 	// 1. Check whether task is registered in local storage
 	periodicTaskSchedule, ok := _periodicTaskSchedules[taskInfo.TaskId]
-	if !ok && !quietly {
+	if !ok {
 		response, err := sendStoppedOutput(taskInfo.TaskId, taskInfo.InvokeVersion, 0, 0, 0, 0, "", stopReasonKilled, nil)
 		cancelLogger.WithFields(logrus.Fields{
 			"response": response,
@@ -524,30 +524,16 @@ func cancelPeriodicTask(taskInfo models.RunTaskInfo, quietly bool) error {
 	delete(_periodicTaskSchedules, taskInfo.TaskId)
 	cancelLogger.Infof("Deregistered periodic task")
 
-	// 4. Cancel existing invocation of periodic task and send ACK
-	runningInvocation, ok := GetTaskFactory().GetTask(taskInfo.TaskId)
-	if ok {
-		cancelLogger.Infof("Cancel running invocation of periodic task")
-		runningInvocation.Cancel(quietly)
-		cancelLogger.Infof("Canceled running invocation of periodic task")
+	// 4. Cancel periodic task, send ACK if invocation is existing 
+	_, ok = GetTaskFactory().GetTask(taskInfo.TaskId)
+	cancelLogger.WithField("stillRunning", ok).Info("Cancel periodic task")
+	err := periodicTaskSchedule.reusableInvocation.Cancel(quietly, ok)
+	if err != nil {
+		cancelLogger.WithError(err).Error("Canceled periodic task failed")
 	} else {
-		cancelLogger.Infof("Not need to cancel running invocation of periodic task")
-		// Since no running
-		if !quietly {
-			lastInvocation := periodicTaskSchedule.reusableInvocation
-			var output string
-			if lastInvocation.disableOutputRingbuffer {
-				output = lastInvocation.getReportString(lastInvocation.output)
-			} else {
-				lastInvocation.droped = lastInvocation.outputRingbuffer.Dropped()
-				output = string(lastInvocation.outputRingbuffer.ReadAll())
-			}
-			sendStoppedOutput(lastInvocation.taskInfo.TaskId, lastInvocation.taskInfo.InvokeVersion,
-				lastInvocation.monotonicStartTimestamp, lastInvocation.monotonicEndTimestamp,
-				lastInvocation.exit_code, lastInvocation.droped, output, stopReasonKilled, nil)
-			cancelLogger.Infof("Sent canceled ACK with output of last invocation")
-		}
+		cancelLogger.Infof("Canceled periodic task")
 	}
+
 	return nil
 }
 

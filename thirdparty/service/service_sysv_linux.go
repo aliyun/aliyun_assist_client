@@ -96,6 +96,8 @@ func (s *sysv) Install() error {
 	if err != nil {
 		return err
 	}
+	// Run sync to ensure that the conf file is saved to disk.
+	f.Sync()
 
 	if err = os.Chmod(confPath, 0755); err != nil {
 		return err

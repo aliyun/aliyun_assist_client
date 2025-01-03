@@ -1,6 +1,5 @@
 package machineid
 
-
 const (
 	// dbusPath is the default path for dbus machine id.
 	dbusPath = "/var/lib/dbus/machine-id"

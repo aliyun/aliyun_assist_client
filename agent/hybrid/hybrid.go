@@ -20,54 +20,59 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/process"
 	"github.com/aliyun/aliyun_assist_client/agent/version"
+	"github.com/aliyun/aliyun_assist_client/common/apiserver"
+	"github.com/aliyun/aliyun_assist_client/common/httpbase"
+	"github.com/aliyun/aliyun_assist_client/common/metaserver"
+	"golang.org/x/net/http/httpguts"
 )
 
 const (
 	errCodeFingerprintDuplicate = "fingerprint_duplicate"
+	errCodeEcsRegDisabled       = "ecs_registration_disabled"
 )
 
 func Register(region string, code string, id string, name string, networkmode string, need_restart bool, tags []Tag) (ret bool) {
-	log.GetLogger().Infoln(region, code, id, name)
-	errmsg := ""
-	defer func() {
-		msgkey := "info"
-		status := "success"
-		if !ret {
-			msgkey = "errmsg"
-			status = "failed"
-		}
-		metrics.GetHybridRegisterEvent(
-			ret,
-			"status", status,
-			msgkey, errmsg,
-		).ReportEvent()
-	}()
+	logger := log.GetLogger().WithField("action", "register")
+	logger.Infoln(region, code, id, name)
 
-	ret = true
 	if instance.IsHybrid() {
 		fmt.Println("error, agent already register, deregister first")
-		errmsg = "error, agent already register, deregister first"
-		log.GetLogger().Infoln("error, agent already register, deregister first")
-		return false
+		logger.Infoln("error, agent already register, deregister first")
+		return
 	}
+	ret = false
 	hostname, _ := os.Hostname()
 	osType := osutil.GetOsType()
+
+	defer func() {
+		if ret {
+			metrics.GetHybridRegisterEvent().ReportEventSync()
+		}
+	}()
+
+	// Try to get instanceId from metaserver.
+	instanceCh := make(chan string)
+	go func() {
+		// Default timeout in GetInstanceId() is 5 seconds. It's too long.
+		instanceId, err := metaserver.GetInstanceId(logger, httpbase.WithTimeoutInSeconds(2))
+		if err != nil {
+			instanceId = ""
+		}
+		instanceCh <- instanceId
+	}()
 
 	ip, _ := osutil.ExternalIP()
 	var pub, pri bytes.Buffer
 	err := genRsaKey(&pub, &pri)
 	if err != nil {
-		errmsg = fmt.Sprintf("generate rsa key error: %s", err.Error())
 		fmt.Println("error, generate rsa key failed")
-		return false
+		return
 	}
 	encodeString := base64.StdEncoding.EncodeToString(pub.Bytes())
 	mid, _ := instance.MachineID()
 	fingerprint, err := instance.GenerateFingerprint()
 	if err != nil {
-		errmsg = fmt.Sprintf("generate fingerprint failed: %v", err)
-		fmt.Println(errmsg)
-		ret = false
+		fmt.Printf("generate fingerprint failed: %v", err)
 		return
 	}
 	info := &RegisterInfo{
@@ -86,13 +91,26 @@ func Register(region string, code string, id string, name string, networkmode st
 		Tag:             tags,
 	}
 
-	resp, err := doRegister(info, networkmode)
+	headers := make(map[string]string)
+	// Put instanceId into headers if it exists.
+	instanceId := <-instanceCh
+	if len(instanceId) > 0 && len(instanceId) <= 32 && httpguts.ValidHeaderFieldValue(instanceId) {
+		headers["X-Client-Instance-ID"] = instanceId
+	} else {
+		logger.Info("invalid ecs instanceId: ", instanceId)
+		headers["X-Client-Instance-ID"] = "unknown"
+	}
+
+	resp, err := doRegister(info, networkmode, headers)
 	if err != nil {
 		fmt.Println("Register failed: ", err)
 		return
 	}
 	if resp.Code == 200 {
 		instance.SaveInstanceInfo(resp.InstanceId, fingerprint, region, pub.String(), pri.String(), networkmode)
+	} else if resp.ErrCode == errCodeEcsRegDisabled {
+		fmt.Println("The ECS instance is forbidden from registering as a managed instance.")
+		return
 	} else if resp.ErrCode == errCodeFingerprintDuplicate {
 		fmt.Println("Fingerprint is duplicated and needs to be regenerated")
 		fingerprint, err = instance.GenerateFingerprintIgnoreSavedHash()
@@ -101,7 +119,7 @@ func Register(region string, code string, id string, name string, networkmode st
 			return
 		}
 		info.Fingerprint = fingerprint
-		resp, err = doRegister(info, networkmode)
+		resp, err = doRegister(info, networkmode, headers)
 		if err == nil && resp.Code == 200 {
 			instance.SaveInstanceInfo(resp.InstanceId, fingerprint, region, pub.String(), pri.String(), networkmode)
 		} else {
@@ -113,38 +131,27 @@ func Register(region string, code string, id string, name string, networkmode st
 		return
 	}
 
-	errmsg = fmt.Sprintf("register ok, instanceid=%s", resp.InstanceId)
 	fmt.Println("register ok")
 	fmt.Println("instance id:", resp.InstanceId)
 	if need_restart {
 		restartService()
 	}
 	fmt.Println("restart service")
+	ret = true
 	return
 }
 
 func UnRegister(need_restart bool) bool {
-	errmsg := ""
-	defer func() {
-		if len(errmsg) > 0 {
-			metrics.GetHybridUnregisterEvent(
-				false,
-				"status", "failed",
-				"errormsg", errmsg,
-			).ReportEvent()
-		} else {
-			metrics.GetHybridUnregisterEvent(
-				true,
-				"status", "success",
-			).ReportEvent()
-		}
-	}()
+	if !instance.IsHybrid() {
+		fmt.Println("There's no need to unregister it, as it is not a hybrid instance.")
+		return false
+	}
+	metrics.GetHybridUnregisterEvent().ReportEvent()
 
 	url := util.GetDeRegisterService()
 	log.GetLogger().Info("deregister service url: ", url)
 	response, err := util.HttpPost(url, "", "")
 	if err != nil {
-		errmsg = fmt.Sprintf("deregister request err: %s", err.Error())
 		fmt.Println(response)
 	}
 	ret := true
@@ -158,7 +165,6 @@ func UnRegister(need_restart bool) bool {
 	}
 
 	if !ret {
-		errmsg = fmt.Sprintf("unregister failed, responsecode=%d", unregister_response.Code)
 		fmt.Println("unregister failed")
 		fmt.Println(response)
 	} else {
@@ -192,11 +198,12 @@ func CheckFingerprint() {
 	}
 }
 
-func doRegister(info *RegisterInfo, networkmode string) (resp registerResponse, err error) {
+func doRegister(info *RegisterInfo, networkmode string, headers map[string]string) (resp registerResponse, err error) {
 	jsonBytes, _ := json.Marshal(*info)
 	url := util.GetRegisterService(info.RegionId, networkmode)
 	log.GetLogger().Info("register service url: ", url)
-	content, err := util.HttpPost(url, string(jsonBytes), "")
+
+	content, err := apiserver.HttpPostWithSpecifiedHeader(log.GetLogger(), url, string(jsonBytes), "", headers)
 	if err != nil {
 		log.GetLogger().Info("register request failed: ", err)
 		return

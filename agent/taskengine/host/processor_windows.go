@@ -6,6 +6,7 @@ import (
 
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/taskerrors"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/agent/util/paramstore"
 	"github.com/aliyun/aliyun_assist_client/agent/util/process"
 )
 
@@ -17,9 +18,9 @@ var (
 func (p *HostProcessor) checkCredentials() (bool, error) {
 	if err := process.IsUserValid(p.Username, p.WindowsUserPassword); err != nil {
 		// TODO: REFACTORME: Unify so many concrete error objects
-		if errors.Is(err, util.ErrRoleNameFailed) ||
-			errors.Is(err, util.ErrParameterStoreNotAccessible) ||
-			errors.Is(err, util.ErrParameterFailed) {
+		if errors.Is(err, paramstore.ErrRoleNameFailed) ||
+			errors.Is(err, paramstore.ErrParameterStoreNotAccessible) ||
+			errors.Is(err, paramstore.ErrParameterFailed) {
 			return false, taskerrors.NormalizeValidationError(err.Error(), nil)
 		} else {
 			return false, taskerrors.NewInvalidUsernameOrPasswordError(err, fmt.Sprintf("UsernameOrPasswordInvalid_%s", p.Username))

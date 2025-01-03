@@ -14,6 +14,7 @@ import (
 	logrusr "github.com/aliyun/aliyun_assist_client/thirdparty/bombsimon/logrusr/v3"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/service"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/single"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 	"k8s.io/klog/v2"
 
 	"github.com/aliyun/aliyun_assist_client/agent/channel"
@@ -39,10 +40,12 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/util/daemon"
 	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
+	"github.com/aliyun/aliyun_assist_client/agent/util/powerutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/wrapgo"
 	"github.com/aliyun/aliyun_assist_client/agent/version"
 	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 	commander_server "github.com/aliyun/aliyun_assist_client/interprocess/commander/server"
+	configure_server "github.com/aliyun/aliyun_assist_client/interprocess/configure/server"
 	cryptdata_server "github.com/aliyun/aliyun_assist_client/interprocess/cryptdata/server"
 	"github.com/aliyun/aliyun_assist_client/interprocess/messagebus/buses"
 	messagebus_server "github.com/aliyun/aliyun_assist_client/interprocess/messagebus/server"
@@ -274,6 +277,8 @@ func (p *program) run() {
 	G_Running = true
 	G_StopEvent = make(chan struct{})
 
+	initConfiguration(log.GetLogger().WithField("phase", "InitConfig"))
+
 	if err := timermanager.InitTimerManager(); err != nil {
 		log.GetLogger().Fatalln("Failed to initialize timer manager: " + err.Error())
 		return
@@ -372,6 +377,7 @@ func (p *program) run() {
 			[]messagebus_server.RegisterFunc{
 				cryptdata_server.RegisterAssistAgentServer,
 				commander_server.RegisterAssistAgentServer,
+				configure_server.RegisterAssistAgentServer,
 			},
 		)
 	})
@@ -470,7 +476,7 @@ func (p *program) Stop(s service.Service) error {
 
 func reportAgentStop(ctx context.Context) {
 	reason := "unknown"
-	shutdown, err := osutil.IsSystemShutdown(ctx)
+	shutdown, err := powerutil.IsSystemShutdown(ctx)
 	if err != nil {
 		log.GetLogger().WithError(err).Error("IsSystemShutdown")
 	} else if shutdown {
@@ -625,4 +631,11 @@ func runRootCommand(ctx *cli.Context, args []string) error {
 		return err
 	}
 	return nil
+}
+
+func initConfiguration(logger logrus.FieldLogger) {
+	flagging.InitConfig(logger)
+	flagging.RegisterCallbackAndApply(logger, map[string]flagging.Callback{
+		flagging.ASSIST_DAEMON_ACTIVE: daemon.OperateAssistDaemon,
+	})
 }

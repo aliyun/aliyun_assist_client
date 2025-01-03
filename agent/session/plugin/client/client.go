@@ -17,6 +17,7 @@ import (
 
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/log"
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/message"
+	"go.uber.org/atomic"
 
 	"github.com/containerd/console"
 	"github.com/creack/goselect"
@@ -35,6 +36,8 @@ const (
 	sendPackageSize     = 2048                                                   // 发送的数据包大小上限，单位 B
 	defaultSendSpeed    = 200                                                    // 默认的最大数据发送速率，单位 kbps
 	defaultSendInterval = 1000 / (defaultSendSpeed * 1024 / 8 / sendPackageSize) // writeloop的循环间隔时间 单位ms
+
+	minimumIdleTimeout = 60
 )
 
 // 状态码为5时可能的错误码
@@ -66,10 +69,21 @@ type Client struct {
 	verbosemode              bool
 	real_connected           bool
 	sendInterval             int // ms, interval between writeLoop, for limit send speed
+
+	// If the client is idle for more than idletimeout seconds, the connection
+	// will be closed.
+	// idleTimeout only works for session, the minimum is minimumIdleTimeout(60s).
+	idleTimeout int32 // seond
+
+	// lastDataTimestampOffset is the difference between the timestamp of the
+	// last received or sent data packet and the timestamp of the Client startup.
+	lastDataTimestampOffset atomic.Int32 // second
+	// startTimestamp is the timestamp of the Client startup.
+	startTimestamp time.Time
 }
 
-func NewClient(inputURL string, input io.ReadCloser, output io.Writer, portForward bool, token string, rawmode bool, verbosemode bool) (*Client, error) {
-	return &Client{
+func NewClient(inputURL string, input io.ReadCloser, output io.Writer, portForward bool, token string, rawmode bool, verbosemode bool, idleTimeout int32) (*Client, error) {
+	c := &Client{
 		Dialer:                   &websocket.Dialer{},
 		URL:                      inputURL,
 		token:                    token,
@@ -83,14 +97,14 @@ func NewClient(inputURL string, input io.ReadCloser, output io.Writer, portForwa
 		verbosemode:              verbosemode,
 		poison:                   make(chan bool),
 		sendInterval:             defaultSendInterval,
-	}, nil
-}
+		startTimestamp:           time.Now(),
+	}
+	if idleTimeout > 0 && idleTimeout < minimumIdleTimeout {
+		idleTimeout = minimumIdleTimeout
+	}
+	c.idleTimeout = idleTimeout
 
-func (c *Client) write(data []byte) error {
-
-	c.WriteMutex.Lock()
-	defer c.WriteMutex.Unlock()
-	return c.Conn.WriteMessage(websocket.BinaryMessage, data)
+	return c, nil
 }
 
 // Connect tries to dial a websocket server
@@ -146,6 +160,10 @@ func (c *Client) Loop() error {
 				fmt.Printf("capture stdin failed %s\r\n", err)
 			}
 			defer func() {
+				if e := recover(); e != nil {
+					fmt.Fprintln(os.Stderr, e)
+					fmt.Fprintln(os.Stderr, string(debug.Stack()))
+				}
 				terminal.Restore(stdin, oldState)
 				if !c.PortForward {
 					os.Exit(1)
@@ -162,6 +180,10 @@ func (c *Client) Loop() error {
 				return fmt.Errorf("Error setting raw terminal: %v", err)
 			}
 			defer func() {
+				if e := recover(); e != nil {
+					fmt.Fprintln(os.Stderr, e)
+					fmt.Fprintln(os.Stderr, string(debug.Stack()))
+				}
 				term.Reset()
 				if !c.PortForward {
 					os.Exit(1)
@@ -172,6 +194,10 @@ func (c *Client) Loop() error {
 	} else {
 		log.GetLogger().Infoln("under rawmode")
 		defer func() {
+			if e := recover(); e != nil {
+				fmt.Fprintln(os.Stderr, e)
+				fmt.Fprintln(os.Stderr, string(debug.Stack()))
+			}
 			if !c.PortForward {
 				os.Exit(1)
 			}
@@ -385,6 +411,7 @@ func (c *Client) readLoop(wg *sync.WaitGroup) int {
 			case message.OutputStreamDataMessage: // data
 				c.real_connected = true
 				c.Output.Write(msg.Msg.Payload)
+				c.lastDataTimestampOffset.Store(int32(time.Since(c.startTimestamp).Seconds()))
 				break
 			case message.StatusDataChannel: // data
 				if c.ProcessStatusDataChannel(msg.Msg.Payload) != nil {
@@ -492,6 +519,49 @@ func (c *Client) writeLoop(wg *sync.WaitGroup) int {
 	pr := NewEscapeProxy(reader, c.EscapeKeys)
 	defer reader.Close()
 
+	if c.idleTimeout > 0 {
+		log.GetLogger().Infof("Idle timeout %d seconds.", c.idleTimeout)
+		go func() {
+			// Init timer as 1 seconds,
+			timer := time.NewTimer(time.Second)
+			defer timer.Stop()
+			for {
+				select {
+				case <-c.poison:
+					return
+				case <-timer.C:
+					elapsedTime := int32(time.Since(c.startTimestamp).Seconds()) - c.lastDataTimestampOffset.Load()
+					if elapsedTime >= c.idleTimeout {
+						// Idle for too long
+						log.GetLogger().Infoln("Idle for too long, close client.")
+						c.SendCloseMessage()
+						openPoison(fname, c.poison)
+					}
+					timer.Reset(time.Duration(c.idleTimeout - elapsedTime))
+				}
+
+			}
+		}()
+		go func() {
+			// minimumIdleTimeout is 60s, so the period of sending keep-alive
+			// package is set to 60s, it does not need to be set too small.
+			// But it cannot exceed 180 seconds, because the Agent will
+			// disconnect if agent does not receive a data packet within 180s.
+			timer := time.NewTicker(time.Minute)
+			defer timer.Stop()
+			for {
+				select {
+				case <-c.poison:
+					return
+				case <-timer.C:
+					if err := c.SendKeepAliveDataMessage(); err != nil {
+						log.GetLogger().Error("Send keep alive package failed: ", err)
+					}
+				}
+			}
+		}()
+	}
+
 	for {
 		select {
 		case <-c.poison:
@@ -580,8 +650,42 @@ func (c *Client) SendStreamDataMessage(inputData []byte) (err error) {
 		return err
 	}
 
+	c.lastDataTimestampOffset.Store(int32(time.Since(c.startTimestamp).Seconds()))
+
 	if c.verbosemode {
 		log.GetLogger().Println("SendStreamDataMessage:", msg)
+	}
+
+	c.StreamDataSequenceNumber = c.StreamDataSequenceNumber + 1
+	return nil
+}
+
+func (c *Client) SendKeepAliveDataMessage() (err error) {
+	agentMessage := &message.Message{
+		MessageType:    message.InputStreamDataMessage,
+		SchemaVersion:  "1.01",
+		CreatedDate:    uint64(time.Now().UnixNano() / 1000000),
+		SequenceNumber: c.StreamDataSequenceNumber,
+		PayloadLength:  0,
+		Payload:        []byte{},
+	}
+
+	if c.verbosemode {
+		log.GetLogger().Infoln("SendKeepAliveDataMessage num: ", c.StreamDataSequenceNumber)
+	}
+
+	msg, err := agentMessage.Serialize()
+	if err != nil {
+		return fmt.Errorf("cannot serialize StreamData message %v, %v", agentMessage, err)
+	}
+
+	if err = c.sendMessage(msg, websocket.BinaryMessage); err != nil {
+		log.GetLogger().Errorf("Error sending keep alive message %v", err)
+		return err
+	}
+
+	if c.verbosemode {
+		log.GetLogger().Println("SendKeepAliveDataMessage:", msg)
 	}
 
 	c.StreamDataSequenceNumber = c.StreamDataSequenceNumber + 1
@@ -646,6 +750,7 @@ func (c *Client) SendResizeDataMessage(inputData []byte) (err error) {
 		return err
 	}
 
+	c.lastDataTimestampOffset.Store(int32(time.Since(c.startTimestamp).Seconds()))
 	c.StreamDataSequenceNumber = c.StreamDataSequenceNumber + 1
 	return nil
 }

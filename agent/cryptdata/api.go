@@ -48,6 +48,13 @@ type ParamInfo struct {
 	ExpiredTimestamp int64
 }
 
+type ParamValueInfo struct {
+	SecretName string
+	SecretValue string
+	CreatedTimestamp int64
+	ExpiredTimestamp int64
+}
+
 var (
 	clearExpiredTimer_    *timermanager.Timer
 	clearExpiredInterval_ = 60

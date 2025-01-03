@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"reflect"
 	"testing"
+	"net/http"
 
 	"github.com/agiledragon/gomonkey/v2"
 	"github.com/jarcoal/httpmock"
@@ -13,6 +14,9 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/internal/testutil"
+	"github.com/aliyun/aliyun_assist_client/common/apiserver"
+	"github.com/aliyun/aliyun_assist_client/common/requester"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 )
 
 func TestKeyPair(t *testing.T) {
@@ -24,24 +28,28 @@ func TestKeyPair(t *testing.T) {
 }
 
 func TestRegister(t *testing.T) {
+	guard_transport := gomonkey.ApplyFunc(requester.GetHTTPTransport, func(logrus.FieldLogger) *http.Transport {
+		transport, _ := http.DefaultTransport.(*http.Transport)
+		return transport
+	})
+	defer guard_transport.Reset()
+
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
 	util.NilRequest.Set()
 	defer util.NilRequest.Clear()
-
-	region := "cn-test100"
-
+	const region = "cn-test100"
 	testutil.MockMetaServer(region)
 
 	guard_1 := gomonkey.ApplyFunc(util.GetServerHost, func() string {
-		return region + util.HYBRID_DOMAIN
+		return region + apiserver.HybridDomainFirst
 	} )
 	defer guard_1.Reset()
 	var m *metrics.MetricsEvent
 	guard_4 := gomonkey.ApplyMethod(reflect.TypeOf(m), "ReportEvent", func(me *metrics.MetricsEvent) {})
 	defer guard_4.Reset()
 
-	url := "https://" + region + util.HYBRID_DOMAIN + "/luban/api/instance/register";
+	url := "https://" + region + apiserver.HybridDomainFirst + "/luban/api/instance/register";
 	httpmock.RegisterResponder("POST", url,
 		httpmock.NewStringResponder(200, `{"code":200,"instanceId":"xx-123"}`))
 	url = "https://" + region + util.HYBRID_DOMAIN_VPC + "/luban/api/instance/register";

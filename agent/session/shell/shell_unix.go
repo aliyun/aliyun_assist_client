@@ -4,7 +4,7 @@
 package shell
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -14,11 +14,10 @@ import (
 	"github.com/creack/pty"
 	"github.com/google/shlex"
 
-	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/session/channel"
-	"github.com/aliyun/aliyun_assist_client/agent/session/message"
 	"github.com/aliyun/aliyun_assist_client/agent/util/process"
 	"github.com/aliyun/aliyun_assist_client/common/executil"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 )
 
 type ShellPlugin struct {
@@ -32,8 +31,12 @@ type ShellPlugin struct {
 	cmd          *exec.Cmd
 	first_ws_col uint32
 	first_ws_row uint32
-	flowLimit    int
 	sendInterval int
+
+	exitCtx  context.Context
+	exitFunc context.CancelCauseFunc
+
+	logger logrus.FieldLogger
 }
 
 const (
@@ -86,14 +89,14 @@ func StartPty(plugin *ShellPlugin) (err error) {
 	if err != nil {
 		return err
 	}
-	log.GetLogger().Infof("Home directory of user `%s`: %s", default_user, userInfo.HomeDir)
+	plugin.logger.Infof("Home directory of user `%s`: %s", default_user, userInfo.HomeDir)
 	runAsUserHomeEnvVariable := fmt.Sprintf("HOME=%s", userInfo.HomeDir)
 	plugin.cmd.Env = append(plugin.cmd.Env, runAsUserHomeEnvVariable)
 	plugin.cmd.Dir = userInfo.HomeDir
 
 	ptyFile, err := pty.Start(plugin.cmd)
 	if err != nil {
-		log.GetLogger().Errorf("Failed to start pty: %s\n", err)
+		plugin.logger.Errorf("Failed to start pty: %s\n", err)
 		return fmt.Errorf("Failed to start pty: %s\n", err)
 	}
 	plugin.stdin = ptyFile
@@ -109,10 +112,10 @@ func StartPty(plugin *ShellPlugin) (err error) {
 func (p *ShellPlugin) waitPid() {
 	go func() {
 		defer func() {
-			log.GetLogger().Infoln("stop in run waitPid")
+			p.logger.Infoln("stop in run waitPid")
 
 			if err := recover(); err != nil {
-				log.GetLogger().Errorf("Error occurred while executing plugin %s: \n%v", p.id, err)
+				p.logger.Errorf("Error occurred while executing plugin %s: \n%v", p.id, err)
 			}
 		}()
 
@@ -122,7 +125,7 @@ func (p *ShellPlugin) waitPid() {
 }
 
 func (p *ShellPlugin) stop() (err error) {
-	log.GetLogger().Info("Stopping pty")
+	p.logger.Info("Stopping pty")
 	if p.stdin == nil {
 		return nil
 	}
@@ -147,61 +150,16 @@ func (p *ShellPlugin) SetSize(ws_col, ws_row uint32) (err error) {
 	}
 
 	if err := pty.Setsize(p.stdin, &winSize); err != nil {
-		log.GetLogger().Errorf("set pty size failed: %s", err)
+		p.logger.Errorf("set pty size failed: %s", err)
 		return fmt.Errorf("set pty size failed: %s", err)
 	}
 	return nil
 }
 
-func (p *ShellPlugin) InputStreamMessageHandler(streamDataMessage message.Message) error {
-	if p.stdin == nil || p.stdout == nil {
-		// This is to handle scenario when cli/console starts sending size data but pty has not been started yet
-		// Since packets are rejected, cli/console will resend these packets until pty starts successfully in separate thread
-		log.GetLogger().Tracef("Pty unavailable. Reject incoming message packet")
-		return nil
-	}
-
-	switch streamDataMessage.MessageType {
-	case message.InputStreamDataMessage:
-		// log.GetLogger().Traceln("Input message received: ", streamDataMessage.Payload)
-		if _, err := p.stdin.Write(streamDataMessage.Payload); err != nil {
-			log.GetLogger().Errorf("Unable to write to stdin, err: %v.", err)
-			return err
-		}
-		break
-	case message.SetSizeDataMessage:
-		var size SizeData
-		if err := json.Unmarshal(streamDataMessage.Payload, &size); err != nil {
-			log.GetLogger().Errorf("Invalid size message: %s", err)
-			return err
-		}
-		// log.GetLogger().Tracef("Resize data received: cols: %d, rows: %d", size.Cols, size.Rows)
-		if err := p.SetSize(size.Cols, size.Rows); err != nil {
-			log.GetLogger().Errorf("Unable to set pty size: %s", err)
-			return err
-		}
-		break
-	case message.StatusDataMessage:
-		if len(streamDataMessage.Payload) > 0 {
-			code, err := message.BytesToIntU(streamDataMessage.Payload[0:1])
-			if err == nil {
-				if code == 7 { // 设置agent的发送速率
-					speed, err := message.BytesToIntU(streamDataMessage.Payload[1:]) // speed 单位是 bps
-					if speed == 0 {
-						break
-					}
-					if err != nil {
-						log.GetLogger().Errorf("Invalid flowLimit: %s", err)
-						return err
-					}
-					p.sendInterval = 1000 / (speed / 8 / sendPackageSize)
-					log.GetLogger().Infof("Set send speed, channelId[%s] speed[%d]bps sendInterval[%d]ms\n", p.id, speed, p.sendInterval)
-				}
-			} else {
-				log.GetLogger().Errorf("Parse status code err: %s", err)
-			}
-		}
-		break
+func (p *ShellPlugin) onInputStreamData(payload []byte) error {
+	if _, err := p.stdin.Write(payload); err != nil {
+		p.logger.Errorf("Unable to write to stdin, err: %v.", err)
+		return err
 	}
 	return nil
 }

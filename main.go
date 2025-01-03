@@ -25,6 +25,7 @@ func main() {
 	if listContainersCmd != nil {
 		rootCmd.AddSubCommand(listContainersCmd)
 	}
+	rootCmd.AddSubCommand(configureSubCmd)
 
 	rootCmd.Execute(ctx, os.Args[1:])
 }

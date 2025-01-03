@@ -230,36 +230,26 @@ func GetTaskWarnEvent(keywords ...string) *MetricsEvent {
 }
 
 // 混合云系统
-func GetHybridRegisterEvent(success bool, keywords ...string) *MetricsEvent {
+func GetHybridRegisterEvent() *MetricsEvent {
 	event := &MetricsEvent{
 		EventId:     EVENT_HYBRID_REGISTER,
 		Category:    EVENT_CATEGORY_HYBRID,
 		SubCategory: EVENT_SUBCATEGORY_HYBRID_REGISTER,
+		EventLevel:  EVENT_LEVEL_INFO,
 		EventTime:   time.Now().UnixNano() / 1e6,
 		Common:      getCommonInfoStr(),
-		KeyWords:    genKeyWordsStr(keywords...),
-	}
-	if success {
-		event.EventLevel = EVENT_LEVEL_INFO
-	} else {
-		event.EventLevel = EVENT_LEVEL_ERROR
 	}
 	return event
 }
 
-func GetHybridUnregisterEvent(success bool, keywords ...string) *MetricsEvent {
+func GetHybridUnregisterEvent() *MetricsEvent {
 	event := &MetricsEvent{
 		EventId:     EVENT_HYBRID_UNREGISTER,
 		Category:    EVENT_CATEGORY_HYBRID,
 		SubCategory: EVENT_SUBCATEGORY_HYBRID_UNREGISTER,
+		EventLevel:  EVENT_LEVEL_INFO,
 		EventTime:   time.Now().UnixNano() / 1e6,
 		Common:      getCommonInfoStr(),
-		KeyWords:    genKeyWordsStr(keywords...),
-	}
-	if success {
-		event.EventLevel = EVENT_LEVEL_INFO
-	} else {
-		event.EventLevel = EVENT_LEVEL_ERROR
 	}
 	return event
 }
@@ -318,12 +308,12 @@ func GetMemOverloadEvent(keywords ...string) *MetricsEvent {
 
 func GetPerfSampleEvent(keywords ...string) *MetricsEvent {
 	event := &MetricsEvent{
-		EventId:     EVENT_PERF_SAMPLE,
-		Category:    EVENT_CATEGORY_PERF,
-		EventLevel:  EVENT_LEVEL_INFO,
-		EventTime:   time.Now().UnixNano() / 1e6,
-		Common:      getCommonInfoStr(),
-		KeyWords:    genKeyWordsStr(keywords...),
+		EventId:    EVENT_PERF_SAMPLE,
+		Category:   EVENT_CATEGORY_PERF,
+		EventLevel: EVENT_LEVEL_INFO,
+		EventTime:  time.Now().UnixNano() / 1e6,
+		Common:     getCommonInfoStr(),
+		KeyWords:   genKeyWordsStr(keywords...),
 	}
 	return event
 }

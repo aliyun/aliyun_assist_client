@@ -33,13 +33,14 @@ type sendFileInfo struct {
 }
 
 type tasks struct {
-	Code          int                      `json:"code"`
-	RunTasks      []taskInfo               `json:"run"`
-	StopTasks     []taskInfo               `json:"stop"`
-	TestTasks     []taskInfo               `json:"test"`
-	SendFileTasks []sendFileInfo           `json:"file"`
-	SessionTasks  []models.SessionTaskInfo `json:"session"`
-	InstanceId    string                   `json:"instanceId"`
+	Code                 int                      `json:"code"`
+	RunTasks             []taskInfo               `json:"run"`
+	StopTasks            []taskInfo               `json:"stop"`
+	TestTasks            []taskInfo               `json:"test"`
+	SendFileTasks        []sendFileInfo           `json:"file"`
+	SessionTasks         []models.SessionTaskInfo `json:"session"`
+	InstanceId           string                   `json:"instanceId"`
+	ConcurrencyTaskQuota int                      `json:"concurrencyTaskQuota"`
 }
 
 type taskCollection struct {
@@ -147,10 +148,12 @@ func FetchTaskList(reason FetchReason, taskId string, taskType int, isColdstart 
 		if taskId != "" {
 			url = url + "&taskId=" + taskId
 		}
+		concurrency := GetDispatcher().Concurrency()
+		concurrencyHardLimit := GetDispatcher().MaxConcurrency()
 		// Append Unix timestamp and timezone name of current wall clock
 		currentTime, currentOffsetFromUTC, timezoneName := timetool.NowWithTimezoneName()
 		escapedTimezoneName := neturl.QueryEscape(timezoneName)
-		url += fmt.Sprintf("&currentTime=%d&offset=%d&timeZone=%s", timetool.ToAccurateTime(currentTime), currentOffsetFromUTC, escapedTimezoneName)
+		url += fmt.Sprintf("&currentTime=%d&offset=%d&timeZone=%s&concurrency=%d&concurrencyHardLimit=%d", timetool.ToAccurateTime(currentTime), currentOffsetFromUTC, escapedTimezoneName, concurrency, concurrencyHardLimit)
 	}
 
 	var err error

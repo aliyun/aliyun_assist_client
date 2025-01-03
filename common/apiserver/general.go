@@ -1,22 +1,19 @@
 package apiserver
 
 import (
-	"errors"
-	"fmt"
-	"io"
-	"os"
-	"path/filepath"
-	"strings"
-	"sync"
-	"crypto/x509"
 	"crypto/tls"
+	"crypto/x509"
+	"errors"
+	"sync"
 
+	"github.com/aliyun/aliyun_assist_client/agent/flagging"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
-	"github.com/kirinlabs/HttpRequest"
 	"go.uber.org/atomic"
 
+	"github.com/aliyun/aliyun_assist_client/common/httpbase"
+	"github.com/aliyun/aliyun_assist_client/common/httputil"
+	"github.com/aliyun/aliyun_assist_client/common/metaserver"
 	"github.com/aliyun/aliyun_assist_client/common/networkcategory"
-	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 	"github.com/aliyun/aliyun_assist_client/common/requester"
 )
 
@@ -40,50 +37,31 @@ var (
 )
 
 type GeneralProvider struct {
-	regionId atomic.String
+	serverDomain             atomic.String
+	extraHTTPHeadersProvider atomic.Value
+}
 
+type GeneralHTTPHeadersProvider struct {
 	instanceIdHeaders         map[string]string
 	initInstanceIdHeadersOnce sync.Once
 }
+
+var (
+	generalHTTPHeadersProvider = GeneralHTTPHeadersProvider{}
+)
 
 func (*GeneralProvider) Name() string {
 	return "GeneralProvider"
 }
 
-func (*GeneralProvider) CACertificate(logger logrus.FieldLogger, refresh bool) ([]byte, error) {
-	currentVersionDir, err := pathutil.GetCurrentPath()
-	if err != nil {
-		return nil, err
-	}
-
-	certPath := filepath.Join(currentVersionDir, "config", "GlobalSignRootCA.crt")
-	certFile, err := os.Open(certPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open bundled CA certificate file: %w", err)
-	}
-
-	pemCerts, err := io.ReadAll(certFile)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read bundled CA certificate file %s: %w", certPath, err)
-	}
-
-	return pemCerts, nil
-}
-
 func (p *GeneralProvider) ServerDomain(logger logrus.FieldLogger) (string, error) {
-	// 0. Retrieve domain from env
-	if domain := os.Getenv("ALIYUN_ASSIST_SERVER_HOST"); domain != "" {
-		logger.Info("Get host from env ALIYUN_ASSIST_SERVER_HOST: ", domain)
-		return domain, nil
-	}
-
 	// 1. Read region id cached in file if exists
-	regionId := getRegionIdInFile()
+	regionId, _ := regionidFileProvider.RegionId(logger)
 	if regionId != "" {
 		domain := regionId + IntranetDomain
-		if err := connectionDetect(logger, domain); err == nil {
-			p.regionId.Store(regionId)
-			go saveRegionIdToFile(logger, regionId)
+		if err := ConnectionDetect(logger, domain); err == nil {
+			p.serverDomain.Store(domain)
+			go p.cacheRegionId(logger, regionId)
 			networkcategory.Set(networkcategory.NetworkVPC)
 			return domain, nil
 		} else {
@@ -94,12 +72,12 @@ func (p *GeneralProvider) ServerDomain(logger logrus.FieldLogger) (string, error
 	}
 
 	// 2. Retrieve region id from meta server in VPC network
-	regionId, _ = HttpGetWithoutExtraHeader(logger, "http://100.100.100.200/latest/meta-data/region-id")
+	regionId, _ = metaserverProvider.RegionId(logger)
 	if regionId != "" {
 		domain := regionId + IntranetDomain
-		if err := connectionDetect(logger, domain); err == nil {
-			p.regionId.Store(regionId)
-			go saveRegionIdToFile(logger, regionId)
+		if err := ConnectionDetect(logger, domain); err == nil {
+			p.serverDomain.Store(domain)
+			go p.cacheRegionId(logger, regionId)
 			networkcategory.Set(networkcategory.NetworkVPC)
 			return domain, nil
 		} else {
@@ -110,22 +88,24 @@ func (p *GeneralProvider) ServerDomain(logger logrus.FieldLogger) (string, error
 	}
 
 	// 3. Poll well-known API servers for region id
-	for _, regionId := range wellKnownRegionIds {
-		regionId, err := HttpGetWithoutExtraHeader(logger, "https://"+regionId+IntranetDomain+"/luban/api/classic/region-id")
-		if err != nil {
-			continue
-		}
+	if flagging.GetApiserverTryPreset() {
+		for _, regionId := range wellKnownRegionIds {
+			regionId, err := HttpGetWithoutExtraHeader(logger, "https://"+regionId+IntranetDomain+"/luban/api/classic/region-id")
+			if err != nil {
+				continue
+			}
 
-		domain := regionId + IntranetDomain
-		if err := connectionDetect(logger, domain); err == nil {
-			p.regionId.Store(regionId)
-			go saveRegionIdToFile(logger, regionId)
-			networkcategory.Set(networkcategory.NetworkClassic)
-			return domain, nil
-		} else {
-			logger.WithFields(logrus.Fields{
-				"domain": domain,
-			}).WithError(err).Error("Failed on detection of API server connection")
+			domain := regionId + IntranetDomain
+			if err := ConnectionDetect(logger, domain); err == nil {
+				p.serverDomain.Store(domain)
+				go p.cacheRegionId(logger, regionId)
+				networkcategory.Set(networkcategory.NetworkClassic)
+				return domain, nil
+			} else {
+				logger.WithFields(logrus.Fields{
+					"domain": domain,
+				}).WithError(err).Error("Failed on detection of API server connection")
+			}
 		}
 	}
 
@@ -133,69 +113,44 @@ func (p *GeneralProvider) ServerDomain(logger logrus.FieldLogger) (string, error
 }
 
 func (p *GeneralProvider) ExtraHTTPHeaders(logger logrus.FieldLogger) (map[string]string, error) {
-	if p.regionId.Load() == "" {
+	if p.serverDomain.Load() == "" {
 		return nil, requester.ErrNotProvided
 	}
 
-	p.initInstanceIdHeadersOnce.Do(func() {
+	epp := p.extraHTTPHeadersProvider.Load()
+	if epp == nil {
+		return generalHTTPHeadersProvider.ExtraHTTPHeaders(logger)
+	}
+	ep, ok := epp.(requester.ExtraHTTPHeadersProvider)
+	if !ok {
+		return generalHTTPHeadersProvider.ExtraHTTPHeaders(logger)
+	}
+	return ep.ExtraHTTPHeaders(logger)
+}
+
+func (*GeneralProvider) cacheRegionId(logger logrus.FieldLogger, regionId string) {
+	requester.SetRegionId(regionId)
+	regionidFileProvider.SaveRegionId(logger, regionId)
+}
+
+func (gp *GeneralHTTPHeadersProvider) ExtraHTTPHeaders(logger logrus.FieldLogger) (map[string]string, error) {
+	gp.initInstanceIdHeadersOnce.Do(func() {
 		instanceId := func() string {
-			instanceId, err := HttpGetWithoutExtraHeader(logger, "http://100.100.100.200/latest/meta-data/instance-id")
+			instanceId, err := metaserver.GetInstanceId(logger)
 			if err != nil {
 				return "unknown"
 			}
 			return instanceId
 		}()
-		p.instanceIdHeaders = map[string]string{
+		gp.instanceIdHeaders = map[string]string{
 			"X-Client-Instance-ID": instanceId,
 		}
 	})
-	return p.instanceIdHeaders, nil
+
+	return gp.instanceIdHeaders, nil
 }
 
-func (p *GeneralProvider) RegionId(logger logrus.FieldLogger) (string, error) {
-	regionId := p.regionId.Load()
-	if regionId != "" {
-		return regionId, nil
-	}
-
-	logger.Errorln("No cached region ID and server domain detection procedure is initiated for it")
-	_, err := p.ServerDomain(logger)
-	if err != nil {
-		return "", requester.ErrNotProvided
-	}
-	regionId = p.regionId.Load()
-	if regionId != "" {
-		return regionId, nil
-	} else {
-		return "", requester.ErrNotProvided
-	}
-}
-
-func getRegionIdInFile() string {
-	currentVersionDir, _ := pathutil.GetCurrentPath()
-	path := filepath.Join(filepath.Dir(currentVersionDir), "region-id")
-
-	if regionIdFile, err := os.Open(path); err == nil {
-		if raw, err2 := io.ReadAll(regionIdFile); err2 == nil {
-			return strings.TrimSpace(strings.Trim(string(raw), "\r\t\n"))
-		}
-	}
-	return ""
-}
-
-func saveRegionIdToFile(logger logrus.FieldLogger, regionId string) {
-	currentVersionDir, _ := pathutil.GetCurrentPath()
-	path := filepath.Join(filepath.Dir(currentVersionDir), "region-id")
-
-	err := os.WriteFile(path, []byte(regionId), os.FileMode(0o644))
-	if err != nil {
-		logger.WithError(err).Warning("Failed to save detected region ID into cache file")
-	} else {
-		logger.Info("Saved detected region ID into cache file")
-	}
-}
-
-func connectionDetect(logger logrus.FieldLogger, domain string) error {
+func ConnectionDetect(logger logrus.FieldLogger, domain string) error {
 	url := "https://" + domain + "/luban/api/connection_detect"
 	content, err := HttpGetWithoutExtraHeader(logger, url)
 	if err != nil {
@@ -214,40 +169,36 @@ func HttpGetWithoutExtraHeader(logger logrus.FieldLogger, url string) (string, e
 }
 
 func HttpGetWithSpecifiedHeader(logger logrus.FieldLogger, url string, headers map[string]string) (string, error) {
-	request := HttpRequest.Transport(requester.GetHTTPTransport(logger))
-
-	// IMPORTANT NOTE: Although time.Duration type is used for the argument of
-	// (*HttpRequest.Request).SetTimeout(d time.Duration), the actual unit is
-	// not nanosecond but second, since the value would be internally multiplied
-	// by base.
-	//
-	// See link below for implementation detail:
-	// https://github.com/kirinlabs/HttpRequest/blob/432628e833bda77cc426fc1bee9825a13f6b4df1/request.go#L105
-	request.SetTimeout(5)
-
-	request.SetHeaders(map[string]string{
-		requester.UserAgentHeader: requester.UserAgentValue,
-	})
-	request.SetHeaders(headers)
-
 	logger = logger.WithField("url", url)
+	transport := requester.GetHTTPTransport(logger)
+	request := httputil.NewGetReq(logger, transport, 5, headers)
+
 	response, err := request.Get(url)
 	if err != nil {
-		if errors.Is(err, x509.UnknownAuthorityError{}) {
-			logger.Info("certificate error, reload certificates and retry")
-			request.Transport(requester.PeekHTTPTransport(logger))
-			certPool := requester.PeekRefreshedRootCAs(logger)
+		var certificateErr *tls.CertificateVerificationError
+		if !errors.As(err, &certificateErr) {
+			logger.WithError(err).Error("Failed to send HTTP GET request")
+			return "", err
+		}
+
+		// tls.CertificateVerificationError encountered. Gonna re-accumulate root CA
+		// certificate pool and retry requesting.
+		logger.Info("certificate error, reload certificates and retry")
+		transport = transport.Clone()
+		requester.AccumulateRootCAs(logger)(func(certPool *x509.CertPool) bool {
+			request = httputil.NewGetReq(logger, transport, 5, headers)
 			request.SetTLSClient(&tls.Config{
 				RootCAs: certPool,
 			})
 			if response, err = request.Get(url); err == nil {
-				logger.Info("certificated updated")
+				logger.Info("certificate updated")
 				requester.RefreshHTTPCas(logger, certPool)
-			} else {
-				logger.WithError(err).Error("Failed to send HTTP GET request")
-				return "", err
+				return false
 			}
-		} else {
+
+			return true
+		})
+		if err != nil {
 			logger.WithError(err).Error("Failed to send HTTP GET request")
 			return "", err
 		}
@@ -256,7 +207,7 @@ func HttpGetWithSpecifiedHeader(logger logrus.FieldLogger, url string, headers m
 
 	content, _ := response.Content()
 	if err == nil && response.StatusCode() > 400 {
-		err = requester.NewHttpErrorCode(response.StatusCode())
+		err = httpbase.NewStatusCodeError(response.StatusCode())
 	}
 
 	logger.WithFields(logrus.Fields{
@@ -264,5 +215,54 @@ func HttpGetWithSpecifiedHeader(logger logrus.FieldLogger, url string, headers m
 		"responseCode":    response.StatusCode(),
 		"responseContent": content,
 	}).WithError(err).Infoln("HTTP GET Requested")
+	return content, err
+}
+
+func HttpPostWithSpecifiedHeader(logger logrus.FieldLogger, url string, data string, contentType string, headers map[string]string) (string, error) {
+	logger = logger.WithField("url", url)
+	transport := requester.GetHTTPTransport(logger)
+	request := httputil.NewPostReq(logger, transport, contentType, 5, headers)
+	response, err := request.Post(url, data)
+	if err != nil {
+		var certificateErr *tls.CertificateVerificationError
+		if !errors.As(err, &certificateErr) {
+			logger.WithError(err).Error("Failed to send HTTP POST request")
+			return "", err
+		}
+
+		// tls.CertificateVerificationError encountered. Gonna re-accumulate root CA
+		// certificate pool and retry requesting.
+		logger.Info("certificate error, reload certificates and retry")
+		transport = transport.Clone()
+		requester.AccumulateRootCAs(logger)(func(certPool *x509.CertPool) bool {
+			request = httputil.NewPostReq(logger, transport, contentType, 5, headers)
+			request.SetTLSClient(&tls.Config{
+				RootCAs: certPool,
+			})
+			if response, err = request.Post(url, data); err == nil {
+				logger.Info("certificate updated")
+				requester.RefreshHTTPCas(logger, certPool)
+				return false
+			}
+
+			return true
+		})
+		if err != nil {
+			logger.WithError(err).Error("Failed to send HTTP POST request")
+			return "", err
+		}
+	}
+	defer response.Close()
+
+	content, _ := response.Content()
+	if err == nil && response.StatusCode() > 400 {
+		err = httpbase.NewStatusCodeError(response.StatusCode())
+	}
+
+	logger.WithFields(logrus.Fields{
+		"url":             url,
+		"responseCode":    response.StatusCode(),
+		"responseContent": content,
+	}).WithError(err).Infoln("HTTP POST Requested")
 	return content, err
 }

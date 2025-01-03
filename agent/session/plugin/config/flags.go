@@ -22,6 +22,7 @@ import (
 const (
 	ProfileFlagName         = "profile"
 	InstanceFlagName        = "instance"
+	IdleTimeoutFlagName     = "idle-timeout"
 	VerboseFlagName         = "verbose"
 	PortNumberFlagName      = "port"
 	WssUrlFlagName          = "wss-url"
@@ -55,6 +56,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewModeFlag())
 	/////////////////////////////////////////////////
 	fs.Add(NewInstanceFlag())
+	fs.Add(NewIdleTimeoutFlag())
 	fs.Add(NewProfileFlag())
 	fs.Add(NewWebsocketUrlFlag())
 	fs.Add(NewVerboseFlag())
@@ -97,6 +99,10 @@ func ProfileFlag(fs *cli.FlagSet) *cli.Flag {
 
 func InstanceFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(InstanceFlagName)
+}
+
+func IdleTimeoutFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(IdleTimeoutFlagName)
 }
 
 func WssUrlFlag(fs *cli.FlagSet) *cli.Flag {
@@ -229,6 +235,20 @@ func NewInstanceFlag() *cli.Flag {
 		Short: i18n.T(
 			"use `--instance <instance id>` to select instance",
 			"使用 `--instance <instance id>` 指定操作的实例")}
+}
+
+func NewIdleTimeoutFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         IdleTimeoutFlagName,
+		AssignedMode: cli.AssignedOnce,
+		DefaultValue: "",
+		Persistent:   true,
+		Short: i18n.T(
+			"use `--idle-timeout <timeout>` to set the allowed idle time, unit is second, default is 180s, minimum is 60s. Only works for session subcommand",
+			"使用 `--idle-timeout <timeout>` 设置连接允许的空闲时长，单位秒，默认为180秒，最小可设置60秒。仅对session子命令有效。",
+		),
+	}
 }
 
 func NewVerboseFlag() *cli.Flag {

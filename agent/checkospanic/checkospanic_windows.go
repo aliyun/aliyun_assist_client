@@ -2,6 +2,7 @@ package checkospanic
 
 import (
 	"bytes"
+	"context"
 	"regexp"
 	"strings"
 	"time"
@@ -10,8 +11,8 @@ import (
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
-	"github.com/aliyun/aliyun_assist_client/agent/util/process"
 	"github.com/aliyun/aliyun_assist_client/agent/util/timetool"
+	"github.com/aliyun/aliyun_assist_client/common/executil"
 	"github.com/aliyun/aliyun_assist_client/common/langutil"
 )
 
@@ -27,6 +28,7 @@ const (
     echo "message:$($item.Message)"
 } 
 `
+	scriptLatestThreePatches = `(Get-HotFix -Description "Security Update"| sort-object -Descending {[int]($_.HotFixID -replace 'KB', '')}| Select-Object -First 3).HotFixID -join ','`
 )
 
 var (
@@ -35,7 +37,7 @@ var (
 
 func ReportLastOsPanic() {
 	logger := log.GetLogger().WithField("Phase", "ReportLastOsPanic")
-	bugcheck, crashInfo, crashTime := FindWerSystemErrorReportingEvent(logger)
+	bugcheck, crashInfo, latestPatches, crashTime := FindWerSystemErrorReportingEvent(logger)
 	if bugcheck == "" && crashInfo == "" {
 		logger.Info("there is no event record need report")
 		return
@@ -51,51 +53,32 @@ func ReportLastOsPanic() {
 		"crashTime", crashTime.Format("2006-01-02 15:04:05"),
 		"crashTimeUTC", crashTime.UTC().Format("2006-01-02 15:04:05"),
 		"timeZone", timeZone,
+		"latestPatches", latestPatches,
 	).ReportEvent()
 	logger.Info("the latest event record has reported")
 }
 
 // FindWerSystemErrorReportingEvent find latest event record provided by Microsoft-Windows-WER-SystemErrorReporting
 // and parse fields `buckcheck` `crashInfo` `crashTime` from it
-func FindWerSystemErrorReportingEvent(logger logrus.FieldLogger) (bugcheck, crashInfo string, crashTime time.Time) {
-	processCmd := process.NewProcessCmd()
-	var stdoutWrite bytes.Buffer
-	var stderrWrite bytes.Buffer
-	_, status, err := processCmd.SyncRun("", command, []string{"-command", scriptMicrosoftWindowsWERSystemErrorReporting}, &stdoutWrite, &stderrWrite, nil, nil, commandTimeout)
-	if status == process.Timeout {
+func FindWerSystemErrorReportingEvent(logger logrus.FieldLogger) (bugcheck, crashInfo, lastThreePatches string, crashTime time.Time) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*commandTimeout)
+	defer cancel()
+
+	cmd := executil.CommandWithContext(ctx, command, "-command", scriptMicrosoftWindowsWERSystemErrorReporting)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
 		logger.WithFields(logrus.Fields{
 			"command": scriptMicrosoftWindowsWERSystemErrorReporting,
-			"timeout": commandTimeout,
-		}).Error("get windows event timeout")
-		return
-	} else if status == process.Fail || err != nil {
-		logger.WithFields(logrus.Fields{
-			"command": scriptMicrosoftWindowsWERSystemErrorReporting,
-			"stdout":  stdoutWrite.String(),
-			"stderr":  stderrWrite.String(),
-			"err":     err,
-		}).Error("get windows event failed")
+		}).WithError(err).Error("get windows event failed")
 		return
 	}
-	var content string
-	if langutil.GetDefaultLang() != 0x409 {
-		if tmp, err := langutil.GbkToUtf8(stdoutWrite.Bytes()); err != nil {
-			logger.Error("GbkToUtf8 err: ", err)
-		} else {
-			content = string(tmp)
-		}
-	} else {
-		content = stdoutWrite.String()
-	}
-	content = strings.TrimSpace(content)
-	if len(content) == 0 {
-		return
-	}
+
 	/*
 		createTime:07/06/2023 19:25:08
 		message:计算机已经从检测错误后重新启动。检测错误: 0x000000d1 (0xffff840001612010, 0x0000000000000002, 0x0000000000000000, 0xfffff801710a1981)。已将转储的数据保存在: C:\Windows\MEMORY.DMP。...
 	*/
-	lines := strings.Split(content, "\n")
+	output = transcoding(logger, output)
+	lines := strings.Split(string(output), "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if len(line) == 0 {
@@ -125,5 +108,32 @@ func FindWerSystemErrorReportingEvent(logger logrus.FieldLogger) (bugcheck, cras
 			}
 		}
 	}
+
+	cmd = executil.CommandWithContext(ctx, command, "-command", scriptLatestThreePatches)
+	output, err = cmd.CombinedOutput()
+	if err != nil {
+		logger.WithFields(logrus.Fields{
+			"command": scriptLatestThreePatches,
+		}).WithError(err).Error("get latest patches failed")
+		return
+	}
+	output = transcoding(logger, output)
+	lastThreePatches = string(output)
+
 	return
+}
+
+func transcoding(logger logrus.FieldLogger, data []byte) []byte {
+	var res []byte
+	var err error
+	if langutil.GetDefaultLang() != 0x409 {
+		if res, err = langutil.GbkToUtf8(data); err != nil {
+			logger.Error("GbkToUtf8 err: ", err)
+			res = data
+		}
+	} else {
+		res = data
+	}
+	res = bytes.TrimSpace(res)
+	return res
 }

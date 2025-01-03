@@ -17,6 +17,7 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	_ "github.com/aliyun/aliyun_assist_client/common/apiserver"
+	"github.com/aliyun/aliyun_assist_client/common/httpbase"
 	"github.com/aliyun/aliyun_assist_client/common/requester"
 )
 
@@ -83,7 +84,7 @@ func (c *WebSocketChannel) StartChannel() error {
 
 	logger := log.GetLogger().WithField("url", url)
 	header := http.Header{
-		requester.UserAgentHeader: []string{requester.UserAgentValue},
+		httpbase.UserAgentHeader: []string{httpbase.UserAgentValue},
 	}
 	if extraHeaders, err := requester.GetExtraHTTPHeaders(logger); extraHeaders != nil {
 		for k, v := range extraHeaders {
@@ -104,16 +105,21 @@ func (c *WebSocketChannel) StartChannel() error {
 	var conn *websocket.Conn
 	conn, _, dialErr = MyDialer.Dial(url, header)
 	if dialErr != nil {
-		if errors.Is(dialErr, x509.UnknownAuthorityError{}) {
+		var certificateErr *tls.CertificateVerificationError
+		if errors.As(dialErr, &certificateErr) {
 			logger.WithError(dialErr).Error("certificate error, reload certificate and retry")
-			certPool := requester.PeekRefreshedRootCAs(logger)
-			MyDialer.TLSClientConfig.RootCAs = certPool
-			if conn, _, dialErr = MyDialer.Dial(url, header); dialErr != nil {
-				errmsg = fmt.Sprintf("dial ws channel errror:%s, url=%s", dialErr.Error(), url)
-			} else {
-				requester.UpdateRootCAs(logger, certPool)
-				logger.Info("certificate updated")
-			}
+
+			requester.AccumulateRootCAs(logger)(func(certPool *x509.CertPool) bool {
+				MyDialer.TLSClientConfig.RootCAs = certPool
+				if conn, _, dialErr = MyDialer.Dial(url, header); dialErr != nil {
+					errmsg = fmt.Sprintf("dial ws channel errror:%s, url=%s", dialErr.Error(), url)
+					return true
+				} else {
+					requester.UpdateRootCAs(logger, certPool)
+					logger.Info("certificate updated")
+					return false
+				}
+			})
 		} else {
 			errmsg = fmt.Sprintf("dial ws channel errror:%s, url=%s", dialErr.Error(), url)
 		}

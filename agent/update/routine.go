@@ -5,21 +5,23 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"go.uber.org/atomic"
 	"net/url"
 	"os"
 	"path/filepath"
 	"time"
 
+	"go.uber.org/atomic"
+
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 
+	"github.com/aliyun/aliyun_assist_client/agent/flagging"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine"
 	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/process"
-	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 	"github.com/aliyun/aliyun_assist_client/common/fileutil"
+	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 	libupdate "github.com/aliyun/aliyun_assist_client/common/update"
 )
 
@@ -87,10 +89,7 @@ func SafeBootstrapUpdate(preparationTimeout time.Duration, maximumDownloadTimeou
 	startTime := time.Now()
 
 	// 0. Pre-check
-	boostrapUpdatingDisabled, err := isBootstrapUpdatingDisabled()
-	if err != nil {
-		log.GetLogger().WithError(err).Errorln("Error encountered when reading bootstrap updating disabling configuration")
-	}
+	boostrapUpdatingDisabled := !flagging.GetUpdatorBootstrapUpdate()
 	if boostrapUpdatingDisabled {
 		log.GetLogger().Infoln("Bootstrap updating has been disabled due to configuration")
 		return nil
@@ -139,10 +138,7 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 	}
 
 	// 0. Pre-check
-	updatingDisabled, err := isUpdatingDisabled()
-	if err != nil {
-		log.GetLogger().WithError(err).Errorln("Error encountered when reading updating disabling configuration")
-	}
+	updatingDisabled := !flagging.GetUpdatorUpdate()
 	if updatingDisabled {
 		log.GetLogger().Infoln("Updating has been disabled due to configuration")
 		return nil
@@ -466,10 +462,7 @@ func RollbackWithLocalDir(newVersion string, updateReason string) error {
 
 func UpgradeWithLocalDir(newVersion string, updateReason string) error {
 	// Pre-check is updating disabled
-	updatingDisabled, err := isUpdatingDisabled()
-	if err != nil {
-		log.GetLogger().WithError(err).Errorln("Error encountered when reading updating disabling configuration")
-	}
+	updatingDisabled := !flagging.GetUpdatorUpdate()
 	if updatingDisabled {
 		log.GetLogger().Infoln("Updating has been disabled due to configuration")
 		return ErrUpdateIsDisabled

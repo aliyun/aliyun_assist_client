@@ -160,7 +160,11 @@ func (s *upstart) Install() error {
 		s.Option.bool(optionLogOutput, optionLogOutputDefault),
 	}
 
-	return s.template().Execute(f, to)
+	err = s.template().Execute(f, to)
+	// Run sync to ensure that the conf file is saved to disk.
+	f.Sync()
+	
+	return err
 }
 
 func (s *upstart) Uninstall() error {

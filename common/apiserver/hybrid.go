@@ -8,11 +8,8 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
-	"fmt"
 	"io"
-	"os"
 	"strconv"
-	"strings"
 
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 	"github.com/google/uuid"
@@ -25,21 +22,25 @@ import (
 )
 
 const (
-	InternetDomain = ".axt.aliyuncs.com"
+	// In hybrid instance scenario, domain name <region-id>-axt.aliyuncs.com is used
+	// first. If it fails, try domain name <region-id>.axt.aliyuncs.com
+	HybridDomainFirst = "-axt.aliyuncs.com"
+	HybridDomain      = ".axt.aliyuncs.com"
 )
 
 type HybridModeProvider struct{}
+
+type HybridModeHTTPHeadersProvider struct {}
+
+var (
+	hybridModeHTTPHeadersProvider = HybridModeHTTPHeadersProvider{}
+)
 
 func (*HybridModeProvider) Name() string {
 	return "HybridModeProvider"
 }
 
 func (p *HybridModeProvider) ServerDomain(logger logrus.FieldLogger) (string, error) {
-	if domain := os.Getenv("ALIYUN_ASSIST_SERVER_HOST"); domain != "" {
-		logger.Info("Get host from env ALIYUN_ASSIST_SERVER_HOST: ", domain)
-		return domain, nil
-	}
-
 	regionId, err := p.RegionId(logger)
 	if regionId == "" || err != nil {
 		return "", requester.ErrNotProvided
@@ -54,15 +55,29 @@ func (p *HybridModeProvider) ServerDomain(logger logrus.FieldLogger) (string, er
 	} else {
 		// Try domain region-axt.aliyuncs.com first,
 		// if not success use region.axt.aliyuncs.com
-		domain := fmt.Sprintf("%s-%s", regionId, strings.TrimLeft(InternetDomain, "."))
-		if err := connectionDetect(logger, domain); err == nil {
+		domain := regionId + HybridDomainFirst
+		if err := ConnectionDetect(logger, domain); err == nil {
 			return domain, nil
 		}
-		return regionId + InternetDomain, nil
+		return regionId + HybridDomain, nil
 	}
 }
 
 func (*HybridModeProvider) ExtraHTTPHeaders(logger logrus.FieldLogger) (map[string]string, error) {
+	return hybridModeHTTPHeadersProvider.ExtraHTTPHeaders(logger)
+}
+
+func (*HybridModeProvider) RegionId(logger logrus.FieldLogger) (string, error) {
+	if !instance.IsHybrid() {
+		return "", requester.ErrNotProvided
+	}
+	if regionId := instance.ReadRegionId(); regionId != "" {
+		return regionId, nil
+	}
+	return "", requester.ErrNotProvided
+}
+
+func (*HybridModeHTTPHeadersProvider) ExtraHTTPHeaders(logger logrus.FieldLogger) (map[string]string, error) {
 	if !instance.IsHybrid() {
 		return nil, requester.ErrNotProvided
 	}
@@ -93,16 +108,6 @@ func (*HybridModeProvider) ExtraHTTPHeaders(logger logrus.FieldLogger) (map[stri
 	}
 
 	return extraHeaders, nil
-}
-
-func (*HybridModeProvider) RegionId(logger logrus.FieldLogger) (string, error) {
-	if !instance.IsHybrid() {
-		return "", requester.ErrNotProvided
-	}
-	if regionId := instance.ReadRegionId(); regionId != "" {
-		return regionId, nil
-	}
-	return "", requester.ErrNotProvided
 }
 
 func getNetworkTypeInHybrid() string {

@@ -13,6 +13,7 @@ import (
 
 	"github.com/tidwall/gjson"
 
+	"github.com/aliyun/aliyun_assist_client/agent/checknet"
 	"github.com/aliyun/aliyun_assist_client/agent/flagging"
 	"github.com/aliyun/aliyun_assist_client/agent/hybrid/instance"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
@@ -21,8 +22,8 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/timetool"
 	"github.com/aliyun/aliyun_assist_client/agent/version"
+	"github.com/aliyun/aliyun_assist_client/common/httpbase"
 	"github.com/aliyun/aliyun_assist_client/common/machineid"
-	"github.com/aliyun/aliyun_assist_client/common/requester"
 )
 
 const (
@@ -61,9 +62,11 @@ var (
 	// otherwise use the reduced fields
 	_useFullFields atomic.Bool
 
-	_networkConnected atomic.Bool
-	_actionsWhenNetRecover map[string]func()
+	_networkConnected          atomic.Bool
+	_actionsWhenNetRecover     map[string]func()
 	_actionsWhenNetRecoverLock sync.Mutex
+
+	_consecutiveFailedCount int
 )
 
 func init() {
@@ -106,8 +109,8 @@ func invokePingRequest(isHttpScheme bool, urlWithoutScheme string, willSwitchSch
 	}
 	err, response = util.HttpGet(*requestURL)
 	if err != nil {
-		tmp_err, ok := err.(*requester.HttpErrorCode)
-		if !(ok && tmp_err.GetCode() < 500) {
+		tmp_err, ok := err.(*httpbase.StatusCodeError)
+		if !(ok && tmp_err.StatusCode() < 500) {
 			_retryMutex.Lock()
 			defer _retryMutex.Unlock()
 			Gap := time.Since(_startTime)
@@ -280,13 +283,21 @@ func doPing() error {
 
 	responseContent, err := invokePingRequest(isHttpScheme, urlWithoutScheme, willSwitchScheme)
 	if err != nil {
+		_consecutiveFailedCount += 1
 		_networkConnected.Store(false)
 		log.GetLogger().WithFields(log.Fields{
 			"requestURLWithourScheme": urlWithoutScheme,
 			"isHttpScheme":            isHttpScheme,
 		}).WithError(err).Errorln("Failed to invoke ping request")
+
+		if _consecutiveFailedCount >= 3 {
+			if e := checknet.ReportNetworkBlockToSerialPort(err); e != nil {
+				log.GetLogger().WithError(e).Error("Report network block to serial port failed.")
+			}
+		}
 		return err
 	} else {
+		_consecutiveFailedCount = 0
 		if _networkConnected.CompareAndSwap(false, true) {
 			go func() {
 				_actionsWhenNetRecoverLock.Lock()
@@ -341,7 +352,7 @@ func buildPingParams(sendCounter uint64) (querystring string) {
 	return
 }
 
-// buildFullFieldsPingParams constructs a full set of heartbeat request 
+// buildFullFieldsPingParams constructs a full set of heartbeat request
 // parameters to be compatible with servers that do not recognize the simplified
 // heartbeat parameters.
 func buildFullFieldsPingParams(sendCounter uint64) (querystring string) {
@@ -352,14 +363,13 @@ func buildFullFieldsPingParams(sendCounter uint64) (querystring string) {
 	acknowledgeCounter := _acknowledgeCounter
 	querystring = fmt.Sprintf("?uptime=%d&timestamp=%d&pid=%d&process_uptime=%d&index=%d&seq_no=%d",
 		uptime, timestamp, pid, processUptime, acknowledgeCounter, sendCounter)
-	
+
 	virtType := "kvm" // osutil.GetVirtualType() is currently unavailable
 	osType := osutil.GetOsType()
 	osVersion := url.QueryEscape(osutil.GetVersion())
 	azId := util.GetAzoneId()
 	querystring += fmt.Sprintf("&virt_type=%s&lang=golang&os_type=%s&os_version=%s&app_version=%s&az=%s",
 		virtType, osType, osVersion, version.AssistVersion, azId)
-
 
 	// Only first heart-beat need to carry extra params
 	if acknowledgeCounter == 0 {
@@ -369,7 +379,7 @@ func buildFullFieldsPingParams(sendCounter uint64) (querystring string) {
 		} else {
 			isColdstart = _isColdstart
 		}
-		
+
 		querystring += fmt.Sprintf("&cold_start=%t", isColdstart)
 	}
 	return

@@ -3,9 +3,11 @@ package main
 import (
 	"fmt"
 
+	"github.com/aliyun/aliyun_assist_client/agent/version"
+
+	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/aliyun-cli/cli"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/aliyun-cli/i18n"
-	"github.com/aliyun/aliyun_assist_client/agent/log"
 )
 
 type Options struct {
@@ -13,7 +15,7 @@ type Options struct {
 	GetVersion bool
 	GetGitHash bool
 
-	LogPath string
+	LogPath   string
 	IsVerbose bool
 }
 
@@ -85,19 +87,19 @@ func parseOptions(ctx *cli.Context) Options {
 	options.GetVersion = ctx.Flags().Get(VersionFlagName).IsAssigned()
 	options.GetGitHash = ctx.Flags().Get(GithashFlagName).IsAssigned()
 	options.LogPath, _ = ctx.Flags().Get(LogPathFlagName).GetValue()
-	
+
 	return options
 }
 
 func runRootCommand(ctx *cli.Context, args []string) error {
 	options := parseOptions(ctx)
-	
+
 	log.InitLog("container_commander.log", options.LogPath, true)
 
 	if options.GetGitHash {
-		fmt.Println(GitCommitHash)
+		fmt.Println(version.GitCommitHash)
 	} else if options.GetVersion {
-		fmt.Println(Version)
+		fmt.Println(version.AssistVersion)
 	}
 	return nil
 }

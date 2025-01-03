@@ -21,6 +21,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -43,7 +44,7 @@ func NewSessionCommand() *cli.Command {
 		Short: i18n.T(
 			"use session manager devops aliyun ecs instance",
 			"使用session manager运维阿里云实例"),
-		Usage: "session --instance {instance_id} [--user-name {user_name}]",
+		Usage: "session --instance {instance_id} [--user-name {user_name}] [--idle-timeout {idle_timeout}]",
 		Run: func(ctx *cli.Context, args []string) error {
 			if len(args) > 0 {
 				return cli.NewInvalidCommandError(args[0], ctx)
@@ -51,7 +52,22 @@ func NewSessionCommand() *cli.Command {
 			instance_id, _ := config.InstanceFlag(ctx.Flags()).GetValue()
 			wss_url, _ := config.WssUrlFlag(ctx.Flags()).GetValue()
 			user_name, _ := config.UserNameFlag(ctx.Flags()).GetValue()
-			return doSession(ctx, instance_id, user_name, wss_url)
+			idle_timeout, _ := config.IdleTimeoutFlag(ctx.Flags()).GetValue()
+			var idleTimeout int64
+			var err error
+			if idle_timeout == "" {
+				// Default value is 180, bedause Agent will disconnect if no
+				// package received within 180 seconds.
+				idleTimeout = 180
+			} else {
+				idleTimeout, err = strconv.ParseInt(idle_timeout, 10, 32)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Parse param `%s` failed: %v", config.IdleTimeoutFlagName, err)
+					os.Exit(1)
+				}
+			}
+
+			return doSession(ctx, instance_id, user_name, wss_url, int32(idleTimeout))
 		},
 	}
 
@@ -168,7 +184,7 @@ func CheckSessionEnabled(ctx *cli.Context) {
 
 }
 
-func doSession(ctx *cli.Context, instance_id, user_name, wss_url string) error {
+func doSession(ctx *cli.Context, instance_id, user_name, wss_url string, idleTimeout int32) error {
 	CheckSessionEnabled(ctx)
 	var websocket_url string
 	if instance_id != "" {
@@ -200,7 +216,10 @@ func doSession(ctx *cli.Context, instance_id, user_name, wss_url string) error {
 	url := websocket_url
 	url = strings.Replace(url, "sessionid", "sessionId", 1)
 	log.GetLogger().Infoln("websocket url:", url)
-	client, err := client.NewClient(url, os.Stdin, os.Stdout, false, "", false, config.VerboseFlag(ctx.Flags()).IsAssigned())
+	client, err := client.NewClient(url, os.Stdin, os.Stdout, false, "", false, config.VerboseFlag(ctx.Flags()).IsAssigned(), idleTimeout)
+	if err != nil {
+		log.GetLogger().Fatalf("Create client error: %v", err)
+	}
 	// loop
 	go func() {
 		waitSignals()

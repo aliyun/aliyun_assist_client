@@ -8,8 +8,8 @@ import (
 
 var (
 	_regionIdProviders []RegionIdProvider
-	_regionId string
-	_regionIdLock sync.Mutex
+	_regionId          string
+	_regionIdLock      sync.Mutex
 )
 
 func SetRegionIdProviders(providers []RegionIdProvider) {
@@ -40,4 +40,18 @@ func GetRegionId(logger logrus.FieldLogger) (string, error) {
 		return _regionId, nil
 	}
 	return "", err
+}
+
+// PeekRegionId just a peek at the cached value of regionId
+func PeekRegionId() string {
+	_regionIdLock.Lock()
+	defer _regionIdLock.Unlock()
+	return _regionId
+}
+
+func SetRegionId(regionId string) {
+	_regionIdLock.Lock()
+	defer _regionIdLock.Unlock()
+
+	_regionId = regionId
 }

@@ -35,7 +35,7 @@ func InitLog(filename string, logpath string, ignoreRotationError bool) {
 		filepath.Join(logdir, filename+".%Y%m%d"),
 		rotatelogs.WithMaxAge(time.Duration(24*30)*time.Hour),    //最长保留30天
 		rotatelogs.WithRotationTime(time.Duration(24)*time.Hour), //每天进行一次日志切割
-		rotatelogs.WithLinkName(filepath.Join(logdir, filename)),         // 为日志文件创建一个名字不变的链接
+		rotatelogs.WithLinkName(filepath.Join(logdir, filename)), // 为日志文件创建一个名字不变的链接
 		rotatelogs.IgnoreRotationError(ignoreRotationError),
 	)
 	if err != nil {

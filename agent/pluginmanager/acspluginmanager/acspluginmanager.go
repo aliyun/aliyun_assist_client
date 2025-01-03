@@ -61,7 +61,7 @@ func (pc *pluginConfig) PluginType() string {
 				pc.pluginTypeStr = PLUGIN_ONCE
 			} else if pt == float64(PLUGIN_PERSIST_INT) {
 				pc.pluginTypeStr = PLUGIN_PERSIST
-			} else if pt == float64(PLUGIN_COMMANDER_INT){
+			} else if pt == float64(PLUGIN_COMMANDER_INT) {
 				pc.pluginTypeStr = PLUGIN_COMMANDER
 			} else {
 				pc.pluginTypeStr = PLUGIN_UNKNOWN
@@ -78,15 +78,12 @@ func (pc *pluginConfig) PluginType() string {
 type PluginManager struct {
 	Verbose bool
 	Yes     bool
+
+	pluginRoot string
 }
 
-var PLUGINDIR string
-
-const Separator = string(filepath.Separator)
-
 func NewPluginManager(verbose bool) (*PluginManager, error) {
-	var err error
-	PLUGINDIR, err = pathutil.GetPluginPath()
+	pluginRoot, err := pathutil.GetPluginPath()
 	if err != nil {
 		return nil, err
 	}
@@ -94,6 +91,8 @@ func NewPluginManager(verbose bool) (*PluginManager, error) {
 	return &PluginManager{
 		Verbose: verbose,
 		Yes:     true,
+
+		pluginRoot: pluginRoot,
 	}, nil
 }
 
@@ -166,7 +165,7 @@ func getOnlinePluginInfo(packageName, version string) (archMatch *PluginInfo, ar
 			if plugin.Arch == "" || plugin.Arch == "all" || localArch == plugin.Arch {
 				if archMatch == nil {
 					archMatch = &pluginList[idx]
-				// if plugin.Version > archMatch.Version, update archMatch
+					// if plugin.Version > archMatch.Version, update archMatch
 				} else if versionutil.CompareVersion(plugin.Version, archMatch.Version) > 0 {
 					archMatch = &pluginList[idx]
 				}
@@ -216,7 +215,7 @@ func (pm *PluginManager) ShowPluginStatus() (exitCode int, err error) {
 	}
 	log.GetLogger().Infof("Count of installed plugins: %d", len(pluginList))
 	statusList := []PluginStatus{}
-	pluginPath := PLUGINDIR + Separator
+
 	paramList := []string{"--status"}
 	for _, plugin := range pluginList {
 		timeout := 60
@@ -233,7 +232,7 @@ func (pm *PluginManager) ShowPluginStatus() (exitCode int, err error) {
 			if plugin.IsRemoved {
 				status.Status = REMOVED
 			} else {
-				pluginDir := filepath.Join(pluginPath, plugin.Name, plugin.Version)
+				pluginDir := filepath.Join(pm.pluginRoot, plugin.Name, plugin.Version)
 				env := []string{
 					"PLUGIN_DIR=" + pluginDir,
 				}
@@ -318,8 +317,8 @@ func (pm *PluginManager) RemovePlugin(pluginName string) (exitCode int, err erro
 			envPluginDir    string
 			envPrePluginDir string
 		)
-		cmdPath := filepath.Join(PLUGINDIR, pluginInfo.Name, pluginInfo.Version, pluginInfo.RunPath)
-		envPluginDir = filepath.Join(PLUGINDIR, pluginInfo.Name, pluginInfo.Version)
+		cmdPath := filepath.Join(pm.pluginRoot, pluginInfo.Name, pluginInfo.Version, pluginInfo.RunPath)
+		envPluginDir = filepath.Join(pm.pluginRoot, pluginInfo.Name, pluginInfo.Version)
 
 		var timeout int
 		if timeout, err = strconv.Atoi(pluginInfo.Timeout); err != nil {
@@ -354,7 +353,7 @@ func (pm *PluginManager) RemovePlugin(pluginName string) (exitCode int, err erro
 		log.GetLogger().Errorf("Plugin[%s] is removed, but report the removed plugin to server error: %s", pluginInfo.Name, err.Error())
 	}
 	// 删除插件目录
-	pluginDir := filepath.Join(PLUGINDIR, pluginInfo.Name)
+	pluginDir := filepath.Join(pm.pluginRoot, pluginInfo.Name)
 	if err = os.RemoveAll(pluginDir); err != nil {
 		exitCode, _ = errProcess(funcName, REMOVE_FILE_ERR, err, fmt.Sprintf("Remove plugin directory err, pluginDir[%s], err: %s", pluginDir, err.Error()))
 		return
@@ -459,7 +458,7 @@ func (pm *PluginManager) executePluginFromFile(packagePath string, fetchTimeoutI
 		plugin = nil
 	}
 	if plugin != nil {
-		envPrePluginDir = filepath.Join(PLUGINDIR, plugin.Name, plugin.Version)
+		envPrePluginDir = filepath.Join(pm.pluginRoot, plugin.Name, plugin.Version)
 		// has installed, check version
 		if versionutil.CompareVersion(config.Version, plugin.Version) <= 0 {
 			if !pm.Yes {
@@ -511,14 +510,14 @@ func (pm *PluginManager) executePluginFromFile(packagePath string, fetchTimeoutI
 		// Double-check if specified plugin has been installed by another
 		// plugin-manager process, that releases plugin-version-wise
 		// exclusive lock and then this acquired.
-		fetched, exitingErr = queryFromLocalOnly(config.Name, config.Version)
+		fetched, exitingErr = pm.queryFromLocalOnly(config.Name, config.Version)
 		if exitingErr == nil || !errors.Is(exitingErr, ErrPackageNotFound) {
 			return
 		}
 
-		fetched, exitingErr = installFromFile(packagePath, &config, plugin, pluginIndex, fetchTimeout)
+		fetched, exitingErr = pm.installFromFile(packagePath, &config, plugin, pluginIndex, fetchTimeout)
 	}, func() {
-		fetched, exitingErr = queryFromLocalOnly(config.Name, config.Version)
+		fetched, exitingErr = pm.queryFromLocalOnly(config.Name, config.Version)
 		// TODO-FIXME: envPrePluginDir SHOULD be constructed on demand only
 		fetched.EnvPrePluginDir = envPrePluginDir
 	})
@@ -572,7 +571,7 @@ func (pm *PluginManager) executePluginFromFile(packagePath string, fetchTimeoutI
 	return
 }
 
-func installFromFile(packagePath string, config *pluginConfig, plugin *PluginInfo, pluginIndex int, timeout time.Duration) (*Fetched, ExitingError) {
+func (pm *PluginManager) installFromFile(packagePath string, config *pluginConfig, plugin *PluginInfo, pluginIndex int, timeout time.Duration) (*Fetched, ExitingError) {
 	ctx := context.Background()
 	var cancel context.CancelFunc
 	if timeout > 0 {
@@ -587,7 +586,7 @@ func installFromFile(packagePath string, config *pluginConfig, plugin *PluginInf
 			Timeout: "60",
 		}
 	} else {
-		envPrePluginDir = filepath.Join(PLUGINDIR, plugin.Name, plugin.Version)
+		envPrePluginDir = filepath.Join(pm.pluginRoot, plugin.Name, plugin.Version)
 	}
 
 	executionTimeoutInSeconds := 60
@@ -621,7 +620,7 @@ func installFromFile(packagePath string, config *pluginConfig, plugin *PluginInf
 	}
 	plugin.Md5 = md5Checksum
 
-	pluginPath := filepath.Join(PLUGINDIR, plugin.Name, plugin.Version)
+	pluginPath := filepath.Join(pm.pluginRoot, plugin.Name, plugin.Version)
 	pathutil.MakeSurePath(pluginPath)
 	if err := zipfile.UnzipContext(ctx, packagePath, pluginPath, false); err != nil {
 		return nil, NewUnzipExitingError(err, fmt.Sprintf("Unzip err, file is [%s], target dir is [%s], err is [%s]", packagePath, pluginPath, err.Error()))
@@ -705,9 +704,9 @@ func (pm *PluginManager) executePluginOnlineOrLocal(fetchOptions *ExecFetchOptio
 	var exitingErr ExitingError
 	if fetchOptions.Local {
 		// execute local plugin
-		fetched, exitingErr = queryFromLocalOnly(fetchOptions.PluginName, fetchOptions.Version)
+		fetched, exitingErr = pm.queryFromLocalOnly(fetchOptions.PluginName, fetchOptions.Version)
 	} else {
-		fetched, queried, exitingErr = queryFromOnlineOrLocal(fetchOptions, localArch)
+		fetched, queried, exitingErr = pm.queryFromOnlineOrLocal(fetchOptions, localArch)
 	}
 	if exitingErr != nil {
 		err = exitingErr.Unwrap()
@@ -745,14 +744,14 @@ func (pm *PluginManager) executePluginOnlineOrLocal(fetchOptions *ExecFetchOptio
 			// Double-check if specified plugin has been installed by another
 			// plugin-manager process, that releases plugin-version-wise
 			// exclusive lock and then this acquired.
-			fetched, exitingErr = queryFromLocalOnly(queried.Name, queried.Version)
+			fetched, exitingErr = pm.queryFromLocalOnly(queried.Name, queried.Version)
 			if exitingErr == nil || !errors.Is(exitingErr, ErrPackageNotFound) {
 				return
 			}
 
-			fetched, exitingErr = installFromOnline(queried, fetchTimeout, localArch)
+			fetched, exitingErr = pm.installFromOnline(queried, fetchTimeout, localArch)
 		}, func() {
-			fetched, exitingErr = queryFromLocalOnly(queried.Name, queried.Version)
+			fetched, exitingErr = pm.queryFromLocalOnly(queried.Name, queried.Version)
 		})
 		if guardErr != nil {
 			err = guardErr
@@ -822,7 +821,7 @@ func (pm *PluginManager) executePluginOnlineOrLocal(fetchOptions *ExecFetchOptio
 	return
 }
 
-func queryFromLocalOnly(pluginName string, pluginVersion string) (*Fetched, ExitingError) {
+func (pm *PluginManager) queryFromLocalOnly(pluginName string, pluginVersion string) (*Fetched, ExitingError) {
 	localInfo, err := getLocalPluginInfo(pluginName, pluginVersion)
 	if err != nil {
 		return nil, NewLoadInstalledPluginsExitingError(err)
@@ -831,7 +830,7 @@ func queryFromLocalOnly(pluginName string, pluginVersion string) (*Fetched, Exit
 		return nil, NewPackageNotFoundExitingError(ErrPackageNotFound, fmt.Sprintf("Could not found local package [%s]", pluginName))
 	}
 
-	envPluginDir := filepath.Join(PLUGINDIR, localInfo.Name, localInfo.Version)
+	envPluginDir := filepath.Join(pm.pluginRoot, localInfo.Name, localInfo.Version)
 	executionTimeoutInSeconds := 60
 	if t, err := strconv.Atoi(localInfo.Timeout); err == nil {
 		executionTimeoutInSeconds = t
@@ -850,7 +849,7 @@ func queryFromLocalOnly(pluginName string, pluginVersion string) (*Fetched, Exit
 }
 
 // didn't set --local, so local & online both try
-func queryFromOnlineOrLocal(fetchOptions *ExecFetchOptions, localArch string) (*Fetched, *PluginInfo, ExitingError) {
+func (pm *PluginManager) queryFromOnlineOrLocal(fetchOptions *ExecFetchOptions, localArch string) (*Fetched, *PluginInfo, ExitingError) {
 	localInfo, err := getLocalPluginInfo(fetchOptions.PluginName, fetchOptions.Version)
 	if err != nil {
 		return nil, nil, NewLoadInstalledPluginsExitingError(err)
@@ -894,7 +893,7 @@ func queryFromOnlineOrLocal(fetchOptions *ExecFetchOptions, localArch string) (*
 			executionTimeoutInSeconds = t
 		}
 
-		pluginPath := filepath.Join(PLUGINDIR, localInfo.Name, localInfo.Version)
+		pluginPath := filepath.Join(pm.pluginRoot, localInfo.Name, localInfo.Version)
 		return &Fetched{
 			PluginName:    localInfo.Name,
 			PluginVersion: localInfo.Version,
@@ -912,7 +911,7 @@ func queryFromOnlineOrLocal(fetchOptions *ExecFetchOptions, localArch string) (*
 
 // 下载并安装插件
 // pull package
-func installFromOnline(onlineInfo *PluginInfo, timeout time.Duration, localArch string) (*Fetched, ExitingError) {
+func (pm *PluginManager) installFromOnline(onlineInfo *PluginInfo, timeout time.Duration, localArch string) (*Fetched, ExitingError) {
 	ctx := context.Background()
 	var cancel context.CancelFunc
 	if timeout > 0 {
@@ -920,7 +919,7 @@ func installFromOnline(onlineInfo *PluginInfo, timeout time.Duration, localArch 
 		defer cancel()
 	}
 
-	filePath := filepath.Join(PLUGINDIR, onlineInfo.Name+".zip")
+	filePath := filepath.Join(pm.pluginRoot, onlineInfo.Name+".zip")
 
 	log.GetLogger().Infof("Downloading package from [%s], save to [%s] ", onlineInfo.Url, filePath)
 	const maxRetries = 3
@@ -975,7 +974,7 @@ func installFromOnline(onlineInfo *PluginInfo, timeout time.Duration, localArch 
 		return nil, NewMD5CheckExitingError(errors.New("Md5 not macth"), fmt.Sprintf("Md5 not match, onlineInfo.Md5 is [%s], real md5 is [%s], plugin.Url is [%s]", onlineInfo.Md5, md5Checksum, onlineInfo.Url))
 	}
 
-	unzipdir := filepath.Join(PLUGINDIR, onlineInfo.Name, onlineInfo.Version)
+	unzipdir := filepath.Join(pm.pluginRoot, onlineInfo.Name, onlineInfo.Version)
 	pathutil.MakeSurePath(unzipdir)
 	log.GetLogger().Infoln("Unzip package...")
 	if err := zipfile.UnzipContext(ctx, filePath, unzipdir, false); err != nil {
@@ -1056,7 +1055,7 @@ func installFromOnline(onlineInfo *PluginInfo, timeout time.Duration, localArch 
 	if pluginIndex == -1 {
 		_, err = insertNewInstalledPlugin(onlineInfo)
 	} else {
-		envPrePluginDir = filepath.Join(PLUGINDIR, pluginInfo.Name, pluginInfo.Version)
+		envPrePluginDir = filepath.Join(pm.pluginRoot, pluginInfo.Name, pluginInfo.Version)
 		err = updateInstalledPlugin(pluginIndex, onlineInfo)
 	}
 	if err != nil {
@@ -1075,7 +1074,7 @@ func installFromOnline(onlineInfo *PluginInfo, timeout time.Duration, localArch 
 
 		Entrypoint:                cmdPath,
 		ExecutionTimeoutInSeconds: executionTimeoutInSeconds,
-		EnvPluginDir:              filepath.Join(PLUGINDIR, config.Name, config.Version),
+		EnvPluginDir:              filepath.Join(pm.pluginRoot, config.Name, config.Version),
 		EnvPrePluginDir:           envPrePluginDir,
 	}, nil
 }
@@ -1134,7 +1133,7 @@ func (pm *PluginManager) VerifyPlugin(fetchOptions *VerifyFetchOptions, executeP
 	}).Infoln("Enter VerifyPlugin")
 
 	// pull package
-	unzipdir := filepath.Join(PLUGINDIR, "verify_plugin_test")
+	unzipdir := filepath.Join(pm.pluginRoot, "verify_plugin_test")
 	exitCode, err = func(packageUrl string, timeoutInSeconds int) (int, error) {
 		ctx := context.Background()
 		var cancel context.CancelFunc
@@ -1146,7 +1145,7 @@ func (pm *PluginManager) VerifyPlugin(fetchOptions *VerifyFetchOptions, executeP
 		log.GetLogger().Infoln("Downloading package from ", packageUrl)
 		filePath, err := func(packageUrl string, timeoutInSeconds int) (string, error) {
 			fileName := packageUrl[strings.LastIndex(packageUrl, "/")+1:]
-			filePath := PLUGINDIR + Separator + fileName
+			filePath := filepath.Join(pm.pluginRoot, fileName)
 			if len(packageUrl) > 4 && packageUrl[:4] == "http" {
 				return filePath, util.HttpDownloadContext(ctx, packageUrl, filePath)
 			} else {
@@ -1300,9 +1299,9 @@ func needReportStatus(paramsList []string) bool {
 	return false
 }
 
-func InstallPluginFromOnline(onlineInfo *PluginInfo, timeout int) error {
+func (pm *PluginManager) InstallPluginFromOnline(onlineInfo *PluginInfo, timeout int) error {
 	localArch, _ := GetArch()
-	_, err := installFromOnline(onlineInfo, time.Second*time.Duration(timeout), localArch)
+	_, err := pm.installFromOnline(onlineInfo, time.Second*time.Duration(timeout), localArch)
 	return err
 }
 
@@ -1316,7 +1315,7 @@ func QueryPluginFromOnline(pluginName, pluginType, version string) (*PluginInfo,
 	}
 	var res *PluginInfo
 	for i, _ := range pluginInfos {
-		if pluginInfos[i].PluginType() != pluginType {
+		if pluginType != "" && pluginInfos[i].PluginType() != pluginType {
 			continue
 		}
 		if version != "" {
@@ -1341,14 +1340,38 @@ func QueryPluginFromLocal(pluginName, pluginType string) (*PluginInfo, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	var res *PluginInfo
 	for i, _ := range plugins {
-		if plugins[i].IsRemoved || plugins[i].PluginType() != pluginType {
+		if plugins[i].IsRemoved || (pluginType != "" && plugins[i].PluginType() != pluginType) {
 			continue
 		}
+		res = &plugins[i]
+		break
+
 	}
 	if res == nil {
 		return nil, fmt.Errorf("not found")
+	}
+	return res, nil
+}
+
+func QueryPluginFromLocalPreInstalled(pluginName, pluginType string) (*PluginInfo, error) {
+	preInstalledPlugins, err := getAllPreInstalledPlugins()
+	if err != nil {
+		return nil, err
+	}
+	var res *PluginInfo
+	for i, _ := range preInstalledPlugins {
+		if preInstalledPlugins[i].IsRemoved || preInstalledPlugins[i].Name != pluginName || (pluginType != "" && preInstalledPlugins[i].PluginType() != pluginType) {
+			continue
+		}
+		res = &preInstalledPlugins[i]
+		break
+	}
+	if res == nil {
+		return nil, fmt.Errorf("not found")
+
 	}
 	return res, nil
 }
@@ -1368,4 +1391,8 @@ func LoadAllPluginFromLocal(pluginType string) ([]PluginInfo, error) {
 		return res, nil
 	}
 	return plugins, nil
+}
+
+func (pm *PluginManager) GetPluginCommandPath(pluginInfo *PluginInfo) string {
+	return filepath.Join(pm.pluginRoot, pluginInfo.Name, pluginInfo.Version, pluginInfo.RunPath)
 }

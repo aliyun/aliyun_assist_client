@@ -176,6 +176,8 @@ func (s *systemd) Install() error {
 	if err != nil {
 		return err
 	}
+	// Run sync to ensure that the conf file is saved to disk.
+	f.Sync()
 
 	// NOTE: The order of enabling service and reloading daemon is swapped due
 	// to an unexpected systemd behavior on SLES12sp2, i.e., enabling enabled

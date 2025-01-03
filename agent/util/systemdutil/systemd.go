@@ -15,6 +15,8 @@ import (
 var (
 	isRunningSystemdOnce sync.Once
 	isRunningSystemd     bool
+
+	cm = newDbusConnManager()
 )
 
 // NOTE: This function comes from package github.com/coreos/go-systemd/util
@@ -33,7 +35,6 @@ func IsRunningSystemd() bool {
 }
 
 func SystemState(ctx context.Context) (string, error) {
-	cm := newDbusConnManager()
 	var property *systemdDbus.Property
 	var err error
 	cm.retryOnDisconnect(func(c *systemdDbus.Conn) error {
@@ -44,4 +45,30 @@ func SystemState(ctx context.Context) (string, error) {
 		return "", err
 	}
 	return strings.Trim(property.Value.String(), "\""), nil
+}
+
+func StopUnit(ctx context.Context, unitName string) (string, error) {
+	ch := make(chan string, 1)
+	err := cm.retryOnDisconnect(func(c *systemdDbus.Conn) error {
+		_, err := c.StopUnitContext(ctx, unitName, "replace", ch)
+		return err
+	})
+	var res string
+	if err == nil {
+		res = <-ch
+	}
+	return res, err
+}
+
+func StartUnit(ctx context.Context, unitName string) (string, error) {
+	ch := make(chan string, 1)
+	err := cm.retryOnDisconnect(func(c *systemdDbus.Conn) error {
+		_, err := c.StartUnitContext(ctx, unitName, "replace", ch)
+		return err
+	})
+	var res string
+	if err == nil {
+		res = <-ch
+	}
+	return res, err
 }
