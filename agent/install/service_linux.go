@@ -3,7 +3,7 @@ package install
 import (
 	"github.com/aliyun/aliyun_assist_client/thirdparty/service"
 
-	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/agent/util/systemdutil"
 )
 
 const (
@@ -145,13 +145,53 @@ case "$1" in
 esac
 exit 0
 `
+	
+	upstartScript = `# {{.Description}}
+
+{{if .DisplayName}}description    "{{.DisplayName}}"{{end}}
+
+{{if .HasKillStanza}}kill signal INT{{end}}
+{{if .ChRoot}}chroot {{.ChRoot}}{{end}}
+{{if .WorkingDirectory}}chdir {{.WorkingDirectory}}{{end}}
+start on filesystem or runlevel [2345]
+stop on runlevel [!2345]
+
+{{if and .UserName .HasSetUIDStanza}}setuid {{.UserName}}{{end}}
+
+respawn
+respawn limit 3 120
+normal exit 0
+umask 022
+
+console none
+
+pre-start script
+    test -x {{.Path}} || { stop; exit 0; }
+end script
+
+# Start
+script
+	{{if .LogOutput}}
+	stdout_log="/var/log/{{.Name}}.out"
+	stderr_log="/var/log/{{.Name}}.err"
+	{{end}}
+	
+	if [ -f "/etc/sysconfig/{{.Name}}" ]; then
+		set -a
+		source /etc/sysconfig/{{.Name}}
+		set +a
+	fi
+
+	exec {{if and .UserName (not .HasSetUIDStanza)}}sudo -E -u {{.UserName}} {{end}}{{.Path}}{{range .Arguments}} {{.|cmd}}{{end}}{{if .LogOutput}} >> $stdout_log 2>> $stderr_log{{end}}
+end script
+`
 )
 
 func ServiceConfig() *service.Config {
 	ServiceName := ""
 	depends := []string{}
 	option := make(service.KeyValue)
-	if util.IsSystemdLinux() {
+	if systemdutil.IsRunningSystemd() {
 		ServiceName = "aliyun"
 		// Official doc https://www.freedesktop.org/wiki/Software/systemd/NetworkTarget/
 		// suggests both After= and Wants= configuration to delay a service after
@@ -167,6 +207,7 @@ func ServiceConfig() *service.Config {
 	} else {
 		ServiceName = "aliyun-service"
 		option["SysvScript"] = sysvScript
+		option["UpstartScript"] = upstartScript
 		option["LogOutput"] = true
 	}
 

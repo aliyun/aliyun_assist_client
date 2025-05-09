@@ -1,11 +1,12 @@
+//go:build windows
 // +build windows
 
 package kickvmhandle
 
 import (
 	"os"
-	"strings"
 	"path/filepath"
+	"strings"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/util/process"
@@ -38,7 +39,7 @@ func removeAgant(params []string) error {
 func updateAgant(params []string) error {
 	log.GetLogger().Println("updateAgant")
 	processer :=  process.ProcessCmd{}
-	path, err := pathutil.GetCurrentPath()
+	path, err := pathutil.GetExecutableDir()
 	if err != nil {
 		return err
 	}

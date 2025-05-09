@@ -15,6 +15,8 @@ import (
 	"github.com/aliyun/aliyun_assist_client/thirdparty/service"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/single"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
+	"github.com/kirinlabs/HttpRequest"
+	"github.com/tidwall/gjson"
 	"k8s.io/klog/v2"
 
 	"github.com/aliyun/aliyun_assist_client/agent/channel"
@@ -28,6 +30,7 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/flagging"
 	"github.com/aliyun/aliyun_assist_client/agent/heartbeat"
 	"github.com/aliyun/aliyun_assist_client/agent/hybrid"
+	"github.com/aliyun/aliyun_assist_client/agent/hybrid/instance"
 	"github.com/aliyun/aliyun_assist_client/agent/install"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
@@ -324,9 +327,22 @@ func (p *program) run() {
 
 	// Check last panic and report it
 	wrapgo.CallWithPanicHandler(checkagentpanic.CheckAgentPanic, clientreport.LogAndReportIgnorePanic)
-
-	// Check hybrid instance's fingerprint file
-	hybrid.CheckFingerprint()
+	if instance.IsHybrid() {
+		// Check hybrid instance's fingerprint file
+		hybrid.CheckFingerprint()
+		util.SetHTTPPostErrHandler(func(httpResp *HttpRequest.Response, httpErr error) {
+			if httpResp != nil {
+				content, _ := httpResp.Content()
+				respJson := gjson.Parse(content)
+				errMsg := respJson.Get("errMsg")
+				if errMsg.Exists() && errMsg.String() == "instance_deregistered" {
+					log.GetLogger().Info("Clean up hybrid instance info and stop agent process self, because of errMsg: ", errMsg.String())
+					// Service process will be stopped after hybrid.CleanUpRegisterDataAndExit()
+					hybrid.CleanUpRegisterDataAndExit()
+				}
+			}
+		})
+	}
 
 	// Check in main goroutine and update as soon as possible, which use stricter
 	// timeout limitation. NOTE: The preparation phase timeout parameter should

@@ -110,51 +110,10 @@ func printPluginInfo(pluginInfoList *[]PluginInfo) {
 	fmt.Println()
 }
 
-// get pluginInfo by name from online
-func getPackageInfo(pluginName, version string, withArch bool) ([]PluginInfo, error) {
-	arch := ""
-	if withArch {
-		arch, _ = GetArch()
-	}
-	postValue := PluginListRequest{
-		OsType:     osutil.GetOsType(),
-		PluginName: pluginName,
-		Version:    version,
-		Arch:       arch,
-	}
-	listRet := PluginListResponse{}
-	if osutil.GetOsType() == osutil.OSWin {
-		postValue.OsType = "windows"
-	}
-	postValueStr, err := fuzzyjson.Marshal(&postValue)
-	if err != nil {
-		return listRet.PluginList, err
-	}
-	// http 请求尝试3次
-	log.GetLogger().Infof("Request /plugin/list, params[%s]", string(postValueStr))
-	ret, err := util.HttpPost(util.GetPluginListService(), postValueStr, "json")
-	if err != nil {
-		retry := 2
-		for retry > 0 && err != nil {
-			retry--
-			// pluginlist接口有流控，等一下再重试
-			time.Sleep(time.Duration(3) * time.Second)
-			ret, err = util.HttpPost(util.GetPluginListService(), postValueStr, "json")
-		}
-	}
-	if err != nil {
-		return listRet.PluginList, err
-	}
-	if err := fuzzyjson.Unmarshal(ret, &listRet); err != nil {
-		return nil, err
-	}
-	return listRet.PluginList, nil
-}
-
 func getOnlinePluginInfo(packageName, version string) (archMatch *PluginInfo, archNotMatch []string, err error) {
 	// request all arch pluginInfos
 	var pluginList []PluginInfo
-	pluginList, err = getPackageInfo(packageName, version, false)
+	pluginList, err = FetchPackageInfo(log.GetLogger(), packageName, version, false)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -193,7 +152,7 @@ func (pm *PluginManager) List(pluginName string, local bool) (exitCode int, err 
 		}
 	} else {
 		// just request pluginInfos with right arch
-		pluginInfoList, err = getPackageInfo(pluginName, "", true)
+		pluginInfoList, err = FetchPackageInfo(log.GetLogger(), pluginName, "", true)
 		if err != nil {
 			exitCode, _ = errProcess(funcName, GET_ONLINE_PACKAGE_INFO_ERR, err, "Get plugin info from online err: "+err.Error())
 			return
@@ -1306,7 +1265,7 @@ func (pm *PluginManager) InstallPluginFromOnline(onlineInfo *PluginInfo, timeout
 }
 
 func QueryPluginFromOnline(pluginName, pluginType, version string) (*PluginInfo, error) {
-	pluginInfos, err := getPackageInfo(pluginName, version, true)
+	pluginInfos, err := FetchPackageInfo(log.GetLogger(), pluginName, version, true)
 	if err != nil {
 		return nil, err
 	}

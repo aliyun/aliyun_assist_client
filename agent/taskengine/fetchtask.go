@@ -122,9 +122,9 @@ func parseTaskInfo(jsonStr string) (int, *taskCollection) {
 	return task_lists.Code, taskInfos
 }
 
-func FetchTaskList(reason FetchReason, taskId string, taskType int, isColdstart bool) *taskCollection {
+func FetchTaskList(reason FetchReason, taskId string, taskType int, isColdstart bool) (*taskCollection, error) {
 	if util.GetServerHost() == "" {
-		return newTaskCollection()
+		return newTaskCollection(), fmt.Errorf("server host is empty")
 	}
 
 	url := util.GetFetchTaskListService()
@@ -137,7 +137,7 @@ func FetchTaskList(reason FetchReason, taskId string, taskType int, isColdstart 
 		log.GetLogger().WithFields(logrus.Fields{
 			"reason": reason,
 		}).Errorln("Invalid reason for fetching tasks")
-		return newTaskCollection()
+		return newTaskCollection(), fmt.Errorf("invalid reason for fetching tasks")
 	}
 	if taskType == SessionTaskType {
 		url = util.GetFetchSessionTaskListService()
@@ -167,7 +167,7 @@ func FetchTaskList(reason FetchReason, taskId string, taskType int, isColdstart 
 			response, err = util.HttpPostWithTimeout(url, "", "", 8, false)
 		}
 		if err != nil {
-			return newTaskCollection()
+			return newTaskCollection(), err
 		}
 		code, taskInfos = parseTaskInfo(response)
 		if code == 408 {
@@ -177,7 +177,7 @@ func FetchTaskList(reason FetchReason, taskId string, taskType int, isColdstart 
 		break
 	}
 
-	return taskInfos
+	return taskInfos, nil
 }
 
 func (t *taskInfo) toRunTaskInfo(instanceId string) (models.RunTaskInfo, error) {

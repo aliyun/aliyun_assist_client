@@ -11,30 +11,27 @@ import (
 	"time"
 
 	gomonkey "github.com/agiledragon/gomonkey/v2"
+	"github.com/aliyun/aliyun_assist_client/agent/flagging"
 	"github.com/google/uuid"
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/aliyun/aliyun_assist_client/agent/clientreport"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
-	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 	"github.com/aliyun/aliyun_assist_client/common/fileutil"
+	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 	"github.com/aliyun/aliyun_assist_client/common/requester"
 	"github.com/aliyun/aliyun_assist_client/internal/testutil"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 )
 
 func TestGshellChannel(t *testing.T) {
+	flagging.InitConfig(logrus.New())
 
-	guard_transport := gomonkey.ApplyFunc(requester.GetHTTPTransport, func(logrus.FieldLogger) *http.Transport {
-		transport, _ := http.DefaultTransport.(*http.Transport)
-		return transport
-	})
-	defer guard_transport.Reset()
+	requester.NilTransport.Set()
+	defer requester.NilTransport.Clear()
 
 	httpmock.Activate()
-	util.NilRequest.Set()
-	defer util.NilRequest.Clear()
 	defer httpmock.DeactivateAndReset()
 	const mockRegion = "cn-test100"
 	testutil.MockMetaServer(mockRegion)
@@ -120,8 +117,8 @@ var defaultLetters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ012345
 func TestWSChannel(t *testing.T) {
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
-	util.NilRequest.Set()
-	defer util.NilRequest.Clear()
+	requester.NilTransport.Set()
+	defer requester.NilTransport.Clear()
 	const mockRegion = "cn-test100"
 	testutil.MockMetaServer(mockRegion)
 	

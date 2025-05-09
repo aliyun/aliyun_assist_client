@@ -9,6 +9,11 @@ import (
 	"time"
 
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
+	"github.com/aliyun/aliyun_assist_client/agent/util/atomicutil"
+)
+
+var (
+	NilTransport *atomicutil.AtomicBoolean
 )
 
 var (
@@ -20,7 +25,16 @@ var (
 	_initProxiedHTTPTransportOnce sync.Once
 )
 
+func init() {
+	NilTransport = &atomicutil.AtomicBoolean{}
+	NilTransport.Clear()
+}
+
 func GetHTTPTransport(logger logrus.FieldLogger) *http.Transport {
+	if NilTransport.IsSet() {
+		return nil
+	}
+
 	_initHTTPTransportOnce.Do(func() {
 		_httpTransportLock.Lock()
 		defer _httpTransportLock.Unlock()
@@ -46,6 +60,10 @@ func RefreshHTTPCas(logger logrus.FieldLogger, certPool *x509.CertPool) {
 }
 
 func GetProxiedHTTPTransport(logger logrus.FieldLogger) *http.Transport {
+	if NilTransport.IsSet() {
+		return nil
+	}
+
 	_initProxiedHTTPTransportOnce.Do(func() {
 		_proxiedHTTPTransport = unsafeGetProxiedHTTPTransport(logger)
 	})

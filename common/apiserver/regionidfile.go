@@ -27,8 +27,8 @@ func (p *RegionIdFileProvider) RegionId(logger logrus.FieldLogger) (string, erro
 }
 
 func (*RegionIdFileProvider) getRegionIdInFile() string {
-	currentVersionDir, _ := pathutil.GetCurrentPath()
-	path := filepath.Join(filepath.Dir(currentVersionDir), "region-id")
+	crossVersionDir, _ := pathutil.GetCrossVersionInboundDir()
+	path := filepath.Join(crossVersionDir, "region-id")
 
 	if regionIdFile, err := os.Open(path); err == nil {
 		if raw, err2 := io.ReadAll(regionIdFile); err2 == nil {
@@ -39,8 +39,8 @@ func (*RegionIdFileProvider) getRegionIdInFile() string {
 }
 
 func (*RegionIdFileProvider) SaveRegionId(logger logrus.FieldLogger, regionId string) {
-	currentVersionDir, _ := pathutil.GetCurrentPath()
-	path := filepath.Join(filepath.Dir(currentVersionDir), "region-id")
+	crossVersionDir, _ := pathutil.GetCrossVersionInboundDir()
+	path := filepath.Join(crossVersionDir, "region-id")
 
 	err := os.WriteFile(path, []byte(regionId), os.FileMode(0o644))
 	if err != nil {

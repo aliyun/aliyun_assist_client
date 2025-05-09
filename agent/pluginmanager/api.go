@@ -1,5 +1,15 @@
 package pluginmanager
 
+import (
+	"encoding/json"
+	"time"
+
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
+
+	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
+)
+
 // 调用一下接口后需要主动向服务端上报插件状态
 var (
 	NEED_REFRESH_STATUS_API []string = []string{"--install", "--uninstall", "--start", "--stop", "--upgrade", "--restart"}
@@ -73,4 +83,45 @@ type PluginUpdateInfo struct {
 	Name    string `json:"name"`
 	Version string `json:"version"`
 	Timeout int `json:"timeout"`
+}
+
+// get pluginInfo by name from online
+func FetchPackageInfo(logger logrus.FieldLogger, pluginName string, version string, withArch bool) ([]PluginInfo, error) {
+	arch := ""
+	if withArch {
+		arch, _ = GetArch()
+	}
+
+	postValue := PluginListRequest{
+		OsType:     osutil.GetOsType(),
+		PluginName: pluginName,
+		Version:    version,
+		Arch:       arch,
+	}
+	postBody, err := json.Marshal(&postValue)
+	if err != nil {
+		return nil, err
+	}
+
+	// http 请求尝试3次
+	postContent := string(postBody)
+	responseContent, err := util.HttpPost(util.GetPluginListService(), postContent, "json")
+	if err != nil {
+		retry := 2
+		for retry > 0 && err != nil {
+			retry--
+			// pluginlist接口有流控，等一下再重试
+			time.Sleep(time.Duration(3) * time.Second)
+			responseContent, err = util.HttpPost(util.GetPluginListService(), postContent, "json")
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	listResponse := PluginListResponse{}
+	if err := json.Unmarshal([]byte(responseContent), &listResponse); err != nil {
+		return nil, err
+	}
+	return listResponse.PluginList, nil
 }

@@ -8,12 +8,12 @@ import (
 
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/cli"
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/config"
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/i18n"
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/log"
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/portforward"
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/sendpublickey"
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/session"
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/ssh"
-	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/i18n"
 
 	"github.com/spf13/pflag"
 )

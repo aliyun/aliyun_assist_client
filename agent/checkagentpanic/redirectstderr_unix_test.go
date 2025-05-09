@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	gomonkey "github.com/agiledragon/gomonkey/v2"
-	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/agent/util/systemdutil"
 	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 	"github.com/stretchr/testify/assert"
 )
@@ -29,7 +29,7 @@ func TestRedirectStdouterr(t *testing.T) {
 		os.RemoveAll(stdouterrDir)
 	}()
 
-	guard_isSystemd := gomonkey.ApplyFunc(util.IsSystemdLinux, func() bool {
+	guard_isSystemd := gomonkey.ApplyFunc(systemdutil.IsRunningSystemd, func() bool {
 		return false
 	})
 	defer guard_isSystemd.Reset()

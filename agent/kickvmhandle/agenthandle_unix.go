@@ -30,7 +30,7 @@ func removeAgant(params []string) error {
 func updateAgant(params []string) error {
 	log.GetLogger().Println("updateAgant")
 	processer :=  process.ProcessCmd{}
-	path, err := pathutil.GetCurrentPath()
+	path, err := pathutil.GetExecutableDir()
 	if err != nil {
 		return err
 	}

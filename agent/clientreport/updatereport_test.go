@@ -7,13 +7,12 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/jarcoal/httpmock"
-	"github.com/stretchr/testify/assert"
 	gomonkey "github.com/agiledragon/gomonkey/v2"
 	"github.com/aliyun/aliyun_assist_client/common/requester"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
+	"github.com/jarcoal/httpmock"
+	"github.com/stretchr/testify/assert"
 
-	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/internal/testutil"
 )
 
@@ -23,18 +22,18 @@ func TestReportUpdateFailure(t *testing.T) {
 		return transport
 	})
 	defer guard_transport.Reset()
-	
+
 	httpmock.Activate()
-	util.NilRequest.Set()
-	defer util.NilRequest.Clear()
+	requester.NilTransport.Set()
+	defer requester.NilTransport.Clear()
 	defer httpmock.DeactivateAndReset()
 
 	const mockRegion = "cn-test100"
 	testutil.MockMetaServer(mockRegion)
 
 	mockResponseBytes, err := json.Marshal(map[string]interface{}{
-		"code": 200,
-		"errCode": "success",
+		"code":       200,
+		"errCode":    "success",
 		"instanceId": "i-test100",
 	})
 	if err != nil {
@@ -55,9 +54,9 @@ func TestReportUpdateFailure(t *testing.T) {
 		})
 
 	response, err := ReportUpdateFailure("UnitTest", UpdateFailure{
-		UpdateInfo: nil,
+		UpdateInfo:     nil,
 		FailureContext: map[string]interface{}{"unittest": true},
-		ErrorMessage: "UnitTest",
+		ErrorMessage:   "UnitTest",
 	})
 	assert.NoError(t, err, "ReportUpdateFailure should not return error")
 	assert.Exactly(t, string(mockResponseBytes), response, "Response should match")
@@ -71,4 +70,3 @@ func TestReportUpdateFailure(t *testing.T) {
 	assert.Exactly(t, true, sendedFailure.FailureContext["unittest"])
 	assert.Exactly(t, sendedFailure.ErrorMessage, "UnitTest")
 }
-

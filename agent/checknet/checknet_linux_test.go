@@ -12,7 +12,7 @@ import (
 	"github.com/jarcoal/httpmock"
 
 	"github.com/aliyun/aliyun_assist_client/common/fileutil"
-	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/common/requester"
 	"github.com/aliyun/aliyun_assist_client/common/networkcategory"
 )
 
@@ -48,8 +48,8 @@ func TestNetWorkCheck(t *testing.T) {
 	RecentReport()
 
 	httpmock.Activate()
-	util.NilRequest.Set()
-	defer util.NilRequest.Clear()
+	requester.NilTransport.Set()
+	defer requester.NilTransport.Clear()
 	defer httpmock.DeactivateAndReset()
 	url := "http://checknet.c"
 	downloadfile := filepath.Join(currentVersionDir, "downloadfile")

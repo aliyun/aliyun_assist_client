@@ -21,9 +21,9 @@ func TestMetrics(t *testing.T) {
 	defer guard_transport.Reset()
 
 	httpmock.Activate()
-	util.NilRequest.Set()
+	requester.NilTransport.Set()
+	defer requester.NilTransport.Clear()
 	defer httpmock.DeactivateAndReset()
-	defer util.NilRequest.Clear()
 	mockRegionId := "mock-region"
 	testutil.MockMetaServer(mockRegionId)
 	httpmock.RegisterResponder("POST",

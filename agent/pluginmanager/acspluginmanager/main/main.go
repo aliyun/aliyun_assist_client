@@ -34,10 +34,10 @@ import (
 func main() {
 	cli.Version = versioning.AssistVersion
 	log.InitLog("acs_plugin_manager.log", "", true)
-	// Init config
-	flagging.InitConfig(log.GetLogger())
 	// If write log failed, do nothing
 	log.GetLogger().SetErrorCallback(func(error) {})
+	// Init config
+	flagging.InitConfig(log.GetLogger())
 	cli.PlatformCompatible()
 	writer := cli.DefaultWriter()
 
@@ -130,6 +130,7 @@ func execute(ctx *cli.Context, args []string) error {
 	if version {
 		fmt.Println(versioning.AssistVersion)
 	} else if list {
+		log.GetLogger().Infof("Listing all plugins")
 		exitCode, err = pluginManager.List(plugin, local)
 	} else if verify {
 		executeParams := &pm.ExecuteParams{

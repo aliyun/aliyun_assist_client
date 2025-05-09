@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/user"
 	"path"
-	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -16,6 +15,7 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/models"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 )
 
 const (
@@ -139,9 +139,7 @@ func sendFile(sendFile models.SendFileTaskInfo) int {
 	fileDir := ""
 	if sendFile.Destination == "" {
 		if G_IsWindows {
-			currentpath, _ := os.Executable()
-			fileDir, _ = filepath.Abs(filepath.Dir(currentpath))
-
+			fileDir, _ = pathutil.GetExecutableDir()
 		} else {
 			fileDir = "/root"
 		}

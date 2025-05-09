@@ -68,7 +68,7 @@ type Task struct {
 	cancelMut               sync.Mutex
 
 	disableOutputRingbuffer bool
-	outputBuf                  outputbuffer.OutputBuf
+	outputBuf               outputbuffer.OutputBuf
 	data_sended             uint32
 }
 
@@ -507,7 +507,11 @@ func (task *Task) sendTaskStart() taskerrors.ExecutionError {
 }
 
 func (task *Task) SendInvalidTask(param string, value string) {
-	content, _ := reportInvalidTask(task.taskInfo.TaskId, task.taskInfo.InvokeVersion, param, value, task.processer.ExtraLubanParams())
+	var extraLubanParams string
+	if task.processer != nil {
+		extraLubanParams = task.processer.ExtraLubanParams()
+	}
+	content, _ := reportInvalidTask(task.taskInfo.TaskId, task.taskInfo.InvokeVersion, param, value, extraLubanParams)
 	if resp := parseTaskReportResp(content); resp != nil && resp.ErrorCode != "" {
 		log.GetLogger().WithFields(logrus.Fields{
 			"taskId":            task.taskInfo.TaskId,
@@ -571,7 +575,7 @@ func (task *Task) SendError(output string, errCode fmt.Stringer, errDesc string)
 	queryString += task.processer.ExtraLubanParams()
 
 	requestURL := util.GetErrorOutputService() + queryString
-	
+
 	content, err := util.HttpPost(requestURL, output, "text")
 	for i := 0; i < 3 && err != nil; i++ {
 		time.Sleep(time.Duration(2) * time.Second)
@@ -608,7 +612,7 @@ func (task *Task) Cancel(quietly bool, taskRunning bool) error {
 				task.monotonicEndTimestamp = timetool.ToAccurateTime(timetool.ToStableElapsedTime(task.endTime, task.startTime).Local())
 			}
 		}
-		cancelErr := task.processer.Cancel()
+		cancelErr = task.processer.Cancel()
 		taskLogger := log.GetLogger().WithFields(logrus.Fields{
 			"taskId":        task.taskInfo.TaskId,
 			"invokeVersion": task.taskInfo.InvokeVersion,

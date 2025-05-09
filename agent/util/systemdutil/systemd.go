@@ -72,3 +72,16 @@ func StartUnit(ctx context.Context, unitName string) (string, error) {
 	}
 	return res, err
 }
+
+func RestartUnit(ctx context.Context, unitName string) (string, error) {
+	ch := make(chan string, 1)
+	err := cm.retryOnDisconnect(func(c *systemdDbus.Conn) error {
+		_, err := c.RestartUnitContext(ctx, unitName, "replace", ch)
+		return err
+	})
+	var res string
+	if err == nil {
+		res = <-ch
+	}
+	return res, err
+}

@@ -23,14 +23,13 @@ import (
 	"github.com/aliyun/aliyun_assist_client/common/httpbase"
 	"github.com/aliyun/aliyun_assist_client/common/requester"
 	"github.com/aliyun/aliyun_assist_client/internal/testutil"
-	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 )
 
 func TestBuildPingRequest(t *testing.T) {
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
-	util.NilRequest.Set()
-	defer util.NilRequest.Clear()
+	requester.NilTransport.Set()
+	defer requester.NilTransport.Clear()
 	const mockRegion = "cn-test100"
 	testutil.MockMetaServer(mockRegion)
 
@@ -150,15 +149,10 @@ func generateFakeErrorResponseOrPanic() string {
 }
 
 func TestInvokePingRequest(t *testing.T) {
-	guard := gomonkey.ApplyFunc(requester.GetHTTPTransport, func(logrus.FieldLogger) *http.Transport {
-		transport, _ := http.DefaultTransport.(*http.Transport)
-		return transport
-	})
-	defer guard.Reset()
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
-	util.NilRequest.Set()
-	defer util.NilRequest.Clear()
+	requester.NilTransport.Set()
+	defer requester.NilTransport.Clear()
 	const mockRegion = "cn-test100"
 	testutil.MockMetaServer(mockRegion)
 
@@ -178,15 +172,10 @@ func TestInvokePingRequest(t *testing.T) {
 }
 
 func TestInvokePingRequestRetrying(t *testing.T) {
-	guard := gomonkey.ApplyFunc(requester.GetHTTPTransport, func(logrus.FieldLogger) *http.Transport {
-		transport, _ := http.DefaultTransport.(*http.Transport)
-		return transport
-	})
-	defer guard.Reset()
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
-	util.NilRequest.Set()
-	defer util.NilRequest.Clear()
+	requester.NilTransport.Set()
+	defer requester.NilTransport.Clear()
 
 	const mockRegion = "cn-test100"
 	testutil.MockMetaServer(mockRegion)
@@ -215,15 +204,10 @@ func TestInvokePingRequestRetrying(t *testing.T) {
 }
 
 func TestInvokePingRequestRetryingWithLimit(t *testing.T) {
-	guard := gomonkey.ApplyFunc(requester.GetHTTPTransport, func(logrus.FieldLogger) *http.Transport {
-		transport, _ := http.DefaultTransport.(*http.Transport)
-		return transport
-	})
-	defer guard.Reset()
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
-	util.NilRequest.Set()
-	defer util.NilRequest.Clear()
+	requester.NilTransport.Set()
+	defer requester.NilTransport.Clear()
 	_retryCounter = 0
 	defer func() {
 		_retryCounter = 0
@@ -262,15 +246,10 @@ func TestInvokePingRequestRetryingWithLimit(t *testing.T) {
 }
 
 func TestInvokePingRequestNetworkError(t *testing.T) {
-	guard := gomonkey.ApplyFunc(requester.GetHTTPTransport, func(logrus.FieldLogger) *http.Transport {
-		transport, _ := http.DefaultTransport.(*http.Transport)
-		return transport
-	})
-	defer guard.Reset()
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
-	util.NilRequest.Set()
-	defer util.NilRequest.Clear()
+	requester.NilTransport.Set()
+	defer requester.NilTransport.Clear()
 
 	const mockRegion = "cn-test100"
 	testutil.MockMetaServer(mockRegion)
@@ -289,15 +268,10 @@ func TestInvokePingRequestNetworkError(t *testing.T) {
 }
 
 func TestInvokePingRequestServerError(t *testing.T) {
-	guard := gomonkey.ApplyFunc(requester.GetHTTPTransport, func(logrus.FieldLogger) *http.Transport {
-		transport, _ := http.DefaultTransport.(*http.Transport)
-		return transport
-	})
-	defer guard.Reset()
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
-	util.NilRequest.Set()
-	defer util.NilRequest.Clear()
+	requester.NilTransport.Set()
+	defer requester.NilTransport.Clear()
 
 	const mockRegion = "cn-test100"
 	testutil.MockMetaServer(mockRegion)
@@ -316,15 +290,10 @@ func TestInvokePingRequestServerError(t *testing.T) {
 }
 
 func TestInvokePingRequestTimeOut(t *testing.T) {
-	guard := gomonkey.ApplyFunc(requester.GetHTTPTransport, func(logrus.FieldLogger) *http.Transport {
-		transport, _ := http.DefaultTransport.(*http.Transport)
-		return transport
-	})
-	defer guard.Reset()
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
-	util.NilRequest.Set()
-	defer util.NilRequest.Clear()
+	requester.NilTransport.Set()
+	defer requester.NilTransport.Clear()
 	const mockRegion = "cn-test500"
 	testutil.MockMetaServer(mockRegion)
 
@@ -363,15 +332,10 @@ var (
 )
 
 func Test_doPing(t *testing.T) {
-	guard := gomonkey.ApplyFunc(requester.GetHTTPTransport, func(logrus.FieldLogger) *http.Transport {
-		transport, _ := http.DefaultTransport.(*http.Transport)
-		return transport
-	})
-	defer guard.Reset()
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
-	util.NilRequest.Set()
-	defer util.NilRequest.Clear()
+	requester.NilTransport.Set()
+	defer requester.NilTransport.Clear()
 	defer func() {
 		_retryCounter = 0
 	}()
@@ -438,21 +402,16 @@ func Test_doPing(t *testing.T) {
 }
 
 func Test_doPingSwitchProtocol(t *testing.T) {
-
-	guard := gomonkey.ApplyFunc(requester.GetHTTPTransport, func(logrus.FieldLogger) *http.Transport {
-		transport, _ := http.DefaultTransport.(*http.Transport)
-		return transport
-	})
-	defer guard.Reset()
-
 	// Mock instance.IsHybrid to make it must return the expect value
 	// Else the return value is uncertain
-	hybridGuard := gomonkey.ApplyFunc(instance.IsHybrid, func() bool { return false})
-	
+	mockHybrid := false
+	hybridGuard := gomonkey.ApplyFunc(instance.IsHybrid, func() bool { return mockHybrid })
+	defer hybridGuard.Reset()
+
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
-	util.NilRequest.Set()
-	defer util.NilRequest.Clear()
+	requester.NilTransport.Set()
+	defer requester.NilTransport.Clear()
 	defer func() {
 		_retryCounter = 0
 	}()
@@ -535,12 +494,10 @@ func Test_doPingSwitchProtocol(t *testing.T) {
 	err = doPing()
 	assert.ErrorIs(t, err, nil)
 
-	hybridGuard.Reset()
-
 	// use https and do not switch to http in hybrid mode
 	log.GetLogger().Info("Test: use https and do not switch to http in hybrid mode")
-	hybridGuard = gomonkey.ApplyFunc(instance.IsHybrid, func() bool { return true})
-	defer hybridGuard.Reset()
+	mockHybrid = true
+	
 	for i := 0; i < 25*60; i += 1 {
 		disableHttpx("https", mockRegion)
 		enableHttpx("http", mockRegion)
@@ -555,15 +512,10 @@ func Test_doPingSwitchProtocol(t *testing.T) {
 }
 
 func TestRegisterActionWhenNetRecover(t *testing.T) {
-	guard := gomonkey.ApplyFunc(requester.GetHTTPTransport, func(logrus.FieldLogger) *http.Transport {
-		transport, _ := http.DefaultTransport.(*http.Transport)
-		return transport
-	})
-	defer guard.Reset()
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
-	util.NilRequest.Set()
-	defer util.NilRequest.Clear()
+	requester.NilTransport.Set()
+	defer requester.NilTransport.Clear()
 	const mockRegion = "cn-test100"
 	testutil.MockMetaServer(mockRegion)
 	timermanager.InitTimerManager()
@@ -583,7 +535,7 @@ func TestRegisterActionWhenNetRecover(t *testing.T) {
 	syncChan := make(chan int, 1)
 	action := func() {
 		flag += 1
-		syncChan<-1
+		syncChan <- 1
 	}
 	var err error
 	RegisterActionWhenNetRecover(map[string]func(){
@@ -595,7 +547,7 @@ func TestRegisterActionWhenNetRecover(t *testing.T) {
 	<-syncChan
 	assert.Equal(t, nil, err)
 	assert.Equal(t, 1, flag)
-	for i:=1; i<5; i++ {
+	for i := 1; i < 5; i++ {
 		disableNetwork()
 		err = doPing()
 		assert.NotEqual(t, nil, err)

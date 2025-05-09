@@ -31,8 +31,9 @@ func GetServerDomain(logger logrus.FieldLogger) (string, error) {
 		domain, err := _selectedAPIServerProvider.ServerDomain(logger)
 		if err != nil {
 			logger.WithError(err).Warningf("Previously selected API server provider %s does not work for server domain", _selectedAPIServerProvider.Name())
+			return "", err
 		}
-		return domain, err
+		return domain, nil
 	}()
 	if err == nil {
 		return domain, nil

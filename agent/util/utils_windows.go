@@ -6,7 +6,6 @@ package util
 import (
 	"bytes"
 	"os/exec"
-	"strings"
 
 	"github.com/aliyun/aliyun_assist_client/common/executil"
 	"github.com/aliyun/aliyun_assist_client/common/langutil"
@@ -42,42 +41,4 @@ func ExeCmd(cmd string) (error, string, string) {
 	}
 
 	return nil, stdout, stderr
-}
-
-func IsServiceExist(ServiceName string) bool {
-	var detect_str string
-	detect_str = "sc query | findstr " + ServiceName
-	_, stdout, _ := ExeCmd(detect_str)
-	if strings.Contains(stdout, ServiceName) {
-		return true
-	} else {
-		return false
-	}
-}
-
-func IsServiceRunning(ServiceName string) bool {
-	detect_str := "sc query " + ServiceName
-	_, stdout, _ := ExeCmd(detect_str)
-	if strings.Contains(stdout, " RUNNING") {
-		return true
-	}
-	return false
-}
-
-func StartService(ServiceName string) error {
-	if IsServiceRunning(ServiceName) {
-		return nil
-	}
-	var err error
-	err, _, _ = ExeCmd("net start " + ServiceName)
-	return err
-}
-
-func StopService(ServiceName string) error {
-	if !IsServiceRunning(ServiceName) {
-		return nil
-	}
-	var err error
-	err, _, _ = ExeCmd("net stop " + ServiceName)
-	return err
 }

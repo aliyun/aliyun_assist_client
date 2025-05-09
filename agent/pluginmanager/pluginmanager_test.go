@@ -16,7 +16,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/timermanager"
-	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 	"github.com/aliyun/aliyun_assist_client/common/fileutil"
 	"github.com/aliyun/aliyun_assist_client/internal/testutil"
@@ -57,9 +56,9 @@ func TestPluginManager(t *testing.T) {
 	healthCheck := true
 	updateCheck := true
 	httpmock.Activate()
-	util.NilRequest.Set()
+	requester.NilTransport.Set()
+	defer requester.NilTransport.Clear()
 	defer httpmock.DeactivateAndReset()
-	defer util.NilRequest.Clear()
 	const mockRegion = "cn-test100"
 	testutil.MockMetaServer(mockRegion)
 	httpmock.RegisterResponder("POST",

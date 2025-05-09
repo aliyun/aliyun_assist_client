@@ -43,7 +43,11 @@ func StartPty(plugin *ShellPlugin) (err error) {
 		finalCmd = plugin.cmdContent
 	}
 	plugin.logger.Infoln("finalCmd ", finalCmd)
-	exe_path, _ := pathutil.GetCurrentPath()
+	exe_path, err := pathutil.GetExecutableDir()
+	if err != nil {
+		return fmt.Errorf("failed to determine executable directory: %w", err)
+	}
+
 	winptyDllFilePath := filepath.Join(exe_path, "plugin", "SessionManager", "winpty.dll")
 	var pty *winpty.WinPTY
 	if plugin.username == "" {
