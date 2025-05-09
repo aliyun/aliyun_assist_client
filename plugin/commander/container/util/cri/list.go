@@ -9,8 +9,8 @@ import (
 	runtimeapis "k8s.io/cri-api/pkg/apis/runtime/v1"
 	"k8s.io/kubernetes/pkg/kubelet/cri/remote"
 
-	"github.com/aliyun/aliyun_assist_client/plugin/commander/container/util/model"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/plugin/commander/container/util/model"
 )
 
 func ListContainers(connectTimeout time.Duration, showAllContainers bool) ([]model.Container, error) {

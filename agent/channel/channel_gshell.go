@@ -159,9 +159,9 @@ func (c *GshellChannel) startChannelUnsafe() error {
 						return
 					}
 				}
-				if reachedFrequencyLimit && (time.Since(lastKickvmFreqExceedTime)>intervalToOpenNoGshellChannel) {
+				if reachedFrequencyLimit && (time.Since(lastKickvmFreqExceedTime) > intervalToOpenNoGshellChannel) {
 					lastKickvmFreqExceedTime = time.Now()
-					tip := fmt.Sprintf("gshell kick_vm has reached max frequency %d times during %d seconds, " + 
+					tip := fmt.Sprintf("gshell kick_vm has reached max frequency %d times during %d seconds, "+
 						"try to open no-gshell channel", count, period)
 					log.GetLogger().Info(tip)
 					report := clientreport.ClientReport{

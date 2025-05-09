@@ -15,31 +15,28 @@ import (
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 
 	"github.com/tidwall/gjson"
+	"github.com/kirinlabs/HttpRequest"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
-	"github.com/aliyun/aliyun_assist_client/agent/util/atomicutil"
 	"github.com/aliyun/aliyun_assist_client/common/httpbase"
 	"github.com/aliyun/aliyun_assist_client/common/httputil"
 	"github.com/aliyun/aliyun_assist_client/common/requester"
 )
 
-var (
-	NilRequest *atomicutil.AtomicBoolean
-)
+type HTTPErrHandler func(resp *HttpRequest.Response, httpErr error)
 
 var (
 	ErrHTTPCode = errors.New("http code error")
+
+	httpPostErrHandler_ HTTPErrHandler
 )
 
-func init() {
-	NilRequest = &atomicutil.AtomicBoolean{}
-	NilRequest.Clear()
+// Try not to initiate new http requests in the handler to avoid circular calls.
+func SetHTTPPostErrHandler(handler HTTPErrHandler) {
+	httpPostErrHandler_ = handler
 }
 
 func GetHTTPTransport() *http.Transport {
-	if NilRequest.IsSet() {
-		return nil
-	}
 	return requester.GetHTTPTransport(log.GetLogger())
 }
 
@@ -55,7 +52,7 @@ func HttpGetWithTimeout(url string, timeoutSecond int, noLog bool) (error, strin
 	transport := GetHTTPTransport()
 	var extraHeaders map[string]string
 	var err error
-	extraHeaders, err = requester.GetExtraHTTPHeaders(logger)
+	extraHeaders, _ = requester.GetExtraHTTPHeaders(logger)
 	req := httputil.NewGetReq(logger, transport, timeoutSecond, extraHeaders)
 
 	res, err := req.Get(url)
@@ -123,17 +120,26 @@ func HttpPostWithTimeout(url string, data string, contentType string, timeoutSec
 		"timeout": timeoutSecond,
 	})
 	transport := GetHTTPTransport()
-	var extraHeaders map[string]string
-	var err error
-	extraHeaders, err = requester.GetExtraHTTPHeaders(logger)
+	var (
+		extraHeaders map[string]string
+		httpReqErr error
+		httpResp *HttpRequest.Response
+	)
+	defer func() {
+		if httpReqErr != nil && httpPostErrHandler_ != nil {
+			httpPostErrHandler_(httpResp, httpReqErr)
+		}
+	}()
+
+	extraHeaders, _ = requester.GetExtraHTTPHeaders(logger)
 	req := httputil.NewPostReq(logger, transport, contentType, timeoutSecond, extraHeaders)
 
-	res, err := req.Post(url, data)
-	if err != nil {
-		log.GetLogger().Infoln(url, err)
+	httpResp, httpReqErr = req.Post(url, data)
+	if httpReqErr != nil {
+		log.GetLogger().Infoln(url, httpReqErr)
 		var certificateErr *tls.CertificateVerificationError
-		if !errors.As(err, &certificateErr) {
-			return "", err
+		if !errors.As(httpReqErr, &certificateErr) {
+			return "", httpReqErr
 		}
 
 		// tls.CertificateVerificationError encountered. Gonna re-accumulate
@@ -141,7 +147,7 @@ func HttpPostWithTimeout(url string, data string, contentType string, timeoutSec
 		// 1. Nil transport means working with net/http.defaultHTTPTransport
 		// which does not hold the custom pool. Give up retrying
 		if transport == nil {
-			return "", err
+			return "", httpReqErr
 		}
 		logger.Info("certificate error, reload certificates and retry")
 		// 2. req.Transport recv a *http.Transport, pass a copy of
@@ -154,7 +160,7 @@ func HttpPostWithTimeout(url string, data string, contentType string, timeoutSec
 			req.SetTLSClient(&tls.Config{
 				RootCAs: certPool,
 			})
-			if res, err = req.Post(url, data); err == nil {
+			if httpResp, httpReqErr = req.Post(url, data); httpReqErr == nil {
 				logger.Info("certificate updated")
 				requester.RefreshHTTPCas(logger, certPool)
 				return false
@@ -163,27 +169,27 @@ func HttpPostWithTimeout(url string, data string, contentType string, timeoutSec
 			return true
 		})
 		// 4. Re-accumulation ends and error still exists. Give up and raise.
-		if err != nil {
-			log.GetLogger().Infoln(url, err)
-			return "", err
+		if httpReqErr != nil {
+			log.GetLogger().Infoln(url, httpReqErr)
+			return "", httpReqErr
 		}
 	}
 
-	defer res.Close()
-	content, _ := res.Content()
+	defer httpResp.Close()
+	content, _ := httpResp.Content()
 
-	if err == nil && res.StatusCode() > 400 {
-		err = httpbase.NewStatusCodeError(res.StatusCode())
+	if httpReqErr == nil && httpResp.StatusCode() > 400 {
+		httpReqErr = httpbase.NewStatusCodeError(httpResp.StatusCode())
 	}
 
 	if noLog {
 		// API消息体过大默认不打INFO日志
-		log.GetLogger().Debugln(url, content, data, err)
+		log.GetLogger().Debugln(url, content, data, httpReqErr)
 	} else {
-		log.GetLogger().Infoln(url, content, data, err)
+		log.GetLogger().Infoln(url, content, data, httpReqErr)
 	}
-	return content, err
 
+	return content, httpReqErr
 }
 
 func HttpDownlod(url string, FilePath string) error {

@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	gomonkey "github.com/agiledragon/gomonkey/v2"
-	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/jarcoal/httpmock"
 	"github.com/aliyun/aliyun_assist_client/common/requester"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
@@ -22,9 +21,9 @@ func TestFetchUpdateInfo(t *testing.T) {
 	defer guard_transport.Reset()
 
 	httpmock.Activate()
-	util.NilRequest.Set()
+	requester.NilTransport.Set()
+	defer requester.NilTransport.Clear()
 	defer httpmock.DeactivateAndReset()
-	defer util.NilRequest.Clear()
 	mockReginid := "test-regin"
 	testutil.MockMetaServer(mockReginid)
 	httpmock.RegisterResponder("POST", 

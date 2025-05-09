@@ -1,9 +1,10 @@
 package update
 
 import (
-	"os"
 	"path/filepath"
 	"runtime"
+
+	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 )
 
 const (
@@ -19,7 +20,7 @@ const (
 )
 
 func GetInstallDir() string {
-	if installDir, err := GetInstallDirByCurrentProcess(); err == nil {
+	if installDir, err := pathutil.GetCrossVersionDir(); err == nil {
 		return installDir
 	}
 
@@ -66,31 +67,8 @@ func GetUpdatorName() string {
 	return DefaultUnixUpdatorName
 }
 
-// GetInstallDirByCurrentProcess returns normal install direcotry of agent.
-// When agent is installed as **/a/b/aliyun-service, it would return **/a .
-// The "normal install directory" on most Linux distribution: /usr/local/share/aliyun-assist
-// on CoreOS specially: /opt/local/share/aliyun-assist
-// on Windows: C:\ProgramData\aliyun\assist
-func GetInstallDirByCurrentProcess() (string, error) {
-	path, err := os.Executable()
-	if err != nil {
-		return "", err
-	}
-
-	currentVersionDir, err := filepath.Abs(filepath.Dir(path))
-	if err != nil {
-		return "", err
-	}
-	// Although filepath.Dir method would call filepath.Clean internally, here
-	// explicitly call the method to guarantee no trailing slash in path
-	cleanedCurrentVersionDir := filepath.Clean(currentVersionDir)
-	multiVersionDir := filepath.Dir(cleanedCurrentVersionDir)
-	return multiVersionDir, nil
-}
-
 func GetUpdatorPathByCurrentProcess() string {
-	path, _ := os.Executable()
-	dir, _ := filepath.Abs(filepath.Dir(path))
+	dir, _ := pathutil.GetExecutableDir()
 	updatorFilename := GetUpdatorName()
 	updatorPath := filepath.Join(dir, updatorFilename)
 	return updatorPath

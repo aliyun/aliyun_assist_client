@@ -9,17 +9,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jarcoal/httpmock"
-	"github.com/stretchr/testify/assert"
 	gomonkey "github.com/agiledragon/gomonkey/v2"
 	"github.com/aliyun/aliyun_assist_client/agent/inventory/model"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/util/jsonutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/timetool"
-	"github.com/aliyun/aliyun_assist_client/internal/testutil"
 	"github.com/aliyun/aliyun_assist_client/common/requester"
+	"github.com/aliyun/aliyun_assist_client/internal/testutil"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
+	"github.com/jarcoal/httpmock"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestChecksum(t *testing.T) {
@@ -91,10 +91,10 @@ func TestInventoryUploader(t *testing.T) {
 
 	items := []model.Item{}
 	item := model.Item{
-		Name: "item-1",
+		Name:          "item-1",
 		SchemaVersion: osutil.GetOsArch(),
-		Content: []string{"content-1", "content-2"},
-		CaptureTime: timetool.ApiTimeFormat(time.Now()),
+		Content:       []string{"content-1", "content-2"},
+		CaptureTime:   timetool.ApiTimeFormat(time.Now()),
 	}
 	items = append(items, item)
 	item.Name = "item-2"
@@ -111,17 +111,17 @@ func TestInventoryUploader(t *testing.T) {
 	defer guard_transport.Reset()
 
 	httpmock.Activate()
-	util.NilRequest.Set()
+	requester.NilTransport.Set()
+	defer requester.NilTransport.Clear()
 	defer httpmock.DeactivateAndReset()
-	defer util.NilRequest.Clear()
 	mockReginId := "mock-reginid"
 	testutil.MockMetaServer(mockReginId)
 	httpmock.RegisterResponder("POST",
 		fmt.Sprintf("https://%s.axt.aliyun.com/luban/api/instance/put_inventory", mockReginId),
 		func(h *http.Request) (*http.Response, error) {
-			apiResp := ApiResponse {
+			apiResp := ApiResponse{
 				ErrCode: "200",
-				ErrMsg: "success",
+				ErrMsg:  "success",
 				Result: &OOSResult{
 					RequestId: "requestid",
 				},
@@ -137,5 +137,5 @@ func TestInventoryUploader(t *testing.T) {
 
 	_, err = uploader.GetDirtyOOSInventoryItems(items)
 	assert.Equal(t, nil, err)
-	
+
 }

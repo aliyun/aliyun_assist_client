@@ -537,7 +537,7 @@ func (c *Client) writeLoop(wg *sync.WaitGroup) int {
 						c.SendCloseMessage()
 						openPoison(fname, c.poison)
 					}
-					timer.Reset(time.Duration(c.idleTimeout - elapsedTime))
+					timer.Reset(time.Duration(c.idleTimeout - elapsedTime) * time.Second)
 				}
 
 			}
@@ -615,7 +615,6 @@ func (c *Client) writeLoop(wg *sync.WaitGroup) int {
 
 		}
 	}
-	return 0
 }
 
 func (c *Client) SendStreamDataMessage(inputData []byte) (err error) {

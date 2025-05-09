@@ -1,3 +1,4 @@
+//go:build windows
 // +build windows
 
 package osutil
@@ -29,4 +30,8 @@ func getKernelVersion() string {
 	}
 	kernelVersion = strings.TrimSpace(kernelVersion)
 	return kernelVersion
+}
+
+func GetDistribution() string {
+	return ""
 }

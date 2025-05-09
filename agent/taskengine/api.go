@@ -13,6 +13,7 @@ import (
 
 const (
 	invalidParamCron string = "cron"
+	invalidSignature string = "signature"
 
 	stopReasonKilled    string = "killed"
 	stopReasonCompleted string = "completed"

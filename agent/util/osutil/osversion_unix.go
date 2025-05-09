@@ -1,3 +1,4 @@
+//go:build linux || freebsd
 // +build linux freebsd
 
 package osutil
@@ -7,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/common/fileutil"
 	"golang.org/x/sys/unix"
 )
 
@@ -55,4 +57,11 @@ func getKernelVersion() string {
 	releaseLength := bytes.IndexByte(utsn.Release[:], '\u0000')
 	release := string(utsn.Release[:releaseLength])
 	return release
+}
+
+func GetDistribution() string {
+	if fileutil.CheckFileIsExist("/default.prop") && fileutil.CheckFileIsExist("/system/bin/app_process64") {
+		return distributionAndroid
+	}
+	return ""
 }

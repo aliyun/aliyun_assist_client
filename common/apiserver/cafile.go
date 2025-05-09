@@ -17,12 +17,12 @@ func (*InherentCAFileProvider) Name() string {
 }
 
 func (*InherentCAFileProvider) CACertificate(logger logrus.FieldLogger, refresh bool) ([]byte, error) {
-	currentVersionDir, err := pathutil.GetCurrentPath()
+	versionedConfigDir, err := pathutil.GetConfigPath()
 	if err != nil {
 		return nil, err
 	}
 
-	certPath := filepath.Join(currentVersionDir, "config", "GlobalSignRootCA.crt")
+	certPath := filepath.Join(versionedConfigDir, "GlobalSignRootCA.crt")
 	certFile, err := os.Open(certPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open bundled CA certificate file: %w", err)
@@ -73,11 +73,11 @@ func (p *CachedCAFileProvider) SaveCACertificate(logger logrus.FieldLogger, pemC
 }
 
 func (*CachedCAFileProvider) getSelfCertPath() (string, error) {
-	currentVersionDir, err := pathutil.GetCurrentPath()
+	crossVersionDir, err := pathutil.GetCrossVersionInboundDir()
 	if err != nil {
 		return "", err
 	}
 
-	selfCertPath := filepath.Join(filepath.Dir(currentVersionDir), "ca-bundle.crt")
+	selfCertPath := filepath.Join(crossVersionDir, "ca-bundle.crt")
 	return selfCertPath, nil
 }

@@ -2,24 +2,23 @@ package statemanager
 
 import (
 	"errors"
-	"testing"
-	"time"
 	"fmt"
 	"net/http"
+	"testing"
+	"time"
 
 	gomonkey "github.com/agiledragon/gomonkey/v2"
-	"github.com/jarcoal/httpmock"
+	"github.com/aliyun/aliyun_assist_client/agent/clientreport"
 	"github.com/aliyun/aliyun_assist_client/agent/inventory/gatherers/instance"
 	"github.com/aliyun/aliyun_assist_client/agent/inventory/model"
-	"github.com/aliyun/aliyun_assist_client/agent/util/timetool"
-	"github.com/stretchr/testify/assert"
 	"github.com/aliyun/aliyun_assist_client/agent/statemanager/resources"
-	"github.com/aliyun/aliyun_assist_client/agent/clientreport"
-	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/timermanager"
-	"github.com/aliyun/aliyun_assist_client/internal/testutil"
+	"github.com/aliyun/aliyun_assist_client/agent/util/timetool"
 	"github.com/aliyun/aliyun_assist_client/common/requester"
+	"github.com/aliyun/aliyun_assist_client/internal/testutil"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
+	"github.com/jarcoal/httpmock"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestGetMode1(t *testing.T) {
@@ -75,7 +74,7 @@ func Test_refreshStateConfigs(t *testing.T) {
 	guard_clientReport := gomonkey.ApplyFunc(clientreport.SendReport, func(report clientreport.ClientReport) (string, error) {
 		fmt.Println(report)
 		panic(report)
-})
+	})
 	defer guard_clientReport.Reset()
 
 	tests := []struct {
@@ -205,8 +204,8 @@ func Test_enforce(t *testing.T) {
 	defer guard_transport.Reset()
 
 	httpmock.Activate()
-	util.NilRequest.Set()
-	defer util.NilRequest.Clear()
+	requester.NilTransport.Set()
+	defer requester.NilTransport.Clear()
 	defer httpmock.DeactivateAndReset()
 	const mockRegion = "cn-test100"
 	testutil.MockMetaServer(mockRegion)
@@ -242,7 +241,7 @@ func Test_enforce(t *testing.T) {
 				defer guard.Reset()
 				state := StateDef{
 					ResourceType: "ACS:Inventory",
-					Properties: make(map[string]interface{}),
+					Properties:   make(map[string]interface{}),
 				}
 				guard_1 := gomonkey.ApplyFunc(ParseResourceState, func([]byte, string) ([]resources.ResourceState, error) {
 					resourceStates := []resources.ResourceState{}

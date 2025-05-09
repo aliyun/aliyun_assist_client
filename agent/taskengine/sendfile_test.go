@@ -8,11 +8,12 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/models"
 	"github.com/jarcoal/httpmock"
+	"github.com/aliyun/aliyun_assist_client/common/requester"
 )
 
 func TestSendFileFinished(t *testing.T) {
 	mockMetrics()
-	defer util.NilRequest.Clear()
+	defer requester.NilTransport.Clear()
 	defer httpmock.DeactivateAndReset()
 
 	const mockRegion = "cn-test100"
@@ -62,7 +63,7 @@ func TestSendFileFinished(t *testing.T) {
 
 func TestSendFileInvalid(t *testing.T) {
 	mockMetrics()
-	defer util.NilRequest.Clear()
+	defer requester.NilTransport.Clear()
 	defer httpmock.DeactivateAndReset()
 
 	const mockRegion = "cn-test100"

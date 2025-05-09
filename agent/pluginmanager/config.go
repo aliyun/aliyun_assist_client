@@ -1,22 +1,25 @@
 package pluginmanager
 
 import (
-	"io/ioutil"
 	"os"
 	"path"
-	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 )
 
 func loadIntervalConf() {
 	// 读取配置文件，如果有就读取并设置相关变量。用来测试的
-	cpath, _ := os.Executable()
-	dir, _ := filepath.Abs(filepath.Dir(cpath))
-	intervalPath := path.Join(dir, "config", "PluginCheckInterval")
-	content, err := ioutil.ReadFile(intervalPath)
+	configDir, err := pathutil.GetConfigPath()
+	if err != nil {
+		log.GetLogger().WithError(err).Error("Failed to determine configuration directory of current version")
+		return
+	}
+
+	intervalPath := path.Join(configDir, "PluginCheckInterval")
+	content, err := os.ReadFile(intervalPath)
 	if err != nil {
 		return
 	}

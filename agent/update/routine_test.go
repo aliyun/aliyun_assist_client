@@ -18,6 +18,7 @@ import (
 	"github.com/aliyun/aliyun_assist_client/common/fileutil"
 	libupdate "github.com/aliyun/aliyun_assist_client/common/update"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
+	"github.com/aliyun/aliyun_assist_client/common/requester"
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
 )
@@ -25,9 +26,9 @@ import (
 func Test_safeUpdate(t *testing.T) {
 	flagging.InitConfig(logrus.New())
 	httpmock.Activate()
-	util.NilRequest.Set()
+	requester.NilTransport.Set()
+	defer requester.NilTransport.Clear()
 	defer httpmock.DeactivateAndReset()
-	defer util.NilRequest.Clear()
 	mockRegin := "mock-reginid"
 	guard := gomonkey.ApplyFunc(util.GetRegionId, func() string { return mockRegin })
 	defer guard.Reset()

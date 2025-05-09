@@ -12,8 +12,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
+
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
+	"github.com/aliyun/aliyun_assist_client/agent/pluginmodel"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/timermanager"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
@@ -49,6 +52,8 @@ var (
 	pluginUpdateCheckInterval = 30 * 60
 
 	pluginListReportInterval = 3600 * 24
+
+	LocalManager pluginmodel.LocalManager = &ShimManager{}
 )
 
 type UpdateHandler func(name, version string) bool
@@ -440,36 +445,28 @@ func pluginHealthCheckPull() {
 
 func pluginUpdateCheck() {
 	log.GetLogger().Info("pluginUpdateCheck start")
-	// get installed plugin list
-	pluginInfoList, err := _findAllInstalledPlugins()
-	if err != nil {
-		log.GetLogger().WithError(err).Error("pluginUpdateCheck fail: loadPlugins fail")
+
+	// get upgradable plugin list
+	upgradables, err := LocalManager.FindUpgradable(log.GetLogger())
+	if err != nil || len(upgradables) == 0 {
+		log.GetLogger().WithError(err).Info("pluginUpdateCheck cancel: there is no persist plugin")
 		return
 	}
-	if len(pluginInfoList) == 0 {
-		log.GetLogger().Info("pluginUpdateCheck cancel: there is no plugins")
-		return
-	}
-	pluginList := []PluginUpdateCheck{}
-	for _, pluginInfo := range pluginInfoList {
-		if (pluginInfo.PluginType() == PLUGIN_PERSIST || pluginInfo.PluginType() == PLUGIN_COMMANDER) && !pluginInfo.IsRemoved {
-			pluginList = append(pluginList, PluginUpdateCheck{
-				Name:    pluginInfo.Name,
-				Version: pluginInfo.Version,
-			})
-		}
-	}
-	if len(pluginList) == 0 {
-		log.GetLogger().Info("pluginUpdateCheck cancel: there is no persist plugin")
-		return
-	}
+
 	// request for update check
 	osType := osutil.GetOsType()
 	arch, _ := GetArch()
+	updateChecks := make([]PluginUpdateCheck, 0, len(upgradables))
+	for _, u := range upgradables {
+		updateChecks = append(updateChecks, PluginUpdateCheck{
+			Name: u.Name(),
+			Version: u.Version(),
+		})
+	}
 	pluginUpdateCheckRequest := PluginUpdateCheckRequest{
 		Os:     osType,
 		Arch:   arch,
-		Plugin: pluginList,
+		Plugin: updateChecks,
 	}
 
 	requestPayloadBytes, err := json.Marshal(pluginUpdateCheckRequest)
@@ -496,32 +493,18 @@ func pluginUpdateCheck() {
 		log.GetLogger().WithError(err).Errorf("pluginUpdateCheck fail: parse pluginUpdateInfo from resp fail: %s", resp)
 		return
 	}
-	handler := getUpdateHandler()
+
 	for _, plugin := range pluginUpdateCheckResp.Plugin {
-		if handler != nil && handler(plugin.Name, plugin.Version) {
-			continue
-		}
-		command := "acs-plugin-manager"
-		arguments := []string{"--exec", "-P", plugin.Name, "-n", plugin.Version, "-p", "--upgrade"}
-		mixedOutput := bytes.Buffer{}
-		exitCode, status, err := syncRunKillGroup("", command, arguments, &mixedOutput, &mixedOutput, plugin.Timeout+5)
-		output := mixedOutput.String()
-		if len(output) > 1024 {
-			output = output[:1024]
-		}
-		errMsg := ""
+		updateOneLogger := log.GetLogger().WithFields(logrus.Fields{
+			"name": plugin.Name,
+			"version": plugin.Version,
+			"timeout": plugin.Timeout,
+		})
+
+		err := LocalManager.Update(updateOneLogger, &RemotePlugin{pui: &plugin})
 		if err != nil {
-			errMsg = err.Error()
+			updateOneLogger.WithError(err).Error("pluginUpdateCheck: failed to update one plugin to new version in specified time")
 		}
-		metrics.GetPluginUpdateEvent(
-			"name", plugin.Name,
-			"version", plugin.Version,
-			"exitCode", strconv.Itoa(exitCode),
-			"status", strconv.Itoa(status),
-			"errMsg", errMsg,
-			"output", output,
-		).ReportEvent()
-		log.GetLogger().Errorf("pluginUpdateCheck: update plugin[%s] version[%s], exitCode[%d] status[%d] err[%v], output is: %s", plugin.Name, plugin.Version, exitCode, status, err, output)
 	}
 	log.GetLogger().Infof("pluginUpdateCheck done, updated [%d] plugins", len(pluginUpdateCheckResp.Plugin))
 	if pluginUpdateCheckResp.NextInterval > 0 {

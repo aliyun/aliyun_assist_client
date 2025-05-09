@@ -203,7 +203,7 @@ func (p *HostProcessor) Prepare(commandContent string) error {
 		}
 		p.scriptFilePath = filepath.Join(scriptDir, fmt.Sprintf("%s%s%s%s", commandName, p.TaskId, iVersion, scriptFileExtension))
 
-		// In english environment PowerShell scripts need to be saved in utf8-bom format, 
+		// In english environment PowerShell scripts need to be saved in utf8-bom format,
 		// otherwise no-ASCII characters will not be recognized
 		commandContent = p.CommandContent
 		if p.CommandType == "RunPowerShellScript" && !langutil.NeedTransformEncoding() {
@@ -415,6 +415,7 @@ func (p *HostProcessor) Cancel() error {
 	if err := p.processCmd.Cancel(); err != nil {
 		return err
 	}
+	p.processCmd = nil
 	return nil
 }
 
@@ -425,6 +426,7 @@ func (p *HostProcessor) Cleanup(removeScriptFile bool) error {
 			return err
 		}
 	}
+	p.processCmd = nil
 	return nil
 }
 

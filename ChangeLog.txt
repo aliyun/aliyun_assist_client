@@ -1,4 +1,14 @@
-﻿2024-12-04
+﻿2025-05-09
+v2.x.x.941
+1. 支持对任务的命令内容进行签名验证
+2. 保证第一次成功的task/list是reason=startup 
+4. update_check接口增加字段distribution以识别来自android环境的请求
+6. 修复终止任务失败时task/stopped请求里的errCode和errDesc缺失的问题
+7. 服务端对http post请求返回instance_deregisted时Agent清除hybrid目录完成注销
+8. 修复acs-plugin-manager日志报错污染插件输出内容 
+9. 升级部分依赖的package
+
+2024-12-04
 v2.x.x.857
 1. 整合从 metaserver 加载服务端相关信息的代码到云助手程序中 
 2. 使用新的配置文件统一管理Agent的配置项 

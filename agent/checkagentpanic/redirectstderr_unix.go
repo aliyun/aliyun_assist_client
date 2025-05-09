@@ -9,7 +9,7 @@ import (
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
-	"github.com/aliyun/aliyun_assist_client/agent/util"
+	"github.com/aliyun/aliyun_assist_client/agent/util/systemdutil"
 	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 )
 
@@ -25,7 +25,7 @@ const (
 // environment. In systemd environment stdout/stderr will be writen to journal 
 // and console.
 func RedirectStdouterr() {
-	if util.IsSystemdLinux() {
+	if systemdutil.IsRunningSystemd() {
 		return
 	}
 	stdouterrDir, err := pathutil.GetLogPath()

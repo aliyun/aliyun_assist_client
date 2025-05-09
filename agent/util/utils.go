@@ -25,7 +25,7 @@ func IsVerboseMode() bool {
 	return verbose_mode
 }
 
-func SetVerboseMode(mode bool)  {
+func SetVerboseMode(mode bool) {
 	verbose_mode = mode
 }
 
@@ -95,12 +95,4 @@ func IsFile(path string) bool {
 		return true
 	}
 	return false
-}
-
-func HasCmdInLinux(cmd string) bool {
-	err, _, _ := ExeCmd("which " + cmd)
-	if err != nil {
-		return false
-	}
-	return true
 }

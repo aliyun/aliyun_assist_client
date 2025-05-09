@@ -8,9 +8,9 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/timermanager"
-	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/process"
+	"github.com/aliyun/aliyun_assist_client/agent/util/systemdutil"
 )
 
 const (
@@ -34,7 +34,7 @@ var majorVer string         // linux系统主版本号
 var kdumpServiceName string // kdump服务名称
 
 func CheckKdumpTimer() error {
-	if util.IsSystemdLinux() {
+	if systemdutil.IsRunningSystemd() {
 		serviceType = LINUX_SYSTEMD
 	} else {
 		serviceType = LINUX_SYSV

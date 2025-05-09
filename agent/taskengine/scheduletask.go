@@ -14,6 +14,7 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/models"
+	"github.com/aliyun/aliyun_assist_client/agent/taskengine/signature"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/timermanager"
 	"github.com/aliyun/aliyun_assist_client/agent/util/atomicutil"
 )
@@ -47,13 +48,21 @@ var (
 	_periodicTaskSchedulesLock sync.Mutex
 
 	// Indicating whether startup fetch(reason=startup) has been done
-	_startupFetched atomic.Bool
+	_startupFetchedFinished bool
+
+	_startupFetchLock   sync.Mutex
+	_startupFetchedDone chan struct{}
+
+	// Retry interval
+	fetchRetryInterval = time.Duration(3) * time.Second
 )
 
 func init() {
 	FetchingTaskLock = heavylock.NewCASMutex()
 
 	_periodicTaskSchedules = make(map[string]*PeriodicTaskSchedule)
+
+	_startupFetchedDone = make(chan struct{})
 }
 
 // EnableFetchingTask sets prviate indicator to allow fetching tasks
@@ -67,17 +76,16 @@ func isEnabledFetchingTask() bool {
 }
 
 func IsStartupFetched() bool {
-	return _startupFetched.Load()
+	return _startupFetchedFinished
 }
 
 func Fetch(from_kick bool, taskId string, taskType int) int {
+	logger := log.GetLogger().WithField("from_kick", from_kick)
 	// Fetching task should be allowed before all core components of agent have
 	// been correctly initialized. This critical indicator would be set at the
 	// end of program.run method
 	if !isEnabledFetchingTask() {
-		log.GetLogger().WithFields(logrus.Fields{
-			"from_kick": from_kick,
-		}).Infoln("Fetching tasks is disabled due to network is not ready")
+		logger.Infoln("Fetching tasks is disabled due to network is not ready")
 		return 0
 	}
 
@@ -91,9 +99,7 @@ func Fetch(from_kick bool, taskId string, taskType int) int {
 	// to provide graceful locking mechanism for goroutine coopeartion. The cost
 	// would be, some performance lost.
 	if !FetchingTaskLock.TryLockWithTimeout(time.Duration(2) * time.Second) {
-		log.GetLogger().WithFields(logrus.Fields{
-			"from_kick": from_kick,
-		}).Infoln("Fetching tasks is canceled due to another running fetching or updating process.")
+		logger.Infoln("Fetching tasks is canceled due to another running startupFetchRetrying or updating process.")
 		return ErrUpdatingProcedureRunning
 	}
 	// Immediately release fetchingTaskLock to let other goroutine fetching
@@ -107,30 +113,91 @@ func Fetch(from_kick bool, taskId string, taskType int) int {
 	defer FetchingTaskCounter.Add(-1)
 
 	var task_size int
-	var isColdstart bool
-	fetchReason := FetchOnKickoff
-	if taskType == NormalTaskType && taskId == "" && !_startupFetched.Swap(true) {
-		fetchReason = FetchOnStartup
-		// `isColdstart` only make sense for FetchOnStartup
-		isColdstart, _ = flagging.IsColdstart()
-		if from_kick {
-			log.GetLogger().WithFields(logrus.Fields{
-				"from_kick": from_kick,
-			}).Infoln("Merge the fetch operations for the kick_off task and the startup task.")
-		}
-	}
-	task_size = fetchTasks(fetchReason, taskId, taskType, isColdstart)
+	var fetchErr error
+	// `isColdstart` only make sense for FetchOnStartup
+	isColdstart, _ := flagging.IsColdstart()
 
-	for i := 0; i < 1 && from_kick && task_size == 0; i++ {
-		time.Sleep(time.Duration(3) * time.Second)
-		task_size = fetchTasks(FetchOnKickoff, taskId, taskType, false)
+	// Fetch tasks for kickoff if startup tasks has been fetched.
+	if _startupFetchedFinished {
+		task_size = fetchForKickOff(taskId, taskType, isColdstart)
+		return task_size
 	}
 
-	return task_size
+	_startupFetchLock.Lock()
+
+	// Check again whether the startup tasks has been fetched.
+	if _startupFetchedFinished {
+		_startupFetchLock.Unlock()
+
+		task_size = fetchForKickOff(taskId, taskType, isColdstart)
+		return task_size
+	}
+
+	// Fetch tasks for startup.
+	task_size, fetchErr = fetchTasks(FetchOnStartup, taskId, taskType, isColdstart)
+	if fetchErr == nil {
+		_startupFetchedFinished = true
+		close(_startupFetchedDone)
+
+		_startupFetchLock.Unlock()
+		return task_size
+	}
+
+	_startupFetchLock.Unlock()
+
+	// The from_kick=false Fetch() is responsible for retrying.
+	// There should be only one Fetch() with from_kick=false.
+	if !from_kick {
+		// In order not to block Fetch(false, ...) a new goroutine to be created
+		// for continuous retrying.
+		go func() {
+			aontherFetchErr := fetchErr
+			ticker := time.NewTicker(fetchRetryInterval)
+			defer ticker.Stop()
+			for aontherFetchErr != nil {
+				select {
+				case <-ticker.C:
+
+					_startupFetchLock.Lock()
+					if _startupFetchedFinished {
+						_startupFetchLock.Unlock()
+						return
+					}
+					_, aontherFetchErr = fetchTasks(FetchOnStartup, taskId, taskType, isColdstart)
+					if aontherFetchErr == nil {
+						_startupFetchedFinished = true
+						close(_startupFetchedDone)
+						_startupFetchLock.Unlock()
+						return
+					}
+					_startupFetchLock.Unlock()
+
+					ticker.Reset(fetchRetryInterval)
+				case <-_startupFetchedDone:
+					// Another goroutine has finished fetching tasks for startup.
+					return
+				}
+			}
+		}()
+	}
+
+	return 0
 }
 
-func fetchTasks(reason FetchReason, taskId string, taskType int, isColdstart bool) int {
-	taskInfos := FetchTaskList(reason, taskId, taskType, isColdstart)
+func fetchForKickOff(taskId string, taskType int, isColdstart bool) (task_size int) {
+	task_size, _ = fetchTasks(FetchOnKickoff, taskId, taskType, isColdstart)
+	for i := 0; i < 1 && task_size == 0; i++ {
+		time.Sleep(fetchRetryInterval)
+		task_size, _ = fetchTasks(FetchOnKickoff, taskId, taskType, false)
+	}
+	return
+}
+
+func fetchTasks(reason FetchReason, taskId string, taskType int, isColdstart bool) (int, error) {
+	taskInfos, err := FetchTaskList(reason, taskId, taskType, isColdstart)
+	if err != nil {
+		return 0, err
+	}
 	SendFiles(taskInfos.sendFiles)
 	DoSessionTask(taskInfos.sessionInfos)
 	for _, v := range taskInfos.runInfos {
@@ -145,7 +212,7 @@ func fetchTasks(reason FetchReason, taskId string, taskType int, isColdstart boo
 		dispatchTestTask(v)
 	}
 
-	return len(taskInfos.runInfos) + len(taskInfos.stopInfos) + len(taskInfos.sessionInfos) + len(taskInfos.sendFiles)
+	return len(taskInfos.runInfos) + len(taskInfos.stopInfos) + len(taskInfos.sessionInfos) + len(taskInfos.sendFiles), nil
 }
 
 func dispatchRunTask(taskInfo models.RunTaskInfo) {
@@ -187,6 +254,18 @@ func dispatchRunTask(taskInfo models.RunTaskInfo) {
 		"InvokeVersion": taskInfo.InvokeVersion,
 		"Phase":         "Scheduling",
 	})
+
+	// Verify task signature
+	if ok, err := signature.VerifyTaskSign(scheduleLogger, taskInfo); err != nil {
+		scheduleLogger.WithError(err).Error("Verify task signature error")
+	} else if !ok {
+		scheduleLogger.Error("Task signature is invalid.")
+		reportInvalidTask(taskInfo.TaskId, taskInfo.InvokeVersion, invalidSignature, "Signature verification failed", "")
+		return
+	} else {
+		scheduleLogger.Info("Task signature is OK.")
+	}
+
 	switch taskInfo.Repeat {
 	case models.RunTaskOnce, models.RunTaskNextRebootOnly, models.RunTaskEveryReboot:
 		t, err := NewTask(taskInfo, nil, nil, onTaskReportError)
@@ -524,7 +603,7 @@ func cancelPeriodicTask(taskInfo models.RunTaskInfo, quietly bool) error {
 	delete(_periodicTaskSchedules, taskInfo.TaskId)
 	cancelLogger.Infof("Deregistered periodic task")
 
-	// 4. Cancel periodic task, send ACK if invocation is existing 
+	// 4. Cancel periodic task, send ACK if invocation is existing
 	_, ok = GetTaskFactory().GetTask(taskInfo.TaskId)
 	cancelLogger.WithField("stillRunning", ok).Info("Cancel periodic task")
 	err := periodicTaskSchedule.reusableInvocation.Cancel(quietly, ok)

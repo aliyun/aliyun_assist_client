@@ -11,18 +11,18 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 
 	"github.com/aliyun/aliyun_assist_client/agent/hybrid/instance"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
-	"github.com/aliyun/aliyun_assist_client/agent/util/process"
+	"github.com/aliyun/aliyun_assist_client/agent/util/serviceutil"
 	"github.com/aliyun/aliyun_assist_client/agent/version"
 	"github.com/aliyun/aliyun_assist_client/common/apiserver"
 	"github.com/aliyun/aliyun_assist_client/common/httpbase"
 	"github.com/aliyun/aliyun_assist_client/common/metaserver"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 	"golang.org/x/net/http/httpguts"
 )
 
@@ -134,7 +134,7 @@ func Register(region string, code string, id string, name string, networkmode st
 	fmt.Println("register ok")
 	fmt.Println("instance id:", resp.InstanceId)
 	if need_restart {
-		restartService()
+		serviceutil.RestartAgentService(logger)
 	}
 	fmt.Println("restart service")
 	ret = true
@@ -142,6 +142,10 @@ func Register(region string, code string, id string, name string, networkmode st
 }
 
 func UnRegister(need_restart bool) bool {
+	logger := log.GetLogger().WithFields(logrus.Fields{
+		"action":       "deregister",
+		"need_restart": need_restart,
+	})
 	if !instance.IsHybrid() {
 		fmt.Println("There's no need to unregister it, as it is not a hybrid instance.")
 		return false
@@ -149,7 +153,7 @@ func UnRegister(need_restart bool) bool {
 	metrics.GetHybridUnregisterEvent().ReportEvent()
 
 	url := util.GetDeRegisterService()
-	log.GetLogger().Info("deregister service url: ", url)
+	logger.Info("deregister service url: ", url)
 	response, err := util.HttpPost(url, "", "")
 	if err != nil {
 		fmt.Println(response)
@@ -169,7 +173,7 @@ func UnRegister(need_restart bool) bool {
 		fmt.Println(response)
 	} else {
 		fmt.Println("unregister ok")
-		clean_unregister_data(need_restart)
+		clean_unregister_data(logger, need_restart)
 	}
 	return ret
 }
@@ -247,18 +251,7 @@ func genRsaKey(pub io.Writer, pri io.Writer) error {
 	return nil
 }
 
-func restartService() {
-	processer := process.ProcessCmd{}
-	if osutil.GetOsType() == "linux" || osutil.GetOsType() == "freebsd" {
-		processer.SyncRunSimple("aliyun-service", strings.Split("--stop", " "), 10)
-		processer.SyncRunSimple("aliyun-service", strings.Split("--start", " "), 10)
-	} else if osutil.GetOsType() == "windows" {
-		processer.SyncRunSimple("net", strings.Split("stop AliyunService", " "), 10)
-		processer.SyncRunSimple("net", strings.Split("start AliyunService", " "), 10)
-	}
-}
-
-func clean_unregister_data(need_restart bool) {
+func clean_unregister_data(logger logrus.FieldLogger, need_restart bool) {
 	instance.RemoveInstanceInfo()
 	// update hardwareInfo and hope this instance will be recognized when next registration
 	if hardwareInfo, err := instance.ReadHardwareInfo(); err == nil {
@@ -267,7 +260,7 @@ func clean_unregister_data(need_restart bool) {
 		}
 	}
 	if need_restart {
-		restartService()
+		serviceutil.RestartAgentService(logger)
 		fmt.Println("restart service")
 	}
 }

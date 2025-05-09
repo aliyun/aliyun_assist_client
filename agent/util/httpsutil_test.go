@@ -2,6 +2,7 @@ package util
 
 import (
 	"crypto/tls"
+	"errors"
 	"reflect"
 	"testing"
 
@@ -87,5 +88,155 @@ func TestHttpGet(t *testing.T) {
 		content, err := HttpPost("https://abc.abc", "data", "contentType")
 		assert.Equal(t, nil, err)
 		assert.Equal(t, "ok", content)
+	}
+}
+
+func TestHttpXxx(t *testing.T) {
+	var (
+		mockContent string
+		mockStatusCode int
+		mockReqError error
+
+		reloadCert bool
+
+		handlerContent string
+		handlerStatusCode int
+		handlerHttpErr error
+	)
+	SetHTTPPostErrHandler(func(httpResp *HttpRequest.Response, httpErr error) {
+		if httpResp != nil {
+			handlerContent, _ = httpResp.Content()
+			handlerStatusCode = httpResp.StatusCode()
+		}
+		handlerHttpErr = httpErr
+	})
+
+
+	var r *HttpRequest.Response
+	defer gomonkey.ApplyMethod(reflect.TypeOf(r), "Close", func() error { return nil }).Reset()
+	defer gomonkey.ApplyMethod(reflect.TypeOf(r), "Content", func() (string, error) { return mockContent, nil }).Reset()
+	defer gomonkey.ApplyMethod(reflect.TypeOf(r), "StatusCode", func() int { return mockStatusCode }).Reset()
+
+	var req *HttpRequest.Request
+	defer gomonkey.ApplyMethod(reflect.TypeOf(req), "Get", func (r *HttpRequest.Request, url string, data ...interface{}) (*HttpRequest.Response, error) {
+		if mockReqError == nil {
+			return &HttpRequest.Response{}, nil
+		} else {
+			return nil, mockReqError
+		}
+	}).Reset()
+	defer gomonkey.ApplyMethod(reflect.TypeOf(req), "Post", func (r *HttpRequest.Request, url string, data ...interface{}) (*HttpRequest.Response, error) {
+		if mockReqError == nil {
+			return &HttpRequest.Response{}, nil
+		} else {
+			return nil, mockReqError
+		}
+	}).Reset()
+
+	var p *apiserver.ExternalExecutableProvider
+	defer gomonkey.ApplyMethod(reflect.TypeOf(p), 
+		"CACertificate", func(p *apiserver.ExternalExecutableProvider, logger logrus.FieldLogger, refresh bool) ([]byte, error) {
+			
+			return []byte("abc"), nil
+		}).Reset()
+	defer gomonkey.ApplyMethod(reflect.TypeOf(p), 
+		"Name", func(p *apiserver.ExternalExecutableProvider) string {
+			return "test-provider"
+		}).Reset()
+	defer gomonkey.ApplyMethod(reflect.TypeOf(p), 
+		"ServerDomain", func(p *apiserver.ExternalExecutableProvider) (string, error) {
+			return "test-domain", nil
+		}).Reset()
+	defer gomonkey.ApplyMethod(reflect.TypeOf(p), 
+		"ExtraHTTPHeaders", func(p *apiserver.ExternalExecutableProvider) (map[string]string, error) {
+			return make(map[string]string), nil
+		}).Reset()
+	defer gomonkey.ApplyMethod(reflect.TypeOf(p), 
+		"RegionId", func(p *apiserver.ExternalExecutableProvider) (string, error) {
+			return "cn-test", nil
+		}).Reset()
+
+
+	testCases := []struct{
+		name string
+		url string
+		data string
+		contentType string
+		method string
+
+		expectErr error
+		expectContent string
+		expectStatusCode int
+	}{
+		// //////////////// GET ///////////////////
+		{
+			name: "get_ok_200",
+			url: "https://abc.abc",
+			method: "GET",
+
+			expectErr: nil,
+			expectContent: "ok",
+			expectStatusCode: 200,
+		},
+		{
+			name: "get_cert_err",
+			url: "https://abc.abc",
+			method: "GET",
+			
+			expectErr: &tls.CertificateVerificationError{},
+		},
+		// //////////////// POST ///////////////////
+		{
+			name: "post_ok_200",
+			url: "https://abc.abc",
+			method: "POST",
+
+			expectErr: nil,
+			expectContent: "ok",
+			expectStatusCode: 200,
+		},
+		{
+			name: "post_cert_err",
+			url: "https://abc.abc",
+			method: "POST",
+			
+			expectErr: &tls.CertificateVerificationError{},
+		},
+	}
+
+	for _, tc := range testCases {
+		reloadCert = false
+		mockContent = tc.expectContent
+		mockStatusCode = tc.expectStatusCode
+		mockReqError = tc.expectErr
+
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.method == "GET" {
+				err, content := HttpGet(tc.url)
+				assert.Equal(t, tc.expectErr, err)
+				if tc.expectContent != "" {
+					assert.Equal(t, tc.expectContent, content)
+				}
+
+				if errors.Is(err, &tls.CertificateVerificationError{}) {
+					assert.True(t, reloadCert)
+				}
+			} else if tc.method == "POST" {
+				content, err := HttpPost(tc.url, tc.data, tc.contentType)
+				assert.Equal(t, tc.expectErr, err)
+				if tc.expectContent != "" {
+					assert.Equal(t, tc.expectContent, content)
+				}
+
+				if errors.Is(err, &tls.CertificateVerificationError{}) {
+					assert.True(t, reloadCert)
+				}
+				if err != nil {
+					assert.Equal(t, mockContent, handlerContent)
+					assert.Equal(t, mockStatusCode, handlerStatusCode)
+					assert.Equal(t, mockReqError, handlerHttpErr)
+				}
+			}
+		})
 	}
 }

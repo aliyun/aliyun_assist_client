@@ -3,11 +3,20 @@ package pathutil
 import (
 	"os"
 	"path/filepath"
+	"sync"
 )
 
 var (
-	scriptPath = ""
-	logPath    = ""
+	scriptPath string
+
+	logPath       string
+	logPathRWLock sync.RWMutex
+
+	versionedConfigDir       string
+	versionedConfigDirRWLock sync.RWMutex
+
+	crossVersionConfigDir       string
+	crossVersionConfigDirRWLock sync.RWMutex
 )
 
 func MakeSurePath(path string) error {
@@ -17,18 +26,10 @@ func MakeSurePath(path string) error {
 func SetCurrentEnvPath() bool {
 	path := os.Getenv("path")
 	path += ";"
-	cur_path, _ := GetCurrentPath()
+	cur_path, _ := GetExecutableDir()
 	path += cur_path
 	os.Setenv("path", path)
 	return true
-}
-
-func GetCurrentPath() (string, error) {
-	path, err := os.Executable()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Dir(path), nil
 }
 
 func SetScriptPath(path string) {
@@ -39,14 +40,13 @@ func GetScriptPath() (string, error) {
 	if scriptPath != "" {
 		return scriptPath, nil
 	}
-	var cur string
-	var err error
-	cur, err = GetCurrentPath()
+
+	crossVersionDir, err := getCrossVersionOutboundDir()
 	if err != nil {
 		return "", err
 	}
 
-	path := filepath.Join(filepath.Dir(cur), "work", "script")
+	path := filepath.Join(crossVersionDir, "work", "script")
 	err = MakeSurePath(path)
 	return path, err
 }
@@ -57,57 +57,92 @@ func SetLogPath(path string) {
 }
 
 func GetLogPath() (string, error) {
-	if logPath != "" {
-		return logPath, nil
-	}
-	var cur string
-	var err error
-	cur, err = GetCurrentPath()
-	if err != nil {
-		return "", err
+	logPathRWLock.RLock()
+	if logPath == "" {
+		logPathRWLock.RUnlock()
+		logPathRWLock.Lock()
+		defer logPathRWLock.Unlock()
+
+		if logPath == "" {
+			parentDir, err := GetExecutableDir()
+			if err != nil {
+				return "", err
+			}
+
+			writableDir := filepath.Join(parentDir, "log")
+			if err := MakeSurePath(writableDir); err != nil {
+				return "", err
+			}
+
+			logPath = writableDir
+		}
+	} else {
+		defer logPathRWLock.RUnlock()
 	}
 
-	path := filepath.Join(cur, "log")
-	err = MakeSurePath(path)
-	return path, err
+	return logPath, nil
 }
 
 func GetHybridPath() (string, error) {
-	var cur string
-	var err error
-	cur, err = GetCurrentPath()
+	crossVersionDir, err := GetCrossVersionInboundDir()
 	if err != nil {
 		return "", err
 	}
 
-	path := filepath.Join(filepath.Dir(cur), "hybrid")
+	path := filepath.Join(crossVersionDir, "hybrid")
 	err = MakeSurePath(path)
 	return path, err
 }
 
 func GetConfigPath() (string, error) {
-	currentVersionDir, err := GetCurrentPath()
-	if err != nil {
-		return "", err
+	versionedConfigDirRWLock.RLock()
+	if versionedConfigDir == "" {
+		versionedConfigDirRWLock.RUnlock()
+		versionedConfigDirRWLock.Lock()
+		defer versionedConfigDirRWLock.Unlock()
+
+		if versionedConfigDir == "" {
+			parentDir, err := getVersionedInboundDir()
+			if err != nil {
+				return "", err
+			}
+
+			writableDir := filepath.Join(parentDir, "config")
+			if err := MakeSurePath(writableDir); err != nil {
+				return "", err
+			}
+
+			versionedConfigDir = writableDir
+		}
+	} else {
+		defer versionedConfigDirRWLock.RUnlock()
 	}
 
-	currentVersionConfigDir := filepath.Join(currentVersionDir, "config")
-	if err := MakeSurePath(currentVersionConfigDir); err != nil {
-		return "", err
-	}
-
-	return currentVersionConfigDir, nil
+	return versionedConfigDir, nil
 }
 
 func GetCrossVersionConfigPath() (string, error) {
-	crossVersionDir, err := getCrossVersionDir()
-	if err != nil {
-		return "", err
-	}
+	crossVersionConfigDirRWLock.RLock()
+	if crossVersionConfigDir == "" {
+		crossVersionConfigDirRWLock.RUnlock()
+		crossVersionConfigDirRWLock.Lock()
+		defer crossVersionConfigDirRWLock.Unlock()
 
-	crossVersionConfigDir := filepath.Join(crossVersionDir, "config")
-	if err := MakeSurePath(crossVersionConfigDir); err != nil {
-		return "", err
+		if crossVersionConfigDir == "" {
+			crossVersionDir, err := GetCrossVersionInboundDir()
+			if err != nil {
+				return "", err
+			}
+
+			writableDir := filepath.Join(crossVersionDir, "config")
+			if err := MakeSurePath(writableDir); err != nil {
+				return "", err
+			}
+
+			crossVersionConfigDir = writableDir
+		}
+	} else {
+		defer crossVersionConfigDirRWLock.RUnlock()
 	}
 
 	return crossVersionConfigDir, nil
@@ -124,47 +159,29 @@ func GetTempPath() (string, error) {
 	return goTempDir, err
 }
 
-func getCrossVersionDir() (string, error) {
-	currentVersionDir, err := GetCurrentPath()
-	if err != nil {
-		return "", err
-	}
-
-	absoluteCurrentVersionDir, err := filepath.Abs(currentVersionDir)
-	if err != nil {
-		return "", err
-	}
-	// Although filepath.Dir method would call filepath.Clean internally, here
-	// explicitly call the method to guarantee no trailing slash in path
-	cleanedCurrentVersionDir := filepath.Clean(absoluteCurrentVersionDir)
-
-	multiVersionDir := filepath.Dir(cleanedCurrentVersionDir)
-	return multiVersionDir, nil
-}
-
 func GetCachePath() (string, error) {
-	cur, err := GetCurrentPath()
+	crossVersionDir, err := getCrossVersionOutboundDir()
 	if err != nil {
 		return "", err
 	}
 
-	path := filepath.Join(filepath.Dir(cur), "cache")
+	path := filepath.Join(crossVersionDir, "cache")
 	MakeSurePath((path))
 	return path, err
 }
 
 func GetPluginPath() (string, error) {
-	cur, err := GetCurrentPath()
+	crossVersionDir, err := getCrossVersionOutboundDir()
 	if err != nil {
 		return "", err
 	}
-	path := filepath.Join(filepath.Dir(cur), "plugin")
+	path := filepath.Join(crossVersionDir, "plugin")
 	err = MakeSurePath(path)
 	return path, err
 }
 
 func GetPreInstalledPluginPath() (string, error) {
-	cur, err := GetCurrentPath()
+	cur, err := getVersionedOutboundDir()
 	if err != nil {
 		return "", err
 	}
