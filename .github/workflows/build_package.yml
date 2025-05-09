@@ -52,7 +52,7 @@ jobs:
           GOOS=linux GOARCH=arm64 go build -v -o $res_dir/acs-plugin-manager-arm -ldflags "-X main.assistVer=$linux_arm_version -X main.gitHash=${GITHUB_SHA}"
 
       - name: Upload file
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: binary-files_${{ github.sha }}
           path: build_result_${{ github.sha }}
@@ -64,7 +64,7 @@ jobs:
     runs-on: [self-hosted, Linux]
     steps:
       - name: Download file
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: binary-files_${{ github.sha }}
 
@@ -106,13 +106,13 @@ jobs:
           fpm -s dir -t rpm -n aliyun_assist -v $version -a i686 --vendor 'Aliyun Software Foundation' --description 'aliyun assist client' -p aliyun-assist_$version.rpm --license 'GPL' -C ./ --after-install usr/local/share/aliyun-assist/$version/init/install --before-remove usr/local/share/aliyun-assist/$version/init/uninstall --after-remove usr/local/share/aliyun-assist/$version/init/clean
 
       - name: Upload package
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: aliyun-assist_${{ env.linux_version }}.deb
           path: deb/aliyun-assist_${{ env.linux_version }}.deb
           retention-days: 3
       - name: Upload package
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: aliyun-assist_${{ env.linux_version }}.rpm
           path: rpm/aliyun-assist_${{ env.linux_version }}.rpm
