@@ -1,0 +1,188 @@
+# Sersi Remediable Issues
+# Authoritative list of diagnostic issue IDs that Sersi can remediate
+# Categories are for quick reference only, not official labels
+
+issues:
+  # SSH Issues
+  - issueId: GuestOS.SSH.PasswordAuthenticationDisabled
+    description: Enable SSH password authentication
+  - issueId: GuestOS.SSH.NotPermitRootLogin
+    description: Enable SSH root login permission
+  - issueId: GuestOS.SSH.SshdConfigValidationFailed
+    description: Repair invalid sshd configuration
+  - issueId: GuestOS.SSH.SshdServiceAutostartNotSet
+    description: Enable sshd service autostart
+  - issueId: GuestOS.SSH.NotListeningOnConfiguredAddress
+    description: Start sshd service on configured address
+  - issueId: GuestOS.SSH.ListeningOnNotConfiguredAddress
+    description: Correct sshd listening address
+  - issueId: GuestOS.SSH.SshdServiceNotInstalled
+    description: Install sshd service
+  - issueId: GuestOS.SSH.IncorrectOwnerUserAtCriticalPath
+    description: Fix incorrect owner user at SSH critical paths
+  - issueId: GuestOS.SSH.IncorrectOwnerGroupAtCriticalPath
+    description: Fix incorrect owner group at SSH critical paths
+  - issueId: GuestOS.SSH.IncorrectCriticalFileOrDirectoryPermission
+    description: Fix incorrect permissions on SSH critical files/directories
+
+  # Disk/Fstab Issues
+  - issueId: GuestOS.Disk.InvalidFstabFormat
+    description: Fix invalid fstab format
+  - issueId: GuestOS.Disk.AutoMountedFilesystemNotFound
+    description: Fix auto-mounted filesystem not found in fstab
+  - issueId: GuestOS.Disk.MountTargetDirNotFound
+    description: Create missing mount target directory
+  - issueId: GuestOS.Disk.MountRootfsDirNotFound
+    description: Fix missing root filesystem directory
+  - issueId: GuestOS.Disk.FstabRequiringFilesystemFeatureNotEnabled
+    description: Fix fstab requiring filesystem feature not enabled
+  - issueId: GuestOS.Disk.IncorrectFilesystemTypeInFstab
+    description: Fix incorrect filesystem type in fstab
+  - issueId: GuestOS.Disk.MountRootfsReadonly
+    description: Fix read-only root filesystem mount
+
+  # Network Issues
+  - issueId: GuestOS.Network.UdevMacAddressNotExistInterface
+    description: Fix udev MAC address for non-existent interface
+  - issueId: GuestOS.Network.NotFullyEnabledVirtioNetMultiqueue
+    description: Enable virtio-net multiqueue
+  - issueId: GuestOS.Network.DHClientOccupiedPort
+    description: Fix DHCP client occupied port issue
+  - issueId: GuestOS.Network.CustomDNS
+    description: Set default DNS configuration
+  - issueId: GuestOS.Network.InterfaceRequiredByConfigurationNotExist
+    description: Fix interface required by configuration not existing
+  - issueId: GuestOS.Network.NoNetworkInterfaceConfiguredViaDHCP
+    description: Configure network interface via DHCP
+  - issueId: GuestOS.Network.DependentDHCPClientNotRunning
+    description: Start dependent DHCP client service
+  - issueId: GuestOS.Network.FirewallEnabled
+    description: Disable firewall
+  - issueId: GuestOS.Network.NetworkProcessNotRunning
+    description: Start network process (e.g., sshd)
+
+  # System Issues
+  - issueId: GuestOS.System.SysctlIPv4TCPTWRecycleEnabled
+    description: Disable tcp_tw_recycle sysctl parameter
+  - issueId: GuestOS.System.SysctlIPv4TCPTWReuseNotEnabled
+    description: Enable tcp_tw_reuse sysctl parameter
+  - issueId: GuestOS.System.SysctlIPv4TCPSACKNotEnabled
+    description: Enable TCP SACK sysctl parameter
+  - issueId: GuestOS.System.NofileLimitLargerThanKernelParameter
+    description: Fix nofile limit larger than kernel parameter
+  - issueId: GuestOS.System.SysctlNetfilterNfConnectionMaxTooSmall
+    description: Increase nf_conntrack_max sysctl value
+  - issueId: GuestOS.System.SysctlTcpMaxTwBucketsTooSmall
+    description: Increase tcp_max_tw_buckets sysctl value
+  - issueId: GuestOS.System.NetCoreOptmenMaxTooSmall
+    description: Increase net.core.optmem_max sysctl value
+  - issueId: GuestOS.System.PidMaxTooSmall
+    description: Increase kernel.pid_max sysctl value
+  - issueId: GuestOS.System.SysctlUnknownNmiPanicEnabled
+    description: Disable unknown_nmi_panic sysctl parameter
+  - issueId: GuestOS.System.SELinuxEnabled
+    description: Disable SELinux
+  - issueId: GuestOS.System.MissingKernelModule
+    description: Install missing kernel module (virtio/nvme drivers)
+  - issueId: GuestOS.System.NvmeIOTimeoutTooSmall
+    description: Configure NVMe IO timeout parameter
+  - issueId: GuestOS.System.FileAttributeIncorrect
+    description: Fix incorrect system file attributes
+  - issueId: GuestOS.System.NtpdateCronjobNotExist
+    description: Create ntpdate cron job
+
+  # Cloud-init Issues
+  - issueId: GuestOS.Cloudinit.CloudinitNotInstalled
+    description: Install cloud-init
+  - issueId: GuestOS.Cloudinit.CloudinitAutostartNotSet
+    description: Enable cloud-init service autostart
+  - issueId: GuestOS.Cloudinit.ConfigurationFileNotExist
+    description: Create cloud-init configuration file
+  - issueId: GuestOS.Cloudinit.ConfigurationInvalid
+    description: Fix invalid cloud-init configuration
+  - issueId: GuestOS.InnerPassword.Cloudinit.QemuFwCfgLinkNotSet
+    description: Configure QEMU firmware config link for cloud-init
+
+  # NTP/Time Sync Issues
+  - issueId: GuestOS.Service.TimeSynchronizationServiceNotRunning
+    description: Start NTP time synchronization service
+  - issueId: GuestOS.Service.TimeSynchronizationServiceNotEnabled
+    description: Enable NTP time synchronization service autostart
+  - issueId: GuestOS.Service.TimeSynchronizationServiceNotInstalled
+    description: Install NTP time synchronization service
+  - issueId: GuestOS.Service.NtpDomainNotOptimal
+    description: Configure optimal NTP domain servers
+
+  # Package/Boot Issues
+  - issueId: GuestOS.Package.DBusNeedUpgrade
+    description: Upgrade D-Bus package
+  - issueId: GuestOS.Package.SystemdNeedUpgrade
+    description: Upgrade systemd package
+  - issueId: GuestOS.Boot.MissingOsReleaseFile
+    description: Install missing os-release file
+  - issueId: GuestOS.PackageManager.APT.SourceSuiteNotMatchCodename
+    description: Fix APT source suite not matching codename
+  - issueId: GuestOS.PackageManager.YumLike.CorruptRepoFile
+    description: Fix corrupt YUM/DNF repository file
+  - issueId: GuestOS.PackageManager.YumLike.DuplicateOptionInRepoSection
+    description: Fix duplicate option in YUM/DNF repo section
+  - issueId: GuestOS.PackageManager.YumLike.DuplicateRepoSection
+    description: Fix duplicate YUM/DNF repository section
+  - issueId: GuestOS.PackageManager.YumLike.InvalidMultiValueForOption
+    description: Fix invalid multi-value for YUM/DNF option
+  - issueId: GuestOS.PackageManager.YumLike.InvalidOptionValue
+    description: Fix invalid YUM/DNF option value
+  - issueId: GuestOS.PackageManager.YumLike.NoSectionHeaderInRepoFile
+    description: Fix missing section header in YUM/DNF repo file
+
+  # Aegis Issues
+  - issueId: GuestOS.Aegis.NotInstalled
+    description: Install Aegis security agent
+  - issueId: GuestOS.Aegis.AutostartNotSet
+    description: Enable Aegis service autostart
+
+  # Cloud Assistant Issues
+  - issueId: GuestOS.CloudAssist.NotInstalled
+    description: Install Cloud Assistant agent
+  - issueId: GuestOS.CloudAssist.AutostartNotSet
+    description: Enable Cloud Assistant service autostart
+
+  # GRUB Issues
+  - issueId: GuestOS.GRUB.UnexpectedKernelOptionValue
+    description: Fix unexpected kernel option value in GRUB
+
+  # Growpart Issues
+  - issueId: GuestOS.OnlineResizeFS.GrowpartNotInstalled
+    description: Install growpart for online filesystem resize
+
+  # PAM Issues
+  - issueId: GuestOS.PAM.PamSessionsMax
+    description: Fix PAM sessions max configuration
+  - issueId: GuestOS.PAM.PamSessionFailure
+    description: Fix PAM session failure
+  - issueId: GuestOS.PAM.PamClosingSessionsNum
+    description: Fix PAM closing sessions number
+  - issueId: GuestOS.PAM.MissPamModule
+    description: Install missing PAM module
+
+  # Audit Issues
+  - issueId: GuestOS.Audit.NoEnoughSpaceWouldShutdownSystem
+    description: Fix audit configuration to prevent shutdown on low space
+  - issueId: GuestOS.Audit.WriteErrorWouldShutdownSystem
+    description: Fix audit configuration to prevent shutdown on write error
+
+  # CPU Issues
+  - issueId: GuestOS.CPU.OfflineCpuNumber
+    description: Bring offline CPUs back online
+
+  # Hosts Access Issues
+  - issueId: GuestOS.HostsAccess.DenySSHConnect
+    description: Fix hosts.allow/hosts.deny blocking SSH connections
+
+  # QEMU Guest Agent Issues
+  - issueId: GuestOS.QemuGuestAgent.Installed
+    description: Remove QEMU guest agent (if conflicting)
+
+  # Filesystem Issues
+  - issueId: GuestOS.Filesystem.IncorrectPermissionAtCriticalPath
+    description: Fix incorrect permissions at critical filesystem paths

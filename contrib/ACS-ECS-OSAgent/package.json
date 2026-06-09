@@ -1,0 +1,23 @@
+{
+  "name": "osagent-tui-demo",
+  "private": true,
+  "packageManager": "npm@10.8.2",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "clean": "turbo run clean",
+    "build": "turbo run build bundle",
+    "rebuild": "npm run clean && npm run build",
+    "commitlint": "commitlint",
+    "lint": "eslint"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^20.5.2",
+    "@commitlint/config-conventional": "^20.5.0",
+    "eslint": "^10.2.1",
+    "eslint-plugin-import-x": "^4.16.2",
+    "turbo": "^2.8.17",
+    "typescript-eslint": "^8.59.1"
+  }
+}

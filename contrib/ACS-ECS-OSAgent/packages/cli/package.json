@@ -1,0 +1,53 @@
+{
+  "name": "@ali/osagent-cli",
+  "version": "0.12.0",
+  "type": "module",
+  "main": "./dist/cli.js",
+  "bin": {
+    "osagent": "./dist/cli.js"
+  },
+  "files": [
+    "dist/cli.js",
+    "dist/skills"
+  ],
+  "scripts": {
+    "clean": "rm -rf dist tsconfig.tsbuildinfo *.tgz",
+    "build": "tsc && node esbuild.config.mjs",
+    "bundle": "node esbuild.config.mjs",
+    "start": "node dist/cli.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@agentclientprotocol/sdk": "^0.22.1",
+    "@alicloud/ecs20140526": "^7.6.0",
+    "@alicloud/openapi-client": "^0.4.12",
+    "@alicloud/tea-util": "^1.4.9",
+    "@modelcontextprotocol/sdk": "^1",
+    "ali-oss": "^6.22.0",
+    "chalk": "^5",
+    "cli-highlight": "^2.1.11",
+    "cli-spinners": "^3",
+    "commander": "^12",
+    "handlebars": "^4.7",
+    "https-proxy-agent": "^7",
+    "ink": "^5",
+    "js-yaml": "^4",
+    "json-merge-patch": "^1",
+    "marked": "^18.0.4",
+    "openai": "^4",
+    "react": "^18",
+    "uuidv7": "^1.2.1",
+    "zod": "^3"
+  },
+  "devDependencies": {
+    "@ali/osagent-skills": "*",
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "core": "*",
+    "esbuild": "^0.25",
+    "protocol": "*",
+    "typescript": "^5",
+    "vitest": "^4.1.5"
+  }
+}

@@ -1,0 +1,7 @@
+@echo off
+setlocal
+set "OSAGENT_INSTALL_DIR=%~dp0"
+set "OSAGENT_INSTALL_DIR=%OSAGENT_INSTALL_DIR:~0,-1%"
+set "OSAGENT_NODE=%OSAGENT_INSTALL_DIR%\bin\node.exe"
+"%OSAGENT_NODE%" %OSAGENT_NODE_ARGS% "%OSAGENT_INSTALL_DIR%\dist\cli.js" %*
+exit /b %ERRORLEVEL%
