@@ -1,0 +1,21 @@
+{
+  "name": "@ali/osagent-skills",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "clean": "rm -f ecs-linux-diagnostic/scripts/ecs-diagnostic-cli.js ecs-linux-diagnostic/scripts/ecs-diagnostic-cli.js.map",
+    "build": "node ecs-linux-diagnostic/scripts/src/esbuild.config.mjs"
+  },
+  "dependencies": {
+    "@alicloud/ecs20140526": "^7.6.0",
+    "@alicloud/openapi-client": "^0.4.12",
+    "@alicloud/tea-util": "^1.4.9",
+    "ali-oss": "^6.22.0"
+  },
+  "devDependencies": {
+    "@types/ali-oss": "^6.16.11",
+    "esbuild": "^0.25.0",
+    "typescript": "^5"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"]
+    },
+    "@ali/osagent-skills#build": {
+      "dependsOn": ["^build"],
+      "outputs": ["ecs-linux-diagnostic/scripts/*.js", "ecs-linux-diagnostic/scripts/*.js.map"]
+    },
+    "bundle": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"]
+    },
+    "clean": {
+      "cache": false
+    },
+    "lint": {
+      "dependsOn": ["^build"]
+    }
+  }
+}

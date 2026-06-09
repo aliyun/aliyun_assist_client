@@ -1,0 +1,7 @@
+{
+  "name": "osagent-axt-plugin",
+  "version": "{{ VERSION }}",
+  "type": "module",
+  "private": true,
+  "dependencies": {{ DEPENDENCIES }}
+}

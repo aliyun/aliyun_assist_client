@@ -1,0 +1,10 @@
+{
+    "publisher": "aliyun",
+    "version": "{{ VERSION }}",
+    "name": "ACS-ECS-OSAgent",
+    "timeout": 86400,
+    "osType": "{{ OS_TYPE }}",
+    "arch": "{{ ARCH }}",
+    "pluginType": "Once",
+    "runPath": "{{ RUN_PATH }}"
+}

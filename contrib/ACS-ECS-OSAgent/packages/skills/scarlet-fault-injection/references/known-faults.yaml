@@ -1,0 +1,401 @@
+# Quick-reference snapshot only — may be incomplete or outdated.
+# Run `scarlet list` for the authoritative list of injectable faults.
+
+faults:
+  # Filesystem & Disk
+  - name: HighFilesystemInodeUsage
+    description: High inode usage on a filesystem
+  - name: HighFilesystemSpaceUsage
+    description: High space usage on a filesystem
+  - name: HighDiskReadIOLoad
+    description: High disk read IO load
+  - name: HighDiskWriteIOLoad
+    description: High disk write IO load
+  - name: FilesystemMountedAgainInFstab
+    description: A filesystem is mounted again in fstab
+  - name: FilesystemNotAutoMounted
+    description: A filesystem is not auto-mounted
+  - name: FilesystemsWithSameUUID
+    description: Multiple filesystems share the same UUID
+  - name: AutoMountedFilesystemNotFound
+    description: Filesystems configured for auto-mount but the underlying block device is not found by the kernel
+  - name: InvalidFstabFormat
+    description: fstab format is invalid
+  - name: IncorrectFilesystemTypeInFstab
+    description: A block device is configured with an incorrect filesystem type
+  - name: FstabRequiringFilesystemFeatureNotEnabled
+    description: A filesystem feature required by fstab is not enabled
+  - name: MountpointOverlappedInFstab
+    description: Duplicate mountpoints in fstab
+  - name: MountRootfsDirNotFound
+    description: Root directory not found in fstab
+  - name: MountRootfsReadonly
+    description: Root filesystem is mounted as read-only
+  - name: MountTargetDirNotFound
+    description: Target filesystem specified in fstab does not exist
+  - name: GrowpartNotInstalled
+    description: growpart tool is not installed
+  - name: IOHang
+    description: Task hung (IO hang simulation via console message)
+  - name: DiskFullWouldShutdownSystem
+    description: Disk full causing system shutdown (via auditd disk_full_action=halt)
+  - name: NoEnoughAdminSpaceWouldShutdownSystem
+    description: Insufficient admin space causing system shutdown (via auditd admin_space_left_action=halt)
+  - name: NoEnoughSpaceWouldShutdownSystem
+    description: Insufficient disk space causing system shutdown (via auditd space_left_action=halt)
+  - name: WriteErrorWouldShutdownSystem
+    description: Write error causing system shutdown (via auditd disk_error_action)
+  - name: IncorrectPartitionTypeToLvm
+    description: Root partition type changed from Linux to Linux LVM
+  - name: BadGeometryEvent
+    description: Kernel bad geometry event triggered via LVM operations on a secondary disk
+  - name: CannotReadInodeBitmapEvent
+    description: Cannot read inode bitmap event in dmesg/messages (triggered via LVM + inode exhaustion)
+  - name: MissingNvmeKconfig
+    description: NVMe kconfig missing in /boot/config-*
+  - name: MissingNvmeKo
+    description: NVMe kernel module missing in initramfs
+  - name: NvmeIOTimeoutTooSmall
+    description: NVMe IO timeout is set too small (should be 4294967295)
+  - name: MissingVirtioKconfig
+    description: CONFIG_VIRTIO_BLK missing in initramfs kernel config
+  - name: MissingVirtioKoInBoth
+    description: virtio module is neither compiled into the kernel nor present in initramfs
+  - name: MissingVirtioKoInInitramfs
+    description: virtio module is not present in the corresponding initramfs
+  - name: MissingVirtioKoInRootfs
+    description: virtio_blk.ko missing under /usr/lib/modules or /lib/modules
+  - name: NoInitramfsInBootDirectory
+    description: No initramfs file for booting in /boot directory
+  - name: NoVmlinuzInBootDirectory
+    description: No vmlinuz file for booting in /boot directory
+
+  # Memory & CPU
+  - name: HighPhysicalMemoryLoad
+    description: High physical memory load (requires stress-ng dependency)
+  - name: OutOfMemory
+    description: Out of memory (requires stress-ng dependency)
+  - name: CannotAllocateMemory
+    description: Cannot allocate memory from kernel (visible in dmesg/messages)
+  - name: TotalCPUUtilizationTooMuch
+    description: Total system CPU utilization too high
+  - name: SingleCoreCPUUtilizationTooMuch
+    description: Single core CPU utilization too high
+  - name: OfflineCpuNumber
+    description: Total CPU count does not match active CPU count
+
+  # Network
+  - name: NetworkPacketDrop
+    description: Network packet drop (via tc netem)
+  - name: NetworkTrafficBlocking
+    description: Block all network traffic via iptables, allowing Alibaba Cloud management traffic
+  - name: NetworkLatencyHigh
+    description: High network latency
+  - name: NetworkNetstatQueueOverflow
+    description: Netstat queue overflow
+  - name: NetworkSnmpAbnormalStats
+    description: Abnormal network SNMP statistics
+  - name: NetworkSoftnetStatDroppedPakcets
+    description: Dropped packets in /proc/net/softnet_stat
+  - name: NetworkTcpListenOverflows
+    description: Increment ListenOverflows count in /proc/net/netstat
+  - name: NetworkTcpPruneCalled
+    description: Increment PruneCalled count in /proc/net/netstat
+  - name: NetworkTcpReqQFullDrop
+    description: Increment TCPReqQFullDrop count in /proc/net/netstat
+  - name: NetworkTcpTimeWaitOverflow
+    description: Increment TimeWaitOverflow count in /proc/net/netstat
+  - name: NetworkDevStatsAbnormalItems
+    description: Abnormal network device statistics
+  - name: NetworkInterfaceIrqNotEvenlyDsitributedOnCPU
+    description: Network interface IRQs not evenly distributed across CPUs
+  - name: NetworkPortListeningByNetstat
+    description: Network port is listening (observed via netstat)
+  - name: NetworkProcessNotRunning
+    description: sshd or ssh service is not running
+  - name: NetworkServiceNotEnabled
+    description: Network service is disabled
+  - name: NetworkServiceRunFailed
+    description: Network service failed to start
+  - name: NetCoreOptmemMaxTooSmall
+    description: net.core.optmem_max set to minimum, degrading network performance
+  - name: NetSoftIrqSqueeze
+    description: netdev_budget set to minimum, causing soft IRQ squeeze and dropped packets
+  - name: NetdevBacklogOverflow
+    description: Increment Dropped count in /proc/net/softnet_stat
+  - name: NetstatNotInstalled
+    description: netstat is not installed
+  - name: NoIPv4DefaultGatewayConfigured
+    description: No IPv4 default gateway is configured
+  - name: NoNetmaskForStaticIPConfiguration
+    description: Static IP is configured without a netmask
+  - name: NoNetworkInterfaceConfiguredViaDHCP
+    description: No network interface is configured via DHCP
+  - name: NoAvailableNetworkService
+    description: No network service exists
+  - name: NoApplicableNetworkServiceConfiguration
+    description: No applicable network service configuration
+  - name: MissingNetworkInterfaceConfigured
+    description: A configured network interface is missing
+  - name: InterfaceRequiredByConfigurationNotExist
+    description: Network interface required by configuration does not exist and hotplug is not configured
+  - name: IncorrectNetworkConf
+    description: Network config file IP differs from actual eth0 IP
+  - name: ListeningOnNotConfiguredAddress
+    description: sshd is listening on a port inconsistent with the configuration file
+  - name: NotListeningOnConfiguredAddress
+    description: The running sshd process is not listening on the port configured in sshd_config
+  - name: UdevMacAddressNotExistInterface
+    description: Network interface (MAC address/device name) in udev does not exist, causing name mismatch
+  - name: ProcessNetworkReceiveRateTops
+    description: High network receive rate
+  - name: ProcessNetworkSendRateTops
+    description: High network send rate
+  - name: MetaserverNotAvailable
+    description: ECS metadata server is unreachable
+  - name: Ip6tablesInputImportantRules
+    description: ip6tables INPUT chain rules blocking key IPv6 traffic
+  - name: Ip6tablesOutputImportantRules
+    description: ip6tables OUTPUT chain rules blocking key IPv6 traffic
+  - name: AegisMayInfluenceNetworkPps
+    description: Alibaba Cloud Security (Aegis) is running and may influence network PPS
+  - name: AssistServerUnreachable
+    description: Cloud Assistant server is unreachable
+  - name: NtpDomainNotOptimal
+    description: Chrony or NTP domain name is not optimal
+  - name: NtpdateCronjobNotExist
+    description: Cron job with ntpdate command for forced time sync exists
+  - name: TimeSynchronizationServiceNotEnabled
+    description: Time synchronization service is not enabled
+  - name: TimeSynchronizationServiceNotInstalled
+    description: Time synchronization service is not installed
+  - name: TimeSynchronizationServiceNotRunning
+    description: Time synchronization service is not running
+  - name: CustomDNS
+    description: DNS is not using the default DNS configuration
+  - name: DependentDHCPClientNotRunning
+    description: DHCP client is not running
+
+  # SSH & Authentication
+  - name: SshdServiceNotInstalled
+    description: sshd is not installed
+  - name: SshdServiceAutostartNotSet
+    description: sshd service autostart is not configured
+  - name: SshdPortNotDefault
+    description: sshd_config configured port is not the default port 22
+  - name: SshdConfigValidationFailed
+    description: sshd configuration validation failed
+  - name: MissingEtcSshSshdconfig
+    description: /etc/ssh/sshd_config file is missing
+  - name: HostKeyFileEmpty
+    description: ssh_host_rsa_key.pub file is empty
+  - name: HostKeyNotExist
+    description: ssh_host_rsa_key.pub does not exist
+  - name: NotPermitRootLogin
+    description: Root login is not permitted
+  - name: PasswordAuthenticationDisabled
+    description: SSH password authentication is disabled
+  - name: DenyUsersRoot
+    description: SSH DenyUsers root is configured
+  - name: PamDenySSHorLogin
+    description: /etc/pam.d/* configured to deny SSH or login
+  - name: MissPamModule
+    description: PAM module is missing
+  - name: HostsDenySSHConnect
+    description: SSH connection denied via /etc/hosts.deny or /etc/hosts.allow
+  - name: IncorrectSSHBrivilegeSeparationPermission
+    description: sshd privilege separation path has incorrect permissions
+  - name: IncorrectSSHCriticalFileOrDirectoryPermission
+    description: sshd critical file or directory has incorrect permissions
+  - name: IncorrectSSHHostPrivateKeyPermission
+    description: ssh_host_rsa_key has incorrect permissions
+  - name: IncorrectSSHHostPublicKeyPermission
+    description: ssh_host_rsa_key.pub has incorrect permissions
+  - name: SshIncorrectOwnerGroupAtCriticalPath
+    description: sshd critical file or directory has incorrect group ownership
+  - name: SshIncorrectOwnerUserAtCriticalPath
+    description: sshd critical file or directory has incorrect user ownership
+  - name: SshIncorrectOwnerUserAtCriticalPathForUser
+    description: sshd critical file or directory has incorrect user ownership (for specific user)
+  - name: StartOpenSSHServerFailed
+    description: "GuestSerial event: StartOpenSSHServerFailed"
+  - name: MockStartOpenSSHServerFailed
+    description: "GuestSerial event: StartOpenSSHServerFailed (mock)"
+  - name: MockBadSshConfigOption
+    description: "GuestSerial event: bad sshd_config option (mock)"
+  - name: SerialConsoleBadSSHDConfig
+    description: "GuestSerial event: BadSSHDConfig (mock)"
+  - name: SshServiceConfigPortSshSocketConfigPortListeningBySystemd
+    description: "Ubuntu 24: ssh.service stopped, ssh.socket started, sshd_config has Port 22 only, port listened by systemd"
+  - name: SshServiceConfigPortSshSocketConfigPortNotListening
+    description: "Ubuntu 24: ssh.service and ssh.socket both stopped, sshd_config has Port 22 only"
+  - name: SshServiceConfigPortSshSocketNotConfigPortListeningBySshd
+    description: "Ubuntu 24: sshd_config has Port 2 and Port 2222, systemd addresses.conf deleted, port listened by sshd"
+  - name: SshServiceConfigPortSshSocketNotConfigPortListeningBySystemd
+    description: "Ubuntu 24: sshd_config has Port 2 and Port 2222, systemd addresses.conf deleted, port listened by systemd"
+  - name: SshServiceConfigPortSshSocketNotConfigPortNotListening
+    description: "Ubuntu 24: ssh.service and ssh.socket stopped, then Port 2222 configured"
+  - name: SshServiceNotConfigPortSshSocketConfigPortListeningBySshd
+    description: "Ubuntu 24: sshd_config has Port 2 and Port 2222, Port 2222 config deleted, listened by sshd"
+  - name: SshServiceNotConfigPortSshSocketConfigPortListeningBySystemd
+    description: "Ubuntu 24: sshd_config has Port 2 and Port 2222, Port 2222 config deleted, listened by systemd"
+  - name: SshServiceNotConfigPortSshSocketConfigPortNotListening
+    description: "Ubuntu 24: ssh.service and ssh.socket stopped, Port 2222 config deleted"
+  - name: SshServiceNotConfigPortSshSocketNotConfigPortListeningBySshd
+    description: "Ubuntu 24: sshd_config has Port 22 and Port 2222, ssh started, Port 2222 config deleted, listened by sshd"
+  - name: SshServiceNotConfigPortSshSocketNotConfigPortListeningBySystemd
+    description: "Ubuntu 24: sshd_config has Port 22 and Port 2222, ssh.service and ssh.socket stopped, Port 2222 config deleted"
+
+  # Boot & Kernel
+  - name: KernelPanic
+    description: Kernel panic (supports --without-kdump, --with-kdump, --block-kdump modes)
+  - name: MockNoBootableDevice
+    description: "GuestSerial event: NoBootableDevice (mock)"
+  - name: MockEnterEmergencyMode
+    description: Emergency mode (mock)
+  - name: MockUEFIBootFailed
+    description: UEFI and Linux bootloader mismatch (mock)
+  - name: UnexpectedKernelOptionValue
+    description: Kernel option in GRUB configuration is set to an unexpected value
+  - name: MockHungTask
+    description: Task hung (mock)
+  - name: MockSoftLockup
+    description: Soft lockup (mock)
+  - name: MockIOError
+    description: IO error (mock)
+  - name: MockPageAllocFailure
+    description: "GuestSerial event: PageAllocFailure (mock)"
+  - name: MockBucketTableOverflow
+    description: "GuestSerial event: BucketTableOverflow (mock)"
+  - name: MockNFConntrackTableFull
+    description: nf_conntrack table full (mock)
+  - name: MockRootFileSystemCheckFailed
+    description: Root filesystem check failed (mock)
+  - name: MockExt4FilesystemError
+    description: ext4 filesystem error (mock)
+  - name: MockFileSystemReadOnly
+    description: Filesystem read-only (mock)
+  - name: MockFileSystemResizeFailed
+    description: "GuestSerial event: FileSystemResizeFailed (mock)"
+  - name: MockFullFilesystemSpaceUsage
+    description: Filesystem space full (mock)
+  - name: MockMissingDiskByUUID
+    description: fstab configuration error — missing disk by UUID (mock)
+  - name: MockMissingLibrary
+    description: Missing shared library file (mock)
+  - name: MockNetworkServiceFailed
+    description: Network service in failed state (mock)
+  - name: MockVirtioNetProbeFailed
+    description: "GuestSerial event: VirtioNetProbeFailed (mock)"
+  - name: MockMetaserverIsUnreachable
+    description: "GuestSerial event: MetaserverIsUnreachable (mock)"
+  - name: MockUserDataRunFailed
+    description: "GuestSerial event: UserDataRunFailed (mock)"
+
+  # Cloud-init & Cloud Assist
+  - name: CloudinitAutostartNotSet
+    description: cloud-init is not configured to auto-start on boot
+  - name: CloudinitCfgFileInvaild
+    description: cloud-init config file (/etc/cloud/cloud.cfg) is invalid
+  - name: CloudinitCfgFileNotExist
+    description: cloud-init config file (/etc/cloud/cloud.cfg) does not exist
+  - name: CloudinitNotInstalled
+    description: cloud-init is not installed
+  - name: CloudinitServiceFailed
+    description: cloud-init service is in Failed state
+  - name: DependencyAcsPluginManagerExecutableNotFound
+    description: acs-plugin-manager executable not found
+  - name: DependencyAcsPluginManagerSymlinkNotFound
+    description: acs-plugin-manager symlink not found
+  - name: DependencyShSymlinkNotFound
+    description: /bin/sh symlink not found
+
+  # SELinux & Firewall
+  - name: SELinuxEnabled
+    description: Enable SELinux — step 1
+  - name: SELinuxEnabledStep3
+    description: Enable SELinux — step 2
+  - name: SELinuxEnabledStep5
+    description: Enable SELinux — step 3
+  - name: FirewallEnabled
+    description: Enable firewall (firewalld or ufw), allowing TCP port 22
+
+  # Filesystem Path & Permission
+  - name: FileRequiredAtCriticalPath
+    description: Critical system file path exists but is a directory instead of a file
+  - name: DirectoryRequiredAtCriticalPath
+    description: Critical system directory path exists but is a file instead of a directory
+  - name: SymlinkRequiredAtCriticalPath
+    description: Critical system file path exists but is a directory instead of a symlink
+  - name: MissingCriticalFile
+    description: Critical system file is not found, even at fallback paths
+  - name: MissingCriticalFileMachineId
+    description: Critical system file /etc/machine-id is not found, even at fallback paths
+  - name: MissingOsReleaseFile
+    description: /etc/os-release and /usr/lib/os-release files are missing
+  - name: FileAttributeIncorrect
+    description: Incorrect file attribute on /etc/shadow (immutable flag set)
+  - name: FileAttributeIncorrectForAuthizedKeys
+    description: Incorrect file attribute on /root/.ssh/authorized_keys (immutable flag set)
+  - name: IncorrectCriticalFileOrDirectoryPermission
+    description: sshd critical file or directory has incorrect permissions
+  - name: IncorrectPermissionAtCriticalPath
+    description: Critical path file has incorrect system permissions
+  - name: InconsistentPermissionAtCriticalPath
+    description: Critical path files have inconsistent system permissions
+  - name: SymlinkMissingCriticalFile
+    description: Critical system file does not exist, even at fallback path
+  - name: SymlinkUnexpectedTargetForCriticalSymlink
+    description: Critical symlink points to an unexpected target
+  - name: UnexpectedSymlinkForCriticalDirectory
+    description: Critical path is a symlink instead of a required directory
+  - name: UnexpectedSymlinkForCriticalFile
+    description: Critical path is a symlink instead of a required file
+  - name: LineTerminatedWithCRLF
+    description: Incorrect line terminator — lines ending with CRLF in /etc/shadow
+
+  # System Configuration & Sysctl
+  - name: SysctlIPv4TCPSACKNotEnabled
+    description: net.ipv4.tcp_sack is not set to 1 (enabled)
+  - name: SysctlIPv4TCPTWRecycleEnabled
+    description: net.ipv4.tcp_tw_recycle and tcp_timestamps both set to 1, blocking logins from NAT environments
+  - name: SysctlIPv4TCPTWReuseNotEnabled
+    description: net.ipv4.tcp_tw_reuse is not set to 1 (enabled)
+  - name: SysctlNetfilterNfConnectionMaxTooSmall
+    description: nf_conntrack_max is too small, preventing kernel from allocating connection tracking memory
+  - name: SysctlPidMaxTooSmall
+    description: kernel.pid_max is configured too small
+  - name: SysctlRpFilterStrictModeEnabled
+    description: net.ipv4.conf.all.rp_filter set to 1 (Strict Mode)
+  - name: SysctlTcpMaxTwBucketsTooSmall
+    description: tcp_max_tw_buckets is too small, causing "time wait bucket table" kernel log errors
+  - name: SysctlUnknownNmiPanicEnabled
+    description: kernel.unknown_nmi_panic is set to 0 (disabled)
+  - name: NofileLimitLargerThanKernelParameter
+    description: nofile value in /etc/security/limits.conf exceeds /proc/sys/fs/nr_open
+  - name: NotFullyEnabledVirtioNetMultiqueue
+    description: virtio network multiqueue is not fully enabled
+
+  # Package & Repo
+  - name: YumLikeCorruptRepoFile
+    description: Corrupt repo file exists under /etc/yum.repos.d/
+  - name: YumLikeDuplicateOptionInRepoSection
+    description: Duplicate option in a DNF/YUM/Zypper repository section
+  - name: YumLikeDuplicateRepoSection
+    description: Duplicate repository section in DNF/YUM/Zypper configuration
+  - name: YumLikeInvalidOptionValue
+    description: Invalid multiple values for an option in a DNF/YUM/Zypper repo section
+  - name: YumLikeNoSectionHeaderInRepoFile
+    description: Key-value pairs found before any section header in DNF/YUM/Zypper config file
+  - name: SourceSuiteNotMatchCodename
+    description: Debian/Ubuntu apt source suite or codename does not match the running OS version
+
+  # System Info
+  - name: AliyunSystemdVersionCheck
+    description: Install a defective D-Bus version
+  - name: DmiProductNameIncorrect
+    description: DMI product name is incorrect (mocked via mount --bind)
+  - name: LikelySystemsAlinux2
+    description: Modify OS release info to simulate Alibaba Cloud Linux 2 version
+  - name: MissingCriticalUser
+    description: A critical user is missing
