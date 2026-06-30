@@ -1,15 +1,18 @@
 package channel
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"runtime/debug"
 	"sync"
 	"time"
 
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 	"github.com/gorilla/websocket"
 
 	"github.com/aliyun/aliyun_assist_client/agent/clientreport"
@@ -29,6 +32,8 @@ const (
 var (
 	wssCoolDownCount = 1  // limit of continuous failed connection
 	wssCoolDownTime  = 60 // second
+
+	wssPingInterval = time.Second * 60
 )
 
 type WebSocketChannel struct {
@@ -57,12 +62,14 @@ func (c *WebSocketChannel) IsSupported() bool {
 func (c *WebSocketChannel) StartChannel() error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+
+	logger := log.GetLogger().WithField("phase", "startWebSocketChannel")
 	errmsg := ""
 	defer func() {
 		if len(errmsg) > 0 {
 			metrics.GetChannelFailEvent(
 				metrics.EVENT_SUBCATEGORY_CHANNEL_WS,
-				"errmsg", errmsg,
+				"errormsg", errmsg,
 				"type", ChannelTypeStr(c.ChannelType),
 			).ReportEvent()
 		}
@@ -82,7 +89,7 @@ func (c *WebSocketChannel) StartChannel() error {
 
 	url := "wss://" + host + WEBSOCKET_SERVER
 
-	logger := log.GetLogger().WithField("url", url)
+	logger = logger.WithField("url", url)
 	header := http.Header{
 		httpbase.UserAgentHeader: []string{httpbase.UserAgentValue},
 	}
@@ -95,6 +102,7 @@ func (c *WebSocketChannel) StartChannel() error {
 	}
 
 	var MyDialer = &websocket.Dialer{
+		NetDialContext: requester.GetDialContextFunc(logger),
 		Proxy:            requester.GetProxyFunc(logger),
 		HandshakeTimeout: 45 * time.Second,
 		TLSClientConfig: &tls.Config{
@@ -102,8 +110,9 @@ func (c *WebSocketChannel) StartChannel() error {
 		},
 	}
 	var dialErr error
+	var dialResponse *http.Response
 	var conn *websocket.Conn
-	conn, _, dialErr = MyDialer.Dial(url, header)
+	conn, dialResponse, dialErr = MyDialer.Dial(url, header)
 	if dialErr != nil {
 		var certificateErr *tls.CertificateVerificationError
 		if errors.As(dialErr, &certificateErr) {
@@ -111,8 +120,8 @@ func (c *WebSocketChannel) StartChannel() error {
 
 			requester.AccumulateRootCAs(logger)(func(certPool *x509.CertPool) bool {
 				MyDialer.TLSClientConfig.RootCAs = certPool
-				if conn, _, dialErr = MyDialer.Dial(url, header); dialErr != nil {
-					errmsg = fmt.Sprintf("dial ws channel errror:%s, url=%s", dialErr.Error(), url)
+				if conn, dialResponse, dialErr = MyDialer.Dial(url, header); dialErr != nil {
+					errmsg = fmt.Sprintf("dial ws channel error:%s, url=%s", dialErr.Error(), url)
 					return true
 				} else {
 					requester.UpdateRootCAs(logger, certPool)
@@ -121,34 +130,70 @@ func (c *WebSocketChannel) StartChannel() error {
 				}
 			})
 		} else {
-			errmsg = fmt.Sprintf("dial ws channel errror:%s, url=%s", dialErr.Error(), url)
+			errmsg = fmt.Sprintf("dial ws channel error:%s, url=%s", dialErr.Error(), url)
 		}
 	}
 	if dialErr != nil {
+		dialErrLogger := logger.WithError(dialErr)
+
+		var dialResponseStatusCode = -1
+		if dialResponse != nil {
+			dialResponseStatusCode = dialResponse.StatusCode
+			dialResponseBody, dialResponseBodyErr := io.ReadAll(dialResponse.Body)
+			if dialResponseBodyErr != nil {
+				logger.WithField("dialErr", dialErr).WithError(dialResponseBodyErr).Error("Another error occurred when reading response body along with dial error")
+			}
+			dialResponse.Body.Close()
+
+			dialResponseContent := string(dialResponseBody)
+			dialErrLogger = dialErrLogger.WithFields(logrus.Fields{
+				"responseCode":    dialResponseStatusCode,
+				"responseContent": dialResponseContent,
+			})
+
+			// Defer invocation of optional callback on error response from
+			// websocket dial
+			if websocketDialErrorResponseHook != nil {
+				defer websocketDialErrorResponseHook(dialResponseStatusCode, dialResponseContent, dialErr)
+			}
+		}
+
 		c.consecutiveConnectFailed += 1
 		if c.consecutiveConnectFailed >= wssCoolDownCount {
 			c.calmDownUntil = time.Now().Add(time.Second * time.Duration(wssCoolDownTime))
-			errmsg = fmt.Sprintf("dial ws channel errror:%s, url=%s, wss dial failed %d times "+
-				"consecutivly, need calm down %d second",
-				dialErr.Error(), url, c.consecutiveConnectFailed, wssCoolDownTime)
+			dialErrLogger.WithFields(logrus.Fields{
+				"failureCount": c.consecutiveConnectFailed,
+				"coolDownSeconds": wssCoolDownTime,
+				"dontRetryBefore": c.calmDownUntil,
+			}).Error("Failed to dial websocket channel times consecutively and will cool down for a while")
+			errmsg = fmt.Sprintf("dial ws channel error:%s, url=%s, responseStatusCode=%d, wss dial failed %d times "+
+				"consecutively, need calm down %d second",
+				dialErr.Error(), url, dialResponseStatusCode, c.consecutiveConnectFailed, wssCoolDownTime)
 		} else {
-			errmsg = fmt.Sprintf("dial ws channel errror:%s, url=%s", dialErr.Error(), url)
+			dialErrLogger.Error("Failed to dial websocket channel")
+			errmsg = fmt.Sprintf("dial ws channel error:%s, url=%s, responseStatusCode=%d", dialErr.Error(), url, dialResponseStatusCode)
 		}
-		log.GetLogger().Errorln(dialErr)
+
+		// Here exit the channel initiating procedure with optional deferred
+		// callback
 		return dialErr
 	}
 	c.consecutiveConnectFailed = 0
 	c.wskConn = conn
 	logger.Infoln("Start websocket channel ok! url:", url)
 	c.Working.Set()
-	c.StartPings(time.Second * 60)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	c.StartPings(ctx, wssPingInterval)
 	go func() {
+		logger := log.GetLogger().WithField("phase", "readWebSocketChannel")
 		defer func() {
 			if msg := recover(); msg != nil {
 				logger.Errorf("WebsocketChannel  run panic: %v", msg)
 				logger.Errorf("%s: %s", msg, debug.Stack())
 			}
 		}()
+		defer cancel()
 		retryCount := 0
 		for {
 			if !c.Working.IsSet() {
@@ -246,13 +291,16 @@ func (c *WebSocketChannel) StopChannel() error {
 	return nil
 }
 
-func (c *WebSocketChannel) StartPings(pingInterval time.Duration) {
+func (c *WebSocketChannel) StartPings(ctx context.Context, pingInterval time.Duration) {
 
 	go func() {
+		tick := *time.NewTicker(pingInterval)
+		defer tick.Stop()
 		for {
 			if !c.Working.IsSet() {
 				return
 			}
+
 			log.GetLogger().Infoln("WebsocketChannel: ping...")
 			c.writeLock.Lock()
 			err := c.wskConn.WriteMessage(websocket.PingMessage, []byte("keepalive"))
@@ -266,7 +314,12 @@ func (c *WebSocketChannel) StartPings(pingInterval time.Duration) {
 				log.GetLogger().Errorf("Error while sending websocket ping: %v", err)
 				return
 			}
-			time.Sleep(pingInterval)
+
+			select {
+			case <-tick.C:
+			case <-ctx.Done():
+				return
+			}
 		}
 	}()
 }

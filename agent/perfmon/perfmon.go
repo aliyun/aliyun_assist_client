@@ -72,7 +72,7 @@ func generatePerfData(logger logrus.FieldLogger) error {
 		var memRss int64
 		memInfo, err := p.MemoryInfo()
 		if err != nil {
-			logger.Error("get cpu percent failed: ", err)
+			logger.Error("get memory info failed: ", err)
 			memRss = -1
 		} else {
 			memRssTotal += int64(memInfo.RSS)

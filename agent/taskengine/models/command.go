@@ -12,10 +12,11 @@ const (
 )
 
 type OutputInfo struct {
-	Interval  int  `json:"interval"`
-	LogQuota  int  `json:"logQuota"`
-	SkipEmpty bool `json:"skipEmpty"`
-	SendStart bool `json:"sendStart"`
+	Interval   int  `json:"interval"`
+	LogQuota   int  `json:"logQuota"`
+	SkipEmpty  bool `json:"skipEmpty"`
+	SendStart  bool `json:"sendStart"`
+	NeedExport bool `json:"needExport"`
 }
 
 type RunTaskInfo struct {

@@ -14,6 +14,7 @@ type RegisterInfo struct {
 	PublicKeyBase64 string `json:"publicKey"`
 	Id              string `json:"activationId"`
 	Tag             []Tag  `json:"tag"`
+	ForceReuse      bool   `json:"forceReuse"`
 }
 
 type Tag struct {

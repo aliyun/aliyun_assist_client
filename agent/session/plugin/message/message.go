@@ -93,6 +93,7 @@ func (message *Message) Deserialize(input []byte) (err error) {
 	}
 
 	offset_data := session_id_len
+	message.SessionId, err = getString(input, AgentMessage_SessionIdOffset+1, session_id_len)
 
 	instance_id_len, err := bytesToIntU(input[AgentMessage_InstanceIdOffset+int(offset_data) : AgentMessage_InstanceIdOffset+int(offset_data)+1])
 	if err != nil {

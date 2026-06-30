@@ -94,6 +94,12 @@ func GetSignCertService() string {
 	return url
 }
 
+func GetExportOutputResultService() string {
+	url := "https://" + GetServerHost()
+	url += "/luban/api/v1/task/exporter_result"
+	return url
+}
+
 // GetPingService returns heart-beat API but without the scheme part, unlike
 // other API address provider function
 func GetPingService() string {

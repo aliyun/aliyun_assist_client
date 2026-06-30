@@ -1,13 +1,9 @@
 package pluginmanager
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
-	"io/ioutil"
 	"math/rand"
-	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -20,8 +16,6 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/timermanager"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
-	"github.com/aliyun/aliyun_assist_client/common/fileutil"
-	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 )
 
 /*
@@ -139,107 +133,21 @@ func pluginHealthCheckScan() {
 	lastPluginHealthCheckTime = time.Now().Unix()
 	pluginHealthCheckTimeMut.Unlock()
 	log.GetLogger().Info("pluginHealthCheckScan: start")
-	// 1.检查插件列表，如果没有插件就不需要健康检查
-	pluginInfoList, err := _findAllInstalledPlugins()
-	if err != nil {
-		log.GetLogger().WithError(err).Error("pluginHealthCheckScan: loadPlugins err: " + err.Error())
-		return
-	}
-	if len(pluginInfoList) == 0 {
-		log.GetLogger().Infof("pluginHealthCheckScan: there is no plugin")
-		return
-	}
 
 	// 2.将插件状态发送给服务端
-	pluginStatusRequest := PluginStatusResquest{
-		Plugin: []PluginStatus{},
-	}
-	persistPluginCount := 0
-	pluginInfoMap := make(map[string]*PluginInfo)
-	for _, pluginInfo := range pluginInfoList {
-		if pluginInfo.IsRemoved {
-			continue
-		}
-		pluginInfoMap[pluginInfo.Name] = &pluginInfo
-		if pluginInfo.PluginType() == PLUGIN_ONCE {
-			pluginStatus := PluginStatus{
-				Name:    pluginInfo.Name,
-				Status:  ONCE_INSTALLED,
-				Version: pluginInfo.Version,
-			}
-			// 太长的名称和版本号字段进行截断
-			if len(pluginStatus.Name) > PLUGIN_NAME_MAXLEN {
-				pluginStatus.Name = pluginStatus.Name[:PLUGIN_NAME_MAXLEN]
-			}
-			if len(pluginStatus.Version) > PLUGIN_VERSION_MAXLEN {
-				pluginStatus.Version = pluginStatus.Version[:PLUGIN_VERSION_MAXLEN]
-			}
-			pluginStatusRequest.Plugin = append(pluginStatusRequest.Plugin, pluginStatus)
-		} else if pluginInfo.PluginType() == PLUGIN_PERSIST {
-			persistPluginCount += 1
-		}
-	}
-	if persistPluginCount > 0 {
-		// 调用acs-plugin-manager模块的 status接口，批量获取常驻插件状态（包括已删除的常驻插件）
-		mixedOutput := bytes.Buffer{}
-		cmd := "acs-plugin-manager"
-		arguments := []string{"--status"}
-		_, _, err = syncRunKillGroup("", cmd, arguments, &mixedOutput, &mixedOutput, 120)
-		if err != nil {
-			log.GetLogger().Errorf("pluginHealthCheckScan: cmd run err: %s, cmd[%s %s] output[%s]", err.Error(), cmd, strings.Join(arguments, " "), mixedOutput.String())
-			return
-		}
-		content := mixedOutput.Bytes()
-		pluginStatusList := []PluginStatus{}
-		if err := json.Unmarshal(content, &pluginStatusList); err != nil {
-			log.GetLogger().Errorf("pluginHealthCheckScan: json.Unmarshal pluginStatusList error: %s, content: %s", err.Error(), string(content))
-		}
-		if len(pluginStatusList) == 0 {
-			log.GetLogger().Infof("pluginHealthCheckScan: there is no persist plugin, content[%s]", string(content))
-		}
-
-		for _, pluginInfo := range pluginStatusList {
-			if pluginInfo.Status == REMOVED {
-				continue
-			}
-			pluginStatus := PluginStatus{
-				Name:    pluginInfo.Name,
-				Version: pluginInfo.Version,
-				Status:  pluginInfo.Status,
-			}
-			// 太长的名称和版本号字段进行截断
-			if len(pluginStatus.Name) > PLUGIN_NAME_MAXLEN {
-				pluginStatus.Name = pluginStatus.Name[:PLUGIN_NAME_MAXLEN]
-			}
-			if len(pluginStatus.Version) > PLUGIN_VERSION_MAXLEN {
-				pluginStatus.Version = pluginStatus.Version[:PLUGIN_VERSION_MAXLEN]
-			}
-			if pluginInfo.Status != PERSIST_RUNNING && pluginInfo.Status != REMOVED {
-				// // 状态异常的常驻插件本次不上报，acs-plugin-manager调用--start拉起后会单独上报该插件的状态
-				log.GetLogger().Warnf("plugin[%s] is not running, try to start it", pluginInfo.Name)
-				go func(pluginName string, mp map[string]*PluginInfo) {
-					randSleep := rand.Intn(10 * 1000)
-					time.Sleep(time.Duration(randSleep) * time.Millisecond)
-					command := "acs-plugin-manager"
-					arguments := []string{"-e", "--local", "-P", pluginName, "-p", "--start"}
-					timeout := 60
-					if pluginInfoPtr, ok := mp[pluginName]; ok && pluginInfoPtr.Timeout != "" {
-						if t, err := strconv.Atoi(pluginInfoPtr.Timeout); err == nil {
-							timeout = t
-						}
-					}
-					syncRunKillGroup("", command, arguments, nil, nil, timeout)
-				}(pluginInfo.Name, pluginInfoMap)
-			} else {
-				// 状态正常的常驻插件进行上报
-				pluginStatusRequest.Plugin = append(pluginStatusRequest.Plugin, pluginStatus)
-			}
-		}
-	}
-	if len(pluginStatusRequest.Plugin) == 0 {
-		log.GetLogger().Infof("pluginHealthCheckScan: there is no plugin need report status")
+	statuses, err := LocalManager.HealthCheck(log.GetLogger(), pluginmodel.HealthCheckByScan)
+	if err != nil {
+		log.GetLogger().WithError(err).Error("pluginHealthCheckScan: error encountered when scanning plugins that need to report status")
 		return
 	}
+	if len(statuses) == 0 {
+		log.GetLogger().Info("pluginHealthCheckScan: there is no plugin need report status")
+		return
+	}
+
+	pluginStatusRequest := _truncateStatusRequestFields(&PluginStatusResquest{
+		Plugin: statuses,
+	})
 	requestPayloadBytes, err := json.Marshal(pluginStatusRequest)
 	if err != nil {
 		log.GetLogger().WithError(err).Error("pluginHealthCheckScan: pluginStatusList marshal err: " + err.Error())
@@ -314,66 +222,20 @@ func pluginHealthCheckPull() {
 		return
 	}
 	log.GetLogger().Info("pluginHealthCheckPull: start")
-	// 1.检查插件列表，如果没有插件就不需要健康检查
-	pluginInfoList, err := _findAllInstalledPlugins()
+
+	statuses, err := LocalManager.HealthCheck(log.GetLogger(), pluginmodel.HealthCheckByPull)
 	if err != nil {
-		log.GetLogger().Error("pluginHealthCheckPull: loadPlugins err: " + err.Error())
+		log.GetLogger().WithError(err).Error("pluginHealthCheckPull: error encountered when pulling heartbeat of plugins")
 		return
 	}
-	if len(pluginInfoList) == 0 {
-		log.GetLogger().Infof("pluginHealthCheckPull: there is no plugin")
+	if len(statuses) == 0 {
+		log.GetLogger().Info("pluginHealthCheckPull: there is no persist plugin with heartbeat")
 		return
 	}
 
-	// 2.获取插件状态
-	pluginStatusRequest := PluginStatusResquest{
-		Plugin: []PluginStatus{},
-	}
-	pluginDir, err := pathutil.GetPluginPath()
-	if err != nil {
-		log.GetLogger().Error("pluginHealthCheckPull: getPluginPath err: ", err.Error())
-		return
-	}
-	curPluginStatusRecord := map[string]string{}
-	for _, pluginInfo := range pluginInfoList {
-		if pluginInfo.PluginType() == PLUGIN_PERSIST && !pluginInfo.IsRemoved {
-			// 常驻型插件且未被删除：检查并读取插件目录下的heartbeat文件
-			heartbeatPath := filepath.Join(pluginDir, pluginInfo.Name, pluginInfo.Version, "heartbeat")
-			if fileutil.CheckFileIsExist(heartbeatPath) {
-				content, err := ioutil.ReadFile(heartbeatPath)
-				if err != nil {
-					log.GetLogger().Errorf("pluginHealthCheckPull: Read heartbeat file err, heartbeat[%s], err: %s", heartbeatPath, err.Error())
-					continue
-				}
-				timestampStr := strings.TrimSpace(string(content))
-				timestamp, err := strconv.ParseInt(timestampStr, 10, 0)
-				if err != nil {
-					log.GetLogger().Errorf("pluginHealthCheckPull: Parse heartbeat file err, heartbeat[%s], content[%s] err: %s", heartbeatPath, timestampStr, err.Error())
-					continue
-				}
-				status := PERSIST_RUNNING
-				if now-timestamp > int64(pluginInfo.HeartbeatInterval+5) {
-					status = PERSIST_FAIL
-				}
-				curPluginStatusRecord[pluginInfo.Name] = status
-				pluginStatus := PluginStatus{
-					Name:    pluginInfo.Name,
-					Status:  status,
-					Version: pluginInfo.Version,
-				}
-				if len(pluginStatus.Name) > PLUGIN_NAME_MAXLEN {
-					pluginStatus.Name = pluginStatus.Name[:PLUGIN_NAME_MAXLEN]
-				}
-				if len(pluginStatus.Version) > PLUGIN_VERSION_MAXLEN {
-					pluginStatus.Version = pluginStatus.Version[:PLUGIN_VERSION_MAXLEN]
-				}
-				pluginStatusRequest.Plugin = append(pluginStatusRequest.Plugin, pluginStatus)
-			}
-		}
-	}
-	if len(pluginStatusRequest.Plugin) == 0 {
-		log.GetLogger().Infof("pluginHealthCheckPull: there is no persist plugin with heartbeat")
-		return
+	curPluginStatusRecord := make(map[string]string, len(statuses))
+	for _, ps := range statuses {
+		curPluginStatusRecord[ps.Name] = ps.Status
 	}
 	willReport := true
 	if lazyReport {
@@ -402,6 +264,10 @@ func pluginHealthCheckPull() {
 		return
 	}
 	lastPluginStatusRecord = curPluginStatusRecord
+
+	pluginStatusRequest := _truncateStatusRequestFields(&PluginStatusResquest{
+		Plugin: statuses,
+	})
 	requestPayloadBytes, err := json.Marshal(pluginStatusRequest)
 	if err != nil {
 		log.GetLogger().WithError(err).Error("pluginHealthCheckPull fail: pluginStatusList marshal fail")
@@ -519,30 +385,23 @@ func pluginUpdateCheck() {
 
 func pluginLocalListReport() {
 	log.GetLogger().Info("pluginLocalListReport: start")
-	pluginInfoList, err := _findAllInstalledPlugins()
-	if err != nil {
-		log.GetLogger().Error("pluginLocalListReport: loadPlugins err: ", err.Error())
+	installeds, err := LocalManager.FindInstalled(log.GetLogger())
+	if err != nil || len(installeds) == 0 {
+		log.GetLogger().WithError(err).Error("pluginLocalListReport: no local installed plugin(s) loaded")
 		return
 	}
+
 	nameList := []string{}
 	versionList := []string{}
 	osList := []string{}
 	archList := []string{}
-	for _, p := range pluginInfoList {
-		if p.IsRemoved {
-			continue
-		}
-		p.OSType = strings.ToLower(p.OSType)
-		p.Arch = strings.ToLower(p.Arch)
-		nameList = append(nameList, p.Name)
-		versionList = append(versionList, p.Version)
-		osList = append(osList, p.OSType)
-		archList = append(archList, p.Arch)
+	for _, p := range installeds {
+		nameList = append(nameList, p.Name())
+		versionList = append(versionList, p.Version())
+		osList = append(osList, strings.ToLower(p.OSType()))
+		archList = append(archList, strings.ToLower(p.Architecture()))
 	}
-	if len(nameList) == 0 {
-		log.GetLogger().Info("pluginLocalListReport: no plugin need to report")
-		return
-	}
+
 	pluginData := map[string][]string{
 		"name":    nameList,
 		"version": versionList,
@@ -601,4 +460,20 @@ func _findAllInstalledPlugins() ([]PluginInfo, error) {
 
 	_, pluginInfoList, err := installedPlugins.FindAll()
 	return pluginInfoList, err
+}
+
+func _truncateStatusRequestFields(request *PluginStatusResquest) *PluginStatusResquest {
+	for i, _ := range request.Plugin {
+		pluginStatus := &request.Plugin[i]
+
+		// 太长的名称和版本号字段进行截断
+		if len(pluginStatus.Name) > PLUGIN_NAME_MAXLEN {
+			pluginStatus.Name = pluginStatus.Name[:PLUGIN_NAME_MAXLEN]
+		}
+		if len(pluginStatus.Version) > PLUGIN_VERSION_MAXLEN {
+			pluginStatus.Version = pluginStatus.Version[:PLUGIN_VERSION_MAXLEN]
+		}
+	}
+
+	return request
 }

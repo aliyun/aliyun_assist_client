@@ -14,9 +14,10 @@
 package config
 
 import (
-	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/i18n"
-
+	"fmt"
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/cli"
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/constant"
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/i18n"
 )
 
 const (
@@ -25,6 +26,7 @@ const (
 	IdleTimeoutFlagName     = "idle-timeout"
 	VerboseFlagName         = "verbose"
 	PortNumberFlagName      = "port"
+	ConnectionTypeFlagName  = "connection-type"
 	WssUrlFlagName          = "wss-url"
 	ModeFlagName            = "mode"
 	LocalPortFlagName       = "local-port"
@@ -50,6 +52,8 @@ const (
 	ServiceInstanceFlagName = "service-instance"
 	PublicKeyFlagName       = "public-key"
 	UserNameFlagName        = "user-name"
+	PasswdNameFlagName      = "password-name"
+	PasswdFlagName          = "password"
 )
 
 func AddFlags(fs *cli.FlagSet) {
@@ -61,6 +65,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewWebsocketUrlFlag())
 	fs.Add(NewVerboseFlag())
 	fs.Add(NewPortNumberUrlFlag())
+	fs.Add(NewConnectionTypeFlag())
 	/////////////////////////////////////////////////
 	fs.Add(NewLocalPortFlag())
 	fs.Add(NewRemotePortFlag())
@@ -87,6 +92,8 @@ func AddFlags(fs *cli.FlagSet) {
 	/////////////////////////////////////////////////
 	fs.Add(NewPublicKeyFlag())
 	fs.Add(NewUserNameFlag())
+	fs.Add(NewPasswdNameFlag())
+	fs.Add(NewPasswdFlag())
 }
 
 func ConnectTimeoutFlag(fs *cli.FlagSet) *cli.Flag {
@@ -115,6 +122,10 @@ func VerboseFlag(fs *cli.FlagSet) *cli.Flag {
 
 func PortNumberFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(PortNumberFlagName)
+}
+
+func ConnectionTypeFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(ConnectionTypeFlagName)
 }
 
 func ModeFlag(fs *cli.FlagSet) *cli.Flag {
@@ -203,6 +214,14 @@ func UserNameFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(UserNameFlagName)
 }
 
+func PasswdNameFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(PasswdNameFlagName)
+}
+
+func PasswdFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(PasswdFlagName)
+}
+
 //var OutputFlag = &cli.Flag{Category: "config",
 //	Name: "output", AssignedMode: cli.AssignedOnce, Hidden: true,
 //	Usage: i18n.T(
@@ -286,6 +305,17 @@ func NewPortNumberUrlFlag() *cli.Flag {
 		Short: i18n.T(
 			"use `--port <port>` to select port",
 			"使用 `--port <port>` 指定操作的实例端口")}
+}
+
+func NewConnectionTypeFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         ConnectionTypeFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Persistent:   true,
+		Short: i18n.T(
+			fmt.Sprintf("use `--connection-type <connection-type>` to set connection type, the optional values are %s and %s, the default is %s", constant.CONNECTION_TYPE_INTERNET, constant.CONNECTION_TYPE_INTRANET, constant.CONNECTION_TYPE_INTERNET),
+			fmt.Sprintf("使用 `--connection-type <connection-type>` 指定连接类型, 可选的值有 %s 和 %s, 默认值是 %s", constant.CONNECTION_TYPE_INTERNET, constant.CONNECTION_TYPE_INTRANET, constant.CONNECTION_TYPE_INTERNET))}
 }
 
 // /////////////////////////////////////////////////////////////////////////////////////////
@@ -553,6 +583,32 @@ func NewUserNameFlag() *cli.Flag {
 		Short: i18n.T(
 			"use `--user-name <user-name>` to set the user name of temporary ssh_public_key, default root",
 			"使用 `--user-name <user-name>` 指定临时公钥的用户名, 默认是root",
+		),
+	}
+}
+
+func NewPasswdNameFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         PasswdNameFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Persistent:   true,
+		Short: i18n.T(
+			"use `--passwd-name <passwd-name>` to set the passwd name of user (Only logging in Windows instance with specified user need this.)",
+			"使用 `--passwd-name <passwd-name>` 指定用户密码的名称 (仅在使用指定用户登录windows实例时需要此参数)",
+		),
+	}
+}
+
+func NewPasswdFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         PasswdFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Persistent:   true,
+		Short: i18n.T(
+			"use `--passwd <passwd>` to set the passwd of user (Only logging in Windows instance with specified user need this.)",
+			"使用 `--passwd <passwd>` 指定用户密码 (仅在使用指定用户登录windows实例时需要此参数)",
 		),
 	}
 }

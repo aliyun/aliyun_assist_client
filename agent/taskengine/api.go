@@ -1,12 +1,11 @@
 package taskengine
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/url"
 	"time"
 
-	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/agent/taskengine/export"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/common/langutil"
 )
@@ -29,6 +28,9 @@ const (
 type TaskReportResp struct {
 	ErrorCode string `json:"errorCode"`
 	Status    string `json:"status"`
+
+	TaskId      string                `json:"taskId"`
+	OssExporter []*export.OSSExporter `json:"ossExporter"`
 }
 
 func reportInvalidTask(taskId string, invokeVersion int, param, value string, extraLubanParams string) (string, error) {
@@ -75,12 +77,4 @@ func sendStoppedOutput(taskId string, invokeVersion int, start int64, end int64,
 	}
 
 	return response, err
-}
-
-func parseTaskReportResp(content string) *TaskReportResp {
-	resp := &TaskReportResp{}
-	if err := json.Unmarshal([]byte(content), resp); err != nil {
-		log.GetLogger().WithError(err).Error("Marshal TaskReportResp failed")
-	}
-	return resp
 }

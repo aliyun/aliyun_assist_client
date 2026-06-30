@@ -5,6 +5,7 @@
 package service
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
@@ -18,7 +19,7 @@ import (
 	"text/template"
 )
 
-func isSystemd() bool {
+func IsSystemd() bool {
 	if _, err := os.Stat("/run/systemd/system"); err == nil {
 		return true
 	}
@@ -81,7 +82,7 @@ func (s *systemd) configPath() (cp string, err error) {
 	if err != nil {
 		return
 	}
-	cp = filepath.Join(systemdUserDir, s.Config.Name + ".service")
+	cp = filepath.Join(systemdUserDir, s.Config.Name+".service")
 	return
 }
 
@@ -129,26 +130,13 @@ func (s *systemd) template() *template.Template {
 	}
 }
 
-func (s *systemd) Install() error {
-	confPath, err := s.configPath()
-	if err != nil {
-		return err
-	}
-	_, err = os.Stat(confPath)
-	if err == nil {
-		return fmt.Errorf("Init already exists: %s", confPath)
-	}
-
-	f, err := os.OpenFile(confPath, os.O_WRONLY|os.O_CREATE, 0644)
+func (s *systemd) GenServiceConfFile(confPath, symlinkPath string) (err error) {
+	var tempPath = confPath + ".tmp"
+	f, err := os.OpenFile(tempPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-
-	path, err := s.execPath()
-	if err != nil {
-		return err
-	}
 
 	var to = &struct {
 		*Config
@@ -162,7 +150,7 @@ func (s *systemd) Install() error {
 		LogOutput            bool
 	}{
 		s.Config,
-		path,
+		symlinkPath,
 		s.hasOutputFileSupport(),
 		s.Option.string(optionReloadSignal, ""),
 		s.Option.string(optionPIDFile, ""),
@@ -176,25 +164,43 @@ func (s *systemd) Install() error {
 	if err != nil {
 		return err
 	}
-	// Run sync to ensure that the conf file is saved to disk.
-	f.Sync()
 
-	// NOTE: The order of enabling service and reloading daemon is swapped due
-	// to an unexpected systemd behavior on SLES12sp2, i.e., enabling enabled
-	// service would cause an error with exit status 1 and will prevent daemon
-	// from reloading operation after that. In my opinion, any external
-	// modification to unit file should be followed by immediate
-	// daemon-reloading opeartion to notify systemd to update its internal
-	// servive status, and I really wonder why the service library author does
-	// not follow such method, maybe there are some other reasons that I have
-	// not known.
-	if s.Option.bool(optionUserService, optionUserServiceDefault) {
-		err = run("systemctl", "daemon-reload", "--user")
-	} else {
-		err = run("systemctl", "daemon-reload")
-	}
+	err = f.Sync()
 	if err != nil {
 		return err
+	}
+
+	err = os.Rename(tempPath, confPath)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *systemd) InstallAndReload(confPath, symlinkPath string, needReload bool) (err error) {
+	if needReload {
+		err = s.GenServiceConfFile(confPath, symlinkPath)
+		if err != nil {
+			return err
+		}
+
+		// NOTE: The order of enabling service and reloading daemon is swapped due
+		// to an unexpected systemd behavior on SLES12sp2, i.e., enabling enabled
+		// service would cause an error with exit status 1 and will prevent daemon
+		// from reloading operation after that. In my opinion, any external
+		// modification to unit file should be followed by immediate
+		// daemon-reloading opeartion to notify systemd to update its internal
+		// servive status, and I really wonder why the service library author does
+		// not follow such method, maybe there are some other reasons that I have
+		// not known.
+		if s.Option.bool(optionUserService, optionUserServiceDefault) {
+			err = run("systemctl", "daemon-reload", "--user")
+		} else {
+			err = run("systemctl", "daemon-reload")
+		}
+		if err != nil {
+			return err
+		}
 	}
 
 	if s.Option.bool(optionUserService, optionUserServiceDefault) {
@@ -203,6 +209,37 @@ func (s *systemd) Install() error {
 		err = run("systemctl", "enable", s.Name+".service")
 	}
 	return err
+}
+
+func (s *systemd) Install() error {
+	status, err := s.Status() // check service status before Install
+	if err != nil && !errors.Is(err, ErrNotInstalled) {
+		return fmt.Errorf("cannot check service status: %w", err)
+	}
+	if status == StatusRunning {
+		return fmt.Errorf("service %s is running; stop it before install", s.Name+".service")
+	}
+
+	confPath, err := s.configPath()
+	if err != nil {
+		return err
+	}
+
+	path, err := s.execPath()
+	if err != nil {
+		return err
+	}
+
+	symlinkPath, err := updateSymlinkPath(path)
+	if err != nil {
+		return err
+	}
+	needReload, err := needReload(confPath, s.Option.string(optionSystemdScript, ""))
+	if err != nil {
+		return err
+	}
+
+	return s.InstallAndReload(confPath, symlinkPath, needReload)
 }
 
 func (s *systemd) Uninstall() error {
@@ -280,6 +317,68 @@ func (s *systemd) Stop() error {
 
 func (s *systemd) Restart() error {
 	return run("systemctl", "restart", s.Name+".service")
+}
+
+func updateSymlinkPath(path string) (symlinkPath string, err error) {
+	outerDir := filepath.Dir(filepath.Dir(path))
+	versionDir := filepath.Base(filepath.Dir(path))
+	binaryName := filepath.Base(path)
+	target := filepath.Join(versionDir, binaryName)
+	symlinkPath = filepath.Join(outerDir, binaryName+".symlink")
+	tempLink := filepath.Join(outerDir, fmt.Sprintf(".%s.tmp", binaryName))
+
+	if err := os.Symlink(target, tempLink); err != nil {
+		return "", fmt.Errorf("failed to create temp symlink: %w", err)
+	}
+
+	if err := os.Rename(tempLink, symlinkPath); err != nil {
+		os.Remove(tempLink)
+		return "", fmt.Errorf("failed to rename symlink: %w", err)
+	}
+
+	return symlinkPath, nil
+}
+
+func needReload(confPath, optionSystemdScript string) (bool, error) {
+	_, err := os.Stat(confPath)
+	if os.IsNotExist(err) {
+		return true, nil
+	} else if err != nil {
+		return false, err
+	}
+
+	var currentContent []byte
+	currentContent, err = os.ReadFile(confPath)
+	if err != nil {
+		return false, err
+	}
+
+	return checkVersionDiff(string(currentContent), optionSystemdScript), nil
+}
+
+func checkVersionDiff(currentContent, newContent string) bool {
+	return extractVersionFromContent(currentContent) != extractVersionFromContent(newContent)
+}
+
+func extractVersionFromContent(script string) string {
+	scanner := bufio.NewScanner(strings.NewReader(script))
+	linesRead := 0
+	const maxLines = 5
+
+	for scanner.Scan() && linesRead < maxLines {
+		line := strings.TrimSpace(scanner.Text())
+		linesRead++
+
+		if strings.Contains(line, "[Unit]") || (len(line) >= 2 && line[0] == '[' && line[len(line)-1] == ']') {
+			break
+		}
+
+		if strings.HasPrefix(line, "#Version=") {
+			ret := strings.TrimPrefix(line, "#Version=")
+			return strings.TrimSpace(ret)
+		}
+	}
+	return ""
 }
 
 const systemdScript = `[Unit]

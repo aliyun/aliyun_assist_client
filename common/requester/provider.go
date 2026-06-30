@@ -1,7 +1,9 @@
 package requester
 
 import (
+	"context"
 	"errors"
+	"net"
 
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 )
@@ -16,6 +18,10 @@ type APIServerProvider interface {
 
 type ExtraHTTPHeadersProvider interface {
 	ExtraHTTPHeaders(logger logrus.FieldLogger) (map[string]string, error)
+}
+
+type DialContextFuncProvider interface {
+	DialContextFunc(logger logrus.FieldLogger, baseDialContext func(ctx context.Context, network, address string) (net.Conn, error)) (func(ctx context.Context, network, address string) (net.Conn, error), error)
 }
 
 type CACertificateProvider interface {

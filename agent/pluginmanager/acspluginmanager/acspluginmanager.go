@@ -16,6 +16,7 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
 	. "github.com/aliyun/aliyun_assist_client/agent/pluginmanager"
+	"github.com/aliyun/aliyun_assist_client/agent/pluginmodel"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
 	"github.com/aliyun/aliyun_assist_client/agent/util/process"
@@ -77,7 +78,6 @@ func (pc *pluginConfig) PluginType() string {
 
 type PluginManager struct {
 	Verbose bool
-	Yes     bool
 
 	pluginRoot string
 }
@@ -90,7 +90,6 @@ func NewPluginManager(verbose bool) (*PluginManager, error) {
 
 	return &PluginManager{
 		Verbose: verbose,
-		Yes:     true,
 
 		pluginRoot: pluginRoot,
 	}, nil
@@ -173,7 +172,7 @@ func (pm *PluginManager) ShowPluginStatus() (exitCode int, err error) {
 		return
 	}
 	log.GetLogger().Infof("Count of installed plugins: %d", len(pluginList))
-	statusList := []PluginStatus{}
+	statusList := []pluginmodel.PluginStatus{}
 
 	paramList := []string{"--status"}
 	for _, plugin := range pluginList {
@@ -183,13 +182,13 @@ func (pm *PluginManager) ShowPluginStatus() (exitCode int, err error) {
 			timeout = int(t)
 		}
 		if plugin.PluginType() == PLUGIN_PERSIST {
-			status := PluginStatus{
+			status := pluginmodel.PluginStatus{
 				Name:    plugin.Name,
 				Version: plugin.Version,
-				Status:  PERSIST_FAIL,
+				Status:  pluginmodel.PERSIST_FAIL,
 			}
 			if plugin.IsRemoved {
-				status.Status = REMOVED
+				status.Status = pluginmodel.REMOVED
 			} else {
 				pluginDir := filepath.Join(pm.pluginRoot, plugin.Name, plugin.Version)
 				env := []string{
@@ -198,7 +197,7 @@ func (pm *PluginManager) ShowPluginStatus() (exitCode int, err error) {
 				cmdPath := filepath.Join(pluginDir, plugin.RunPath)
 				code, _, err = pm.executePlugin(cmdPath, paramList, timeout, env, true)
 				if code == 0 && err == nil {
-					status.Status = PERSIST_RUNNING
+					status.Status = pluginmodel.PERSIST_RUNNING
 				}
 				if err != nil {
 					log.GetLogger().Errorf("ShowPluginStatus: executePlugin err, pluginName[%s] pluginVersion[%s]", plugin.Name, plugin.Version)
@@ -308,7 +307,7 @@ func (pm *PluginManager) RemovePlugin(pluginName string) (exitCode int, err erro
 	if pluginInfo.AddSysTag {
 		sysTagType = RemoveSysTag
 	}
-	if err = pm.ReportPluginStatus(pluginInfo.Name, pluginInfo.Version, REMOVED, sysTagType); err != nil {
+	if err = pm.ReportPluginStatus(pluginInfo.Name, pluginInfo.Version, pluginmodel.REMOVED, sysTagType); err != nil {
 		log.GetLogger().Errorf("Plugin[%s] is removed, but report the removed plugin to server error: %s", pluginInfo.Name, err.Error())
 	}
 	// 删除插件目录
@@ -420,21 +419,6 @@ func (pm *PluginManager) executePluginFromFile(packagePath string, fetchTimeoutI
 		envPrePluginDir = filepath.Join(pm.pluginRoot, plugin.Name, plugin.Version)
 		// has installed, check version
 		if versionutil.CompareVersion(config.Version, plugin.Version) <= 0 {
-			if !pm.Yes {
-				yn := ""
-				for {
-					fmt.Printf("[%s %s] has installed, this package version[%s] is not newer, still install ? [y/n]: \n", plugin.Name, plugin.Version, config.Version)
-					fmt.Scanln(&yn)
-					if yn == "y" || yn == "n" {
-						break
-					}
-				}
-				if yn == "n" {
-					log.GetLogger().Infoln("Execute plugin cancel...")
-					fmt.Println("Execute plugin cancel...")
-					return
-				}
-			}
 			fmt.Printf("[%s %s] has installed, this package version[%s] is not newer, still install...\n", plugin.Name, plugin.Version, config.Version)
 		} else {
 			fmt.Printf("[%s %s] has installed, this package version[%s] is newer, keep install...\n", plugin.Name, plugin.Version, config.Version)
@@ -525,7 +509,7 @@ func (pm *PluginManager) executePluginFromFile(packagePath string, fetchTimeoutI
 			"status":        status,
 		}).WithError(err).Infof("CheckAndReportPlugin")
 	} else if pluginType == PLUGIN_ONCE {
-		pm.ReportPluginStatus(pluginName, pluginVersion, ONCE_INSTALLED, "")
+		pm.ReportPluginStatus(pluginName, pluginVersion, pluginmodel.ONCE_INSTALLED, "")
 	}
 	return
 }
@@ -775,7 +759,7 @@ func (pm *PluginManager) executePluginOnlineOrLocal(fetchOptions *ExecFetchOptio
 		} else if len(fetched.EnvPrePluginDir) != 0 {
 			sysTagType = RemoveSysTag
 		}
-		pm.ReportPluginStatus(pluginName, pluginVersion, ONCE_INSTALLED, sysTagType)
+		pm.ReportPluginStatus(pluginName, pluginVersion, pluginmodel.ONCE_INSTALLED, sysTagType)
 	}
 	return
 }
@@ -1205,7 +1189,7 @@ func (pm *PluginManager) ReportPluginStatus(pluginName, pluginVersion, status st
 		pluginVersion = pluginVersion[:PLUGIN_VERSION_MAXLEN]
 	}
 	pluginStatusRequest := PluginStatusResquest{
-		Plugin: []PluginStatus{
+		Plugin: []pluginmodel.PluginStatus{
 			{
 				Name:       pluginName,
 				Version:    pluginVersion,
@@ -1234,15 +1218,15 @@ func (pm *PluginManager) ReportPluginStatus(pluginName, pluginVersion, status st
 // 检查并上报常驻插件状态
 func (pm *PluginManager) CheckAndReportPlugin(pluginName, pluginVersion, cmdPath string, timeout int, env []string, sysTagType string) (status string, err error) {
 	exitCode := 0
-	status = PERSIST_UNKNOWN
+	status = pluginmodel.PERSIST_UNKNOWN
 	exitCode, _, err = pm.executePlugin(cmdPath, []string{"--status"}, timeout, env, true)
 	if err != nil {
 		return
 	}
 	if exitCode != 0 {
-		status = PERSIST_FAIL
+		status = pluginmodel.PERSIST_FAIL
 	} else {
-		status = PERSIST_RUNNING
+		status = pluginmodel.PERSIST_RUNNING
 	}
 	return status, pm.ReportPluginStatus(pluginName, pluginVersion, status, sysTagType)
 }

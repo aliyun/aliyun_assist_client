@@ -2,6 +2,7 @@ package kickvmhandle
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 	"github.com/spf13/pflag"
@@ -143,6 +144,13 @@ func requestCollectNetConf(params []string) error {
 	}
 	exitCode, err := checknet.CollectNetworkConfiguration(logger, *taskId)
 	logger.Infof("exit code %d, err: %v", exitCode, err)
+	var content string
+	if err == nil {
+		content = fmt.Sprintf("exitCode %d, success", exitCode)
+	} else {
+		content = fmt.Sprintf("exitCode %d, ", exitCode) + err.Error()
+	}
+	go checknet.ReportNoNetworkCollectResToSerialPort(content)
 	return nil
 
 }

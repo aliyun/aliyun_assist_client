@@ -212,6 +212,20 @@ func VerifySignature(keyId, data string, signature []byte) (bool, error) {
 	}
 }
 
+func IsAnyKeypairExist() (res bool) {
+	now := time.Now().Unix()
+	keyPairs_.Range(func(k, v interface{}) bool {
+		if privateKey, ok := v.(*rsaKeyPair); ok {
+			if privateKey.ExpiredTimestamp > now {
+				res = true
+				return false
+			}
+		}
+		return true
+	})
+	return
+}
+
 func clearExpiredKey() {
 	ks := getKeys()
 	now := time.Now().Unix()
@@ -232,7 +246,7 @@ func loadKey(keyId string) (*rsaKeyPair, error) {
 			return nil, errors.New("Type convert failed")
 		}
 		now := time.Now().Unix()
-		if privateKey.ExpiredTimestamp < now {
+		if privateKey.ExpiredTimestamp <= now {
 			log.GetLogger().Infof("KeyPair[%s] has expired for %d second, so delete it", privateKey.Id, now-privateKey.ExpiredTimestamp)
 			keyPairs_.Delete(keyId)
 			return nil, ErrKeyIdNotExist

@@ -16,7 +16,6 @@ import (
 	"github.com/aliyun/aliyun_assist_client/thirdparty/single"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 	"github.com/kirinlabs/HttpRequest"
-	"github.com/tidwall/gjson"
 	"k8s.io/klog/v2"
 
 	"github.com/aliyun/aliyun_assist_client/agent/channel"
@@ -29,6 +28,7 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/cryptdata"
 	"github.com/aliyun/aliyun_assist_client/agent/flagging"
 	"github.com/aliyun/aliyun_assist_client/agent/heartbeat"
+	"github.com/aliyun/aliyun_assist_client/agent/httphandler"
 	"github.com/aliyun/aliyun_assist_client/agent/hybrid"
 	"github.com/aliyun/aliyun_assist_client/agent/hybrid/instance"
 	"github.com/aliyun/aliyun_assist_client/agent/install"
@@ -50,6 +50,7 @@ import (
 	commander_server "github.com/aliyun/aliyun_assist_client/interprocess/commander/server"
 	configure_server "github.com/aliyun/aliyun_assist_client/interprocess/configure/server"
 	cryptdata_server "github.com/aliyun/aliyun_assist_client/interprocess/cryptdata/server"
+	"github.com/aliyun/aliyun_assist_client/interprocess/httpserver"
 	"github.com/aliyun/aliyun_assist_client/interprocess/messagebus/buses"
 	messagebus_server "github.com/aliyun/aliyun_assist_client/interprocess/messagebus/server"
 )
@@ -70,10 +71,13 @@ type Options struct {
 	ActivationId   string
 	NetWorkMode    string
 	InstanceName   string
-	RunAsCommon    bool
-	RunAsDaemon    bool
-	LogPath        string
-	IsVerbose      bool
+	MachineId      string
+	ForceReuse     bool
+
+	RunAsCommon bool
+	RunAsDaemon bool
+	LogPath     string
+	IsVerbose   bool
 }
 
 type program struct{}
@@ -96,6 +100,8 @@ const (
 	ActivationIdFlagName   = "ActivationId"
 	NetworkModeFlagName    = "NetworkMode"
 	InstanceNameFlagName   = "InstanceName"
+	MachineIdFlagName      = "MachineId"
+	ForceReuseFlagName     = "ForceReuse"
 
 	LogPathFlagName = "LogPath"
 
@@ -229,6 +235,18 @@ var (
 			AssignedMode: cli.AssignedOnce,
 			Category:     "caller",
 		},
+		{
+			Name:         MachineIdFlagName,
+			Short:        i18n.T(`used in register mode`, `（该参数仅限在注册为云助手托管实例时使用）`),
+			AssignedMode: cli.AssignedOnce,
+			Category:     "caller",
+		},
+		{
+			Name:         ForceReuseFlagName,
+			Short:        i18n.T(`used in register mode`, `（该参数仅限在注册为云助手托管实例时使用）`),
+			AssignedMode: cli.AssignedNone,
+			Category:     "caller",
+		},
 
 		{
 			Name:         RunAsCommonFlagName,
@@ -333,15 +351,11 @@ func (p *program) run() {
 		util.SetHTTPPostErrHandler(func(httpResp *HttpRequest.Response, httpErr error) {
 			if httpResp != nil {
 				content, _ := httpResp.Content()
-				respJson := gjson.Parse(content)
-				errMsg := respJson.Get("errMsg")
-				if errMsg.Exists() && errMsg.String() == "instance_deregistered" {
-					log.GetLogger().Info("Clean up hybrid instance info and stop agent process self, because of errMsg: ", errMsg.String())
-					// Service process will be stopped after hybrid.CleanUpRegisterDataAndExit()
-					hybrid.CleanUpRegisterDataAndExit()
-				}
+				hybrid.OnErrorResponse(httpResp.StatusCode(), content, httpErr)
 			}
 		})
+		channel.RegisterWebsocketDialErrorResponseHook(hybrid.OnErrorResponse)
+		heartbeat.RegisterInstanceDeregisteredHook(hybrid.OnInstanceDeregisteredMessage)
 	}
 
 	// Check in main goroutine and update as soon as possible, which use stricter
@@ -389,7 +403,8 @@ func (p *program) run() {
 	commandermanager.InitCommanderManager("")
 	// Initialize and serve inter-process functionalities in parallel
 	wrapgo.GoWithDefaultPanicHandler(func() {
-		messagebus_server.ListenAndServe(log.GetLogger(), buses.GetCentralEndpoint(true), nil,
+		httpserver.RegisterHTTPHandler("/v1/plugin/rpc", httphandler.PluginRPCHandler)
+		messagebus_server.ListenAndServeHTTP(log.GetLogger(), buses.GetCentralEndpoint(true), httpserver.SetupRouter(), nil,
 			[]messagebus_server.RegisterFunc{
 				cryptdata_server.RegisterAssistAgentServer,
 				commander_server.RegisterAssistAgentServer,
@@ -523,6 +538,8 @@ func parseOptions(ctx *cli.Context) Options {
 	options.ActivationId, _ = ctx.Flags().Get(ActivationIdFlagName).GetValue()
 	options.NetWorkMode, _ = ctx.Flags().Get(NetworkModeFlagName).GetValue()
 	options.InstanceName, _ = ctx.Flags().Get(InstanceNameFlagName).GetValue()
+	options.MachineId, _ = ctx.Flags().Get(MachineIdFlagName).GetValue()
+	options.ForceReuse = ctx.Flags().Get(ForceReuseFlagName).IsAssigned()
 
 	options.LogPath, _ = ctx.Flags().Get(LogPathFlagName).GetValue()
 
@@ -534,7 +551,7 @@ func parseOptions(ctx *cli.Context) Options {
 
 func runRootCommand(ctx *cli.Context, args []string) error {
 	options := parseOptions(ctx)
-	log.InitLog("aliyun_assist_main.log", options.LogPath, false)
+	log.InitLogWithRotationParams("aliyun_assist_main.log", options.LogPath, false)
 	// Redirect logging messages from kubernetes CRI client via klog to logrus
 	// used by ourselves
 	klog.SetLogger(logrusr.New(log.GetLogger()).WithName("klog"))
@@ -565,6 +582,11 @@ func runRootCommand(ctx *cli.Context, args []string) error {
 		return nil
 	}
 	if options.Register {
+		if len(options.MachineId) > hybrid.ExternalMachineIdLengthLimit {
+			fmt.Printf("Invalid machine-id value: exceeds the limit of %d bytes\n", hybrid.ExternalMachineIdLengthLimit)
+			cli.Exit(1)
+		}
+
 		tags := []hybrid.Tag{}
 		for _, tag := range options.Tags {
 			words := strings.Split(tag, "=")
@@ -577,12 +599,17 @@ func runRootCommand(ctx *cli.Context, args []string) error {
 				Value: words[1],
 			})
 		}
-		if !hybrid.Register(options.Region, options.ActivationCode, options.ActivationId, options.InstanceName, options.NetWorkMode, true, tags) {
+
+		flagging.InitConfig(log.GetLogger())
+		if !hybrid.Register(options.Region, options.ActivationCode,
+			options.ActivationId, options.InstanceName, options.NetWorkMode,
+			true, tags, options.MachineId, options.ForceReuse) {
 			cli.Exit(1)
 		}
 		return nil
 	}
 	if options.DeRegister {
+		flagging.InitConfig(log.GetLogger())
 		if !hybrid.UnRegister(true) {
 			cli.Exit(1)
 		}
@@ -652,6 +679,9 @@ func runRootCommand(ctx *cli.Context, args []string) error {
 func initConfiguration(logger logrus.FieldLogger) {
 	flagging.InitConfig(logger)
 	flagging.RegisterCallbackAndApply(logger, map[string]flagging.Callback{
-		flagging.ASSIST_DAEMON_ACTIVE: daemon.OperateAssistDaemon,
+		flagging.ASSIST_DAEMON_ACTIVE:          daemon.OperateAssistDaemon,
+		flagging.RESOURCE_LOG_FILE_COUNT_LIMIT: log.UpdateLogFileCountLimit,
+		flagging.RESOURCE_LOG_SIZE_LIMIT:       log.UpdateLogSizeLimit,
+		flagging.TASK_PROTOCOL:                 channel.SwitchChannelWhenConfigReceived,
 	})
 }

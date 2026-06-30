@@ -10,6 +10,8 @@ import (
 	"encoding/pem"
 	"io"
 	"strconv"
+	"sync"
+	"time"
 
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 	"github.com/google/uuid"
@@ -30,10 +32,18 @@ const (
 
 type HybridModeProvider struct{}
 
-type HybridModeHTTPHeadersProvider struct {}
+type HybridModeHTTPHeadersProvider struct{}
 
 var (
 	hybridModeHTTPHeadersProvider = HybridModeHTTPHeadersProvider{}
+)
+
+var (
+	clientIPMu        sync.RWMutex
+	clientIPCache     string
+	clientIPExpiresAt time.Time
+	clientIPTTL       = 30 * time.Second
+	clientIPDuration  = 3 * time.Second
 )
 
 func (*HybridModeProvider) Name() string {
@@ -102,12 +112,50 @@ func (*HybridModeHTTPHeadersProvider) ExtraHTTPHeaders(logger logrus.FieldLogger
 		"x-acs-signature":   output,
 	}
 
-	internal_ip, err := osutil.ExternalIP()
+	internal_ip, err := getClientIPWithTTL(logger, time.Now())
 	if err == nil {
-		extraHeaders["X-Client-IP"] = internal_ip.String()
+		extraHeaders["X-Client-IP"] = internal_ip
 	}
 
 	return extraHeaders, nil
+}
+
+func getClientIPWithTTL(logger logrus.FieldLogger, now time.Time) (string, error) {
+	ipCache := func() string {
+		clientIPMu.RLock()
+		defer clientIPMu.RUnlock()
+
+		if now.Before(clientIPExpiresAt) && clientIPCache != "" {
+			return clientIPCache
+		}
+		return ""
+	}()
+	if ipCache != "" {
+		return ipCache, nil
+	}
+
+	clientIPMu.Lock()
+	defer clientIPMu.Unlock()
+
+	if now.Before(clientIPExpiresAt) && clientIPCache != "" {
+		return clientIPCache, nil
+	}
+
+	ip, err := osutil.ExternalIP()
+	if err != nil {
+		logger.Errorln("getClientIPWithTTL err: ", err)
+		return "", err
+	}
+	actualNow := time.Now()
+	duration := actualNow.Sub(now)
+	if actualNow.Sub(now) > clientIPDuration {
+		logger.WithField("duration", duration).Warn("ExternalIP slow")
+	}
+	clientIPCache = ip.String()
+	clientIPExpiresAt = actualNow.Add(clientIPTTL)
+	logger.WithFields(logrus.Fields{"ip": clientIPCache}).Infoln("getClientIPWithTTL.")
+
+	return clientIPCache, nil
 }
 
 func getNetworkTypeInHybrid() string {

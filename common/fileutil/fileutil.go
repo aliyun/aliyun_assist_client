@@ -4,11 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
-
 )
 
 func CheckFileIsExist(filename string) bool {
@@ -19,9 +17,21 @@ func CheckFileIsExist(filename string) bool {
 	return exist
 }
 
+func CheckDirectoryIsExist(dirname string) bool {
+	var exist = true
+	if fi, err := os.Stat(dirname); os.IsNotExist(err) {
+		exist = false
+	} else {
+		if !fi.IsDir() {
+			exist = false
+		}
+	}
+	return exist
+}
+
 func WriteStringToFile(path string, content string) error {
 	var d1 = []byte(content)
-	err := ioutil.WriteFile(path, d1, 0666) //写入文件(字节数组)
+	err := os.WriteFile(path, d1, 0666) //写入文件(字节数组)
 	return err
 }
 
@@ -81,5 +91,26 @@ func copyFile(src, dest string) (err error) {
 	}
 	defer dstFile.Close()
 	_, err = io.Copy(dstFile, srcFile)
+	return err
+}
+
+func WriteAndSyncFile(name string, data []byte, perm os.FileMode) error {
+	f, err := os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
+	if err != nil {
+		return err
+	}
+
+	_, err = f.Write(data)
+
+	// Sync file from memory to disk, and override error indication only when
+	// there was no error before
+	if err1 := f.Sync(); err1 != nil && err == nil {
+		err = err1
+	}
+
+	// Close file, and override error indication only when there was no error
+	if err2 := f.Close(); err2 != nil && err == nil {
+		err = err2
+	}
 	return err
 }

@@ -2,7 +2,7 @@ package port
 
 import (
 	"context"
-	"errors"
+	// "errors"
 	"fmt"
 	"net"
 	"strconv"
@@ -11,18 +11,11 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/session/channel"
 	"github.com/aliyun/aliyun_assist_client/agent/session/message"
-	"github.com/aliyun/aliyun_assist_client/agent/session/shell"
+	"github.com/aliyun/aliyun_assist_client/agent/session/sessionresult"
+
+	// "github.com/aliyun/aliyun_assist_client/agent/session/shell"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
-	"go.uber.org/atomic"
-)
-
-const (
-	Ok               = "Ok"
-	Open_port_failed = "Open_port_failed"
-	Read_port_failed = "Read_port_failed"
-	IO_socket_error  = "IO_port_failed"
-	Unknown_error    = "Unknown_error"
 )
 
 const (
@@ -41,9 +34,6 @@ type PortPlugin struct {
 	conn         net.Conn
 	connReady    chan struct{}
 	sendInterval int
-
-	needReconnect atomic.Bool
-	reconnectSign chan struct{}
 
 	exitCtx  context.Context
 	exitFunc context.CancelCauseFunc
@@ -66,7 +56,6 @@ func NewPortPlugin(id string, targetHost string, portNumber int, flowLimit int) 
 		}),
 	}
 	plugin.connReady = make(chan struct{})
-	plugin.reconnectSign = make(chan struct{})
 	if flowLimit > 0 {
 		plugin.sendInterval = 1000 / (flowLimit / 8 / sendPackageSize)
 	} else {
@@ -84,11 +73,11 @@ func (p *PortPlugin) Stop() {
 	p.logger.WithError(err).Info("Close local connection")
 }
 
-func (p *PortPlugin) Execute(dataChannel channel.ISessionChannel, cancelFlag util.CancelFlag) (errorCode string, pluginErr error) {
+func (p *PortPlugin) Execute(dataChannel channel.ISessionChannel, cancelFlag util.CancelFlag) (sessionRes *sessionresult.SessionResult) {
 	p.dataChannel = dataChannel
-	// p.exitCtx and p.exitFunc are initialized in Execute() instead of NewPortPlugin() to ensure 
-	// that p.exitCtx can be released eventually. 
-	// Although InputStreamMessageHandler() may be called before Execute(), it will wait until 
+	// p.exitCtx and p.exitFunc are initialized in Execute() instead of NewPortPlugin() to ensure
+	// that p.exitCtx can be released eventually.
+	// Although InputStreamMessageHandler() may be called before Execute(), it will wait until
 	// p.conn is successfully created before starting to process data (possibly calling p.exitFunc),
 	// so p.exitFunc will not be called before it be initialized.
 	p.exitCtx, p.exitFunc = context.WithCancelCause(context.Background())
@@ -98,23 +87,16 @@ func (p *PortPlugin) Execute(dataChannel channel.ISessionChannel, cancelFlag uti
 		p.Stop()
 
 		if err := recover(); err != nil {
-			p.logger.Errorf("Error occurred while executing port plugin %s: \n%v", p.id, err)
-			// Panic in session port plugin SHOULD NOT disturb the whole agent
-			// process
-			errorCode = Unknown_error
-			if v, ok := err.(error); ok {
-				pluginErr = v
-			} else {
-				pluginErr = fmt.Errorf(fmt.Sprint(err))
-			}
+			p.logger.Errorf("Error occurred while executing plugin %s: \n%v", p.id, err)
+			sessionRes = sessionresult.NewUnknownError(err)
 		}
 	}()
 	targetHostPort := net.JoinHostPort(p.targetHost, strconv.Itoa(p.portNumber))
 	p.logger.Infoln("start port, dial tcp connection to ", targetHostPort)
-	if p.conn, pluginErr = net.DialTimeout("tcp", targetHostPort, time.Second*waitLocalConnTimeoutSecond); pluginErr != nil {
-		errorString := fmt.Sprintf("Unable to start port: %s", pluginErr)
-		p.logger.Errorln(errorString)
-		errorCode = Open_port_failed
+	var err error
+	if p.conn, err = net.DialTimeout("tcp", targetHostPort, time.Second*waitLocalConnTimeoutSecond); err != nil {
+		sessionRes = sessionresult.NewOpenTargetPortFailedError(targetHostPort, err)
+		p.logger.Errorln(sessionRes)
 		return
 	}
 	close(p.connReady)
@@ -124,12 +106,15 @@ func (p *PortPlugin) Execute(dataChannel channel.ISessionChannel, cancelFlag uti
 		select {
 		case <-cancelFlag.C():
 			cancelState := cancelFlag.State()
-			if cancelState == util.Canceled {
-				p.exitFunc(errors.New(shell.Timeout))
+			p.logger.Info("Cancel flag set to %v in session", cancelState)
+			if cancelState == util.ErrerOccurred {
+				_, err := cancelFlag.IsErrorOccurred()
+				p.logger.WithError(err).Error("An error occurred in session")
+				p.exitFunc(err)
 			} else {
-				p.exitFunc(errors.New(shell.Notified))
+				p.logger.Info("Session is notified to be ended")
+				p.exitFunc(sessionresult.NewNotified())
 			}
-			p.logger.Debugf("Cancel flag set to %v in session", cancelState)
 		case <-p.exitCtx.Done():
 			cancelFlag.Set(util.ShutDown)
 		}
@@ -141,8 +126,12 @@ func (p *PortPlugin) Execute(dataChannel channel.ISessionChannel, cancelFlag uti
 	p.logger.Infof("Plugin %s started", p.id)
 
 	<-p.exitCtx.Done()
-	errorCode = context.Cause(p.exitCtx).Error()
-	p.logger.Infoln("Plugin  done", p.id, errorCode)
+	contextErr := context.Cause(p.exitCtx)
+	var ok bool
+	if sessionRes, ok = contextErr.(*sessionresult.SessionResult); !ok {
+		sessionRes = sessionresult.NewUnknownError(contextErr)
+	}
+	p.logger.Infoln("Plugin  done", p.id, sessionRes)
 
 	return
 }
@@ -163,29 +152,20 @@ func (p *PortPlugin) writePump() {
 		case <-p.exitCtx.Done():
 			return
 		default:
-			if p.dataChannel.IsActive() == true {
-				numBytes, err := p.conn.Read(packet)
-				if err != nil {
-					if connected := p.onError(err); connected {
-						p.logger.Infoln("Reconnection to port is successful, resume reading from port.")
-						continue
-					}
-					p.logger.Infof("Unable to read port: %v", err)
-					return
-				}
+			numBytes, err := p.conn.Read(packet)
+			if err != nil {
+				p.logger.Infof("Unable to read port: %v", err)
+				p.exitFunc(sessionresult.NewReadFromTargetPortFailedError(p.conn.RemoteAddr().String(), err))
+				return
+			}
 
-				if util.IsVerboseMode() {
-					p.logger.Infoln("read data:", string(packet[:numBytes]))
-				}
+			if util.IsVerboseMode() {
+				p.logger.Infoln("read data:", string(packet[:numBytes]))
+			}
 
-				if err = p.dataChannel.SendStreamDataMessage(packet[:numBytes]); err != nil {
-					p.logger.Errorf("Unable to send stream data message: %v", err)
-					p.exitFunc(errors.New(IO_socket_error))
-					return
-				}
-			} else {
-				p.logger.Infoln("PortPlugin:writePump stream is closed")
-				p.exitFunc(errors.New(IO_socket_error))
+			if err = p.dataChannel.SendStreamDataMessage(packet[:numBytes]); err != nil {
+				p.logger.Errorf("Unable to send stream data message: %v", err)
+				p.exitFunc(sessionresult.NewSendingDataFailedError(err))
 				return
 			}
 
@@ -193,26 +173,6 @@ func (p *PortPlugin) writePump() {
 			time.Sleep(time.Duration(p.sendInterval) * time.Millisecond)
 		}
 	}
-}
-
-func (p *PortPlugin) onError(theErr error) (reconnected bool) {
-	p.logger.Infoln("Encountered reconnect while reading from port: ", theErr)
-	select {
-	case <-p.exitCtx.Done():
-		reconnected = false
-		return
-	default:
-	}
-	p.Stop()
-	p.needReconnect.Store(true)
-	p.logger.Debugf("Waiting for reconnection to port!!")
-	select {
-	case <-p.reconnectSign:
-		reconnected = true
-	case <-p.exitCtx.Done():
-		reconnected = false
-	}
-	return
 }
 
 func (p *PortPlugin) InputStreamMessageHandler(streamDataMessage message.Message) error {
@@ -230,21 +190,6 @@ func (p *PortPlugin) InputStreamMessageHandler(streamDataMessage message.Message
 
 	switch streamDataMessage.MessageType {
 	case message.InputStreamDataMessage:
-		// Reconnect only when receive data message
-		if p.needReconnect.CompareAndSwap(true, false) {
-			targetHostPort := net.JoinHostPort(p.targetHost, strconv.Itoa(p.portNumber))
-			p.logger.Infof("InputStreamMessageHandler:Reconnect to %s", targetHostPort)
-			var err error
-			p.conn, err = net.Dial("tcp", targetHostPort)
-			if err != nil {
-				p.logger.WithError(err).Error("Reconnect failed")
-				p.exitFunc(errors.New(Read_port_failed))
-				return err
-			} else {
-				p.logger.Info("Reconnect succeed")
-				p.reconnectSign <- struct{}{}
-			}
-		}
 		if _, err := p.conn.Write(streamDataMessage.Payload); err != nil {
 			p.logger.Errorf("Unable to write to port, err: %v.", err)
 			return err
@@ -272,7 +217,7 @@ func (p *PortPlugin) InputStreamMessageHandler(streamDataMessage message.Message
 					p.logger.Infof("Set send speed, channelId[%s] speed[%d]bps sendInterval[%d]ms\n", p.id, speed, p.sendInterval)
 				case 5:
 					p.logger.Info("Exit due to receiving a packet with a close status")
-					p.exitFunc(errors.New(Ok))
+					p.exitFunc(sessionresult.NewOk("a close status packet was received."))
 				}
 			} else {
 				p.logger.Errorf("Parse status code err: %s", err)
@@ -280,7 +225,7 @@ func (p *PortPlugin) InputStreamMessageHandler(streamDataMessage message.Message
 		}
 	case message.CloseDataChannel:
 		p.logger.Info("Exit due to receiving CloseDataChannel packet")
-		p.exitFunc(errors.New(Ok))
+		p.exitFunc(sessionresult.NewOk("a CloseDataChannel packet was received."))
 	}
 	return nil
 }

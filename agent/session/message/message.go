@@ -16,6 +16,7 @@ const (
 	SetSizeDataMessage      = 2 //string = "set_size"
 	CloseDataChannel        = 3
 	StatusDataMessage       = 5
+	KeyExchangeMessage      = 7
 )
 
 const (

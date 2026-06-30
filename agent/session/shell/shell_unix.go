@@ -4,7 +4,7 @@
 package shell
 
 import (
-	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -14,29 +14,15 @@ import (
 	"github.com/creack/pty"
 	"github.com/google/shlex"
 
-	"github.com/aliyun/aliyun_assist_client/agent/session/channel"
+	sessionresult "github.com/aliyun/aliyun_assist_client/agent/session/sessionresult"
 	"github.com/aliyun/aliyun_assist_client/agent/util/process"
 	"github.com/aliyun/aliyun_assist_client/common/executil"
-	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
+	"github.com/aliyun/aliyun_assist_client/common/fileutil"
 )
 
 type ShellPlugin struct {
-	id           string
-	stdin        *os.File
-	stdout       *os.File
-	cmdContent   string
-	username     string
-	passwordName string
-	dataChannel  channel.ISessionChannel
-	cmd          *exec.Cmd
-	first_ws_col uint32
-	first_ws_row uint32
-	sendInterval int
-
-	exitCtx  context.Context
-	exitFunc context.CancelCauseFunc
-
-	logger logrus.FieldLogger
+	ShellPluginBase
+	cmd *exec.Cmd
 }
 
 const (
@@ -47,13 +33,13 @@ const (
 	default_runas_user = "ecs-assist-user"
 )
 
-func StartPty(plugin *ShellPlugin) (err error) {
+func StartPty(plugin *ShellPlugin) *sessionresult.SessionResult {
 	if plugin.cmdContent == "" {
 		plugin.cmd = executil.Command(shellCommand)
 	} else {
 		cmdArgs, err := shlex.Split(plugin.cmdContent)
 		if err != nil {
-			return fmt.Errorf("split command content failed: %v", err)
+			return sessionresult.NewMalformedCommandLineError(plugin.cmdContent, err)
 		}
 		plugin.cmd = executil.Command(cmdArgs[0], cmdArgs[1:]...)
 	}
@@ -73,13 +59,13 @@ func StartPty(plugin *ShellPlugin) (err error) {
 		default_user = plugin.username
 		if userExists, _ := process.DoesUserExist(plugin.username); !userExists {
 			// if user does not exist, fail the session
-			return fmt.Errorf("failed to start pty since RunAs user %s does not exist", plugin.username)
+			return sessionresult.NewUserNotExistsError(plugin.username)
 		}
 	}
 
 	uid, gid, groups, err := process.GetUserCredentials(default_user)
 	if err != nil {
-		return err
+		return sessionresult.NewObtainUserIdentityFailedError(default_user, err)
 	}
 	plugin.cmd.SysProcAttr = &syscall.SysProcAttr{}
 	plugin.cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uid, Gid: gid, Groups: groups, NoSetGroups: false}
@@ -87,17 +73,31 @@ func StartPty(plugin *ShellPlugin) (err error) {
 	// Setting home environment variable for RunAs user
 	userInfo, err := user.Lookup(default_user)
 	if err != nil {
-		return err
+		return sessionresult.NewObtainUserInfoFailedError(default_user, err)
 	}
 	plugin.logger.Infof("Home directory of user `%s`: %s", default_user, userInfo.HomeDir)
 	runAsUserHomeEnvVariable := fmt.Sprintf("HOME=%s", userInfo.HomeDir)
 	plugin.cmd.Env = append(plugin.cmd.Env, runAsUserHomeEnvVariable)
 	plugin.cmd.Dir = userInfo.HomeDir
 
+	// 检查homedir
+	if !fileutil.CheckFileIsExist(userInfo.HomeDir) {
+		return sessionresult.NewHomeDirNotFoundError(userInfo.HomeDir)
+	}
+	if err := checkHomeDirPerm(userInfo.HomeDir, uid); err != nil {
+		return err
+	}
+
+	if plugin.cmdContent == "" {
+		if err := checkShellCmd(shellCommand); err != nil {
+			return err
+		}
+	}
+
 	ptyFile, err := pty.Start(plugin.cmd)
 	if err != nil {
 		plugin.logger.Errorf("Failed to start pty: %s\n", err)
-		return fmt.Errorf("Failed to start pty: %s\n", err)
+		return sessionresult.NewOpenPtyFailedError(err)
 	}
 	plugin.stdin = ptyFile
 	plugin.stdout = ptyFile
@@ -131,13 +131,14 @@ func (p *ShellPlugin) stop() (err error) {
 	}
 	if err := p.stdin.Close(); err != nil {
 		if err, ok := err.(*os.PathError); ok && err.Err != os.ErrClosed {
-			return fmt.Errorf("unable to close ptyFile. %s", err)
+			return err
 		}
 	}
 	return nil
 }
 
 func (p *ShellPlugin) SetSize(ws_col, ws_row uint32) (err error) {
+	// pty未创建时，先缓存窗口大小
 	if p.stdin == nil {
 		p.first_ws_col = ws_col
 		p.first_ws_row = ws_row
@@ -151,7 +152,7 @@ func (p *ShellPlugin) SetSize(ws_col, ws_row uint32) (err error) {
 
 	if err := pty.Setsize(p.stdin, &winSize); err != nil {
 		p.logger.Errorf("set pty size failed: %s", err)
-		return fmt.Errorf("set pty size failed: %s", err)
+		return err
 	}
 	return nil
 }
@@ -160,6 +161,43 @@ func (p *ShellPlugin) onInputStreamData(payload []byte) error {
 	if _, err := p.stdin.Write(payload); err != nil {
 		p.logger.Errorf("Unable to write to stdin, err: %v.", err)
 		return err
+	}
+	return nil
+}
+
+func checkHomeDirPerm(path string, expectUid uint32) *sessionresult.SessionResult {
+	fileInfo, err := os.Stat(path)
+	if err != nil {
+		return sessionresult.NewObtainHomeDirPermissionError(path, err)
+	}
+	if stat, ok := fileInfo.Sys().(*syscall.Stat_t); ok {
+		if stat.Uid != expectUid {
+			return sessionresult.NewHomeDirBelongIncorrectUserError(path, stat.Uid)
+		}
+	}
+	mode := fileInfo.Mode()
+	if mode.Perm()&0400 == 0 {
+		return sessionresult.NewHomeDirPermissionUnReadableError(path, fmt.Sprintf("%o", mode.Perm()))
+	}
+	if mode.Perm()&0100 == 0 {
+		return sessionresult.NewHomeDirPermissionUnExecutableError(path, fmt.Sprintf("%o", mode.Perm()))
+	}
+	return nil
+}
+
+func checkShellCmd(path string) *sessionresult.SessionResult {
+	absPath, err := exec.LookPath(path)
+	if err != nil && !errors.Is(err, exec.ErrDot) {
+		return sessionresult.NewShellCommandNotFoundError(path, err)
+	}
+
+	fileInfo, err := os.Stat(absPath)
+	if err != nil {
+		return sessionresult.NewObtainShellCommandPermissionError(absPath, err)
+	}
+
+	if fileInfo.Mode().Perm()&0100 == 0 {
+		return sessionresult.NewShellCommandPermissionDeniedError(absPath, fmt.Sprintf("%o", fileInfo.Mode().Perm()))
 	}
 	return nil
 }

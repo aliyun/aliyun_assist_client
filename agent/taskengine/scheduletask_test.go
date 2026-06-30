@@ -46,6 +46,7 @@ func mockMetrics() {
 
 func TestFetch(t *testing.T) {
 	mockMetrics()
+	flagging.InitConfig(logrus.New())
 	defer requester.NilTransport.Clear()
 	defer httpmock.DeactivateAndReset()
 	type args struct {
@@ -172,7 +173,7 @@ func Test_dispatchRunTask(t *testing.T) {
 			name: "taskHasExist",
 			args: args{
 				taskInfo: models.RunTaskInfo{
-					TaskId: "abc",
+					TaskId: "abc-1",
 				},
 			},
 		},
@@ -180,7 +181,7 @@ func Test_dispatchRunTask(t *testing.T) {
 			name: "taskRepeatOnce",
 			args: args{
 				taskInfo: models.RunTaskInfo{
-					TaskId: "abc",
+					TaskId: "abc-2",
 					Repeat: models.RunTaskOnce,
 				},
 			},
@@ -189,7 +190,7 @@ func Test_dispatchRunTask(t *testing.T) {
 			name: "taskPeriod",
 			args: args{
 				taskInfo: models.RunTaskInfo{
-					TaskId: "abc",
+					TaskId: "abc-3",
 					Repeat: models.RunTaskCron,
 				},
 			},
@@ -198,7 +199,7 @@ func Test_dispatchRunTask(t *testing.T) {
 			name: "taskUnknown",
 			args: args{
 				taskInfo: models.RunTaskInfo{
-					TaskId: "abc",
+					TaskId: "abc-4",
 					Repeat: models.RunTaskRepeatType("unknown"),
 				},
 			},
@@ -250,7 +251,7 @@ func Test_dispatchStopTask(t *testing.T) {
 			name: "taskHasExist",
 			args: args{
 				taskInfo: models.RunTaskInfo{
-					TaskId: "abc",
+					TaskId: "abc-5",
 					Repeat: models.RunTaskOnce,
 				},
 			},
@@ -259,7 +260,7 @@ func Test_dispatchStopTask(t *testing.T) {
 			name: "taskRepeatOnce",
 			args: args{
 				taskInfo: models.RunTaskInfo{
-					TaskId: "abc",
+					TaskId: "abc-6",
 					Repeat: models.RunTaskOnce,
 				},
 			},
@@ -268,7 +269,7 @@ func Test_dispatchStopTask(t *testing.T) {
 			name: "taskPeriod",
 			args: args{
 				taskInfo: models.RunTaskInfo{
-					TaskId: "abc",
+					TaskId: "abc-7",
 					Repeat: models.RunTaskCron,
 				},
 			},
@@ -277,7 +278,7 @@ func Test_dispatchStopTask(t *testing.T) {
 			name: "taskUnknown",
 			args: args{
 				taskInfo: models.RunTaskInfo{
-					TaskId: "abc",
+					TaskId: "abc-8",
 					Repeat: models.RunTaskRepeatType("unknown"),
 				},
 			},
@@ -323,7 +324,7 @@ func Test_dispatchTestTask(t *testing.T) {
 		name: "taskHasExist",
 		args: args{
 			taskInfo: models.RunTaskInfo{
-				TaskId: "abc",
+				TaskId: "abc-9",
 				Repeat: models.RunTaskOnce,
 			},
 		},
@@ -332,7 +333,7 @@ func Test_dispatchTestTask(t *testing.T) {
 			name: "taskRepeatOnce",
 			args: args{
 				taskInfo: models.RunTaskInfo{
-					TaskId: "abc",
+					TaskId: "abc-10",
 					Repeat: models.RunTaskOnce,
 				},
 			},
@@ -341,7 +342,7 @@ func Test_dispatchTestTask(t *testing.T) {
 			name: "taskUnknown",
 			args: args{
 				taskInfo: models.RunTaskInfo{
-					TaskId: "abc",
+					TaskId: "abc-11",
 					Repeat: models.RunTaskRepeatType("unknown"),
 				},
 			},
@@ -385,7 +386,7 @@ func TestPeriodicTaskSchedule_startExclusiveInvocation(t *testing.T) {
 				timer: nil,
 				reusableInvocation: &Task{
 					taskInfo: models.RunTaskInfo{
-						TaskId:        "abc",
+						TaskId:        "abc-12",
 						InvokeVersion: 1,
 					},
 				},
@@ -397,7 +398,7 @@ func TestPeriodicTaskSchedule_startExclusiveInvocation(t *testing.T) {
 				timer: nil,
 				reusableInvocation: &Task{
 					taskInfo: models.RunTaskInfo{
-						TaskId:        "abc",
+						TaskId:        "abc-13",
 						InvokeVersion: 1,
 					},
 				},
@@ -421,9 +422,10 @@ func TestPeriodicTaskSchedule_startExclusiveInvocation(t *testing.T) {
 				})
 				defer guard.Reset()
 			}
+			task, _ := NewTask(tt.fields.reusableInvocation.taskInfo, nil, nil, onTaskReportError)
 			s := &PeriodicTaskSchedule{
 				timer:              tt.fields.timer,
-				reusableInvocation: tt.fields.reusableInvocation,
+				reusableInvocation: task,
 			}
 			s.startExclusiveInvocation()
 		})
@@ -452,7 +454,7 @@ func Test_schedulePeriodicTask(t *testing.T) {
 				taskInfo: models.RunTaskInfo{
 					InstanceId:    "fake-instance-id",
 					CommandType:   "RunShellScript",
-					TaskId:        "abc",
+					TaskId:        "abc-14",
 					CommandId:     "fake-command-id",
 					TimeOut:       "60",
 					InvokeVersion: 1,
@@ -464,7 +466,7 @@ func Test_schedulePeriodicTask(t *testing.T) {
 			name: "normal",
 			args: args{
 				taskInfo: models.RunTaskInfo{
-					TaskId:        "abc",
+					TaskId:        "abc-15",
 					Cronat:        "0 0 0 1 1 1",
 					InvokeVersion: 1,
 				},
@@ -545,7 +547,7 @@ func Test_cancelPeriodicTask(t *testing.T) {
 			name: "cancleTask",
 			args: args{
 				taskInfo: models.RunTaskInfo{
-					TaskId: "abc",
+					TaskId: "abc-16",
 				},
 			},
 			wantErr: false,
@@ -554,7 +556,7 @@ func Test_cancelPeriodicTask(t *testing.T) {
 			name: "noNeedCancelTask",
 			args: args{
 				taskInfo: models.RunTaskInfo{
-					TaskId: "abc",
+					TaskId: "abc-17",
 				},
 			},
 			wantErr: false,

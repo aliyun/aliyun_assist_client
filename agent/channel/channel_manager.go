@@ -19,12 +19,13 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine"
 	"github.com/aliyun/aliyun_assist_client/agent/update"
 	"github.com/aliyun/aliyun_assist_client/agent/util/powerutil"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 )
 
 var _gshellChannel IChannel = nil
 var _websocketChannel *WebSocketChannel = nil
 
-//manage all channels
+// manage all channels
 type ChannelMgr struct {
 	ActiveChannel   IChannel   //current used channel
 	AllChannel      []IChannel //the first one is GshellChannel
@@ -33,7 +34,7 @@ type ChannelMgr struct {
 	ChannelSetLock  sync.Mutex
 }
 
-//new
+// new
 var G_ChannelMgr *ChannelMgr = &ChannelMgr{
 	StopChanelEvent: make(chan struct{}),
 }
@@ -82,21 +83,8 @@ func (m *ChannelMgr) SelectAvailableChannel(currentChannel int) error {
 
 func (m *ChannelMgr) Init(CallBack OnReceiveMsg) error {
 	m.WaitCheckDone.Add(1)
-	go func() {
-		defer m.WaitCheckDone.Done()
-		tick := time.NewTicker(time.Duration(1800) * time.Second)
-		defer tick.Stop()
-		for {
-			select {
-			case <-m.StopChanelEvent:
-				return
-			case <-tick.C:
-				if m.checkChannelWorker() == false {
-					m.SelectAvailableChannelAndReport(ChannelNone, "switch_channel_in_timer", false)
-				}
-			}
-		}
-	}()
+	go m.periodicCheckAndSelect()
+
 	m.ChannelSetLock.Lock()
 	defer m.ChannelSetLock.Unlock()
 	_websocketChannel = NewWebsocketChannel(CallBack)
@@ -114,10 +102,59 @@ func (m *ChannelMgr) Init(CallBack OnReceiveMsg) error {
 	return errors.New("No available channel")
 }
 
-// SelectAvailableChannelAndReport will call SelectAvailableChannel and report 
+// periodicCheckAndSelect will periodically check the availability of channels
+// and select the available one. Inside it would check quickly in a shorter
+// interval and fully in a longer interval.
+//
+// Pre-condition: m.AllChannel is the [2]IChannel slice, in which
+// m.AllChannel[0] is the _gshellChannel and m.AllChannel[1] is the
+// _websocketChannel.
+//
+// To accomplish such pre-condition:
+//  1. TryStartGshellChannel() MUST be called at the very first, to initialize
+//     the _gshellChannel variable.
+//  2. StartChannelMgr() calling (*ChannelMgr).Init() MUST be called then to
+//     initialize the _websocketChannel variable, as well as the
+//     m.AllChannel[2] slice.
+func (m *ChannelMgr) periodicCheckAndSelect() {
+	const (
+		quickCheckInterval  time.Duration = 5 * time.Minute
+		quickCheckTelemetry string        = "retry_websocket_every_5min"
+
+		fullCheckTriggerThreshold int = 6
+	)
+
+	defer m.WaitCheckDone.Done()
+	tick := time.NewTicker(quickCheckInterval)
+	defer tick.Stop()
+	for counter := 0; ; {
+		select {
+		case <-m.StopChanelEvent:
+			return
+		case <-tick.C:
+			counter++
+			if counter < fullCheckTriggerThreshold {
+				if !m.AllChannel[0].IsWorking() && !m.AllChannel[1].IsWorking() {
+					// Here the ChannelGshellType pretends to be the current
+					// available channel, so checking and opening the gshell
+					// channel is skipped and only WebSocket channel deserves
+					// retrying.
+					m.SelectAvailableChannelAndReport(ChannelGshellType, quickCheckTelemetry, false)
+				}
+			} else {
+				if m.checkChannelWorker() == false {
+					m.SelectAvailableChannelAndReport(ChannelNone, "switch_channel_in_timer", false)
+				}
+			}
+			counter = counter % 6
+		}
+	}
+}
+
+// SelectAvailableChannelAndReport will call SelectAvailableChannel and report
 // the result, but the failure will not be reported if ignoreFailed is true.
 func (m *ChannelMgr) SelectAvailableChannelAndReport(currentChannel int, reason string, ignoreFailed bool) error {
-	err := m.SelectAvailableChannel(ChannelNone)
+	err := m.SelectAvailableChannel(currentChannel)
 	if err == nil || !ignoreFailed {
 		var report clientreport.ClientReport
 		if err == nil {
@@ -223,7 +260,7 @@ type GshellCmdReply struct {
 		CmdOutput string `json:"cmd_output"`
 		// netcheck field would not presented when no diagnostic result available
 		Netcheck *NetcheckReply `json:"netcheck,omitempty"`
-		Result    int    `json:"result"`
+		Result   int            `json:"result"`
 	} `json:"return"`
 }
 
@@ -252,7 +289,8 @@ func OnRecvMsg(Msg string, ChannelType int) string {
 		}
 		if Msg == "kick_vm" {
 			go func() {
-				taskengine.Fetch(true, "", taskengine.NormalTaskType)			}()
+				taskengine.Fetch(true, "", taskengine.NormalTaskType)
+			}()
 			return "accept:" + Msg
 		} else if strings.Contains(Msg, "kick_vm agent deregister") {
 			hybrid.UnRegister(true)
@@ -306,7 +344,8 @@ func OnRecvMsg(Msg string, ChannelType int) string {
 		}
 		if gshellCmd.Arguments.Cmd == "kick_vm" {
 			go func() {
-				taskengine.Fetch(true, "", taskengine.NormalTaskType)			}()
+				taskengine.Fetch(true, "", taskengine.NormalTaskType)
+			}()
 			gshellCmdReply := GshellCmdReply{}
 			gshellCmdReply.Return.Result = 8
 			gshellCmdReply.Return.CmdOutput = "execute kick_vm success"
@@ -366,4 +405,30 @@ func OnRecvMsg(Msg string, ChannelType int) string {
 func OnNetworkRecover() {
 	_websocketChannel.ResetFailedCount()
 	G_ChannelMgr.SelectAvailableChannelAndReport(ChannelNone, "select_available_chan_when_net_recover", false)
+}
+
+func SwitchChannelWhenConfigReceived(logger logrus.FieldLogger, v any) {
+	protocol, ok := v.(string)
+	if !ok {
+		logger.Warnf("SwitchChannelWhenConfigReceived failed with invalid value: %v", v)
+		return
+	}
+	var err error
+	logger.Warnln("SwitchChannelWhenConfigReceived, protocol set to: ", protocol)
+	var channelType int
+	switch protocol {
+	case ChannelTypeStr(ChannelWebsocketType):
+		channelType = ChannelGshellType //current type
+	case ChannelTypeStr(ChannelGshellType):
+		channelType = ChannelWebsocketType //current type
+	default:
+		return
+	}
+	logger.Warnln("SwitchChannelWhenConfigReceived, channelType set to: ", channelType)
+	err = G_ChannelMgr.SelectAvailableChannelAndReport(channelType, "switch_channel_in_"+protocol+"_when_set_protocol", false)
+	if err != nil {
+		logger.WithError(err).Errorln("SwitchChannelWhenConfigReceived failed: ", channelType)
+	} else {
+		logger.Infoln("SwitchChannelWhenConfigReceived, success: ", channelType)
+	}
 }

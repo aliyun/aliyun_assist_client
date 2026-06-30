@@ -35,7 +35,7 @@ func (sc linuxSystemService) New(i Interface, c *Config) (Service, error) {
 func init() {
 	ChooseSystem(linuxSystemService{
 		name:   "linux-systemd",
-		detect: isSystemd,
+		detect: IsSystemd,
 		interactive: func() bool {
 			is, _ := isInteractive()
 			return is

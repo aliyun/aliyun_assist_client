@@ -41,30 +41,33 @@ func TestAutoCleanKey(t *testing.T) {
 	assert.Equal(t, 190, len(plainText))
 
 	for _, c := range cases {
-		k, err := GenRsaKey(c.KeyId, c.TimeoutSecond)
-		assert.Nil(t, err)
-		assert.Equal(t, c.TimeoutSecond, int(k.ExpiredTimestamp-k.CreatedTimestamp))
-		assert.Equal(t, c.KeyId, k.Id)
-		_, err = CheckKey(c.KeyId)
-		assert.Nil(t, err)
-		if c.CheckTimeout {
-			time.Sleep(time.Duration(c.TimeoutSecond+1) * time.Second)
-			_, err = EncryptWithRsa(c.KeyId, plainText)
-			assert.ErrorIs(t, err, ErrKeyIdNotExist)
+		t.Run(c.KeyId, func(t *testing.T){
+			k, err := GenRsaKey(c.KeyId, c.TimeoutSecond)
+			defer RemoveRsaKey(k.Id)
+			assert.Nil(t, err)
+			assert.Equal(t, c.TimeoutSecond, int(k.ExpiredTimestamp-k.CreatedTimestamp))
+			assert.Equal(t, c.KeyId, k.Id)
 			_, err = CheckKey(c.KeyId)
-			assert.ErrorIs(t, err, ErrKeyIdNotExist)
-		} else {
-			content, err := EncryptWithRsa(c.KeyId, plainText)
 			assert.Nil(t, err)
-			plainContent, err := DecryptWithRsa(c.KeyId, content)
-			assert.Nil(t, err)
-			assert.Equal(t, plainText, string(plainContent))
+			if c.CheckTimeout {
+				time.Sleep(time.Duration(c.TimeoutSecond+1) * time.Second)
+				_, err = EncryptWithRsa(c.KeyId, plainText)
+				assert.ErrorIs(t, err, ErrKeyIdNotExist)
+				_, err = CheckKey(c.KeyId)
+				assert.ErrorIs(t, err, ErrKeyIdNotExist)
+			} else {
+				content, err := EncryptWithRsa(c.KeyId, plainText)
+				assert.Nil(t, err)
+				plainContent, err := DecryptWithRsa(c.KeyId, content)
+				assert.Nil(t, err)
+				assert.Equal(t, plainText, string(plainContent))
 
-			err = RemoveRsaKey(c.KeyId)
-			assert.Nil(t, err)
-			_, err = CheckKey(c.KeyId)
-			assert.ErrorIs(t, err, ErrKeyIdNotExist)
-		}
+				err = RemoveRsaKey(c.KeyId)
+				assert.Nil(t, err)
+				_, err = CheckKey(c.KeyId)
+				assert.ErrorIs(t, err, ErrKeyIdNotExist)
+			}
+		})
 	}
 }
 
@@ -72,6 +75,7 @@ func TestVerify(t *testing.T) {
 	keyId := "test-key"
 	rawData := "This is test text!"
 	_, err := GenRsaKey(keyId, 60)
+	defer RemoveRsaKey(keyId)
 	assert.Nil(t, err)
 
 	signature, err := SignData(keyId, rawData)
@@ -92,6 +96,7 @@ func TestVerify(t *testing.T) {
 
 func TestEncryptAndDecryptLongData(t *testing.T) {
 	keyInfo, err := GenRsaKey("", 60)
+	defer RemoveRsaKey(keyInfo.Id)
 	assert.Nil(t, err)
 	testLens := []int{}
 	for i := 0; i < 1024; i += 1 {

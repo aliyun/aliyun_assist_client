@@ -16,6 +16,9 @@ const (
 
 	// ShutDown indicates a job for which ShutDown has been requested.
 	ShutDown State = 3
+
+	// ErrerOccurred indicates a job for which an error has occurred.
+	ErrerOccurred State = 4
 )
 
 // CancelFlag is an object that is passed to any job submitted to a task in order to
@@ -27,6 +30,10 @@ type CancelFlag interface {
 
 	// Set sets the state of this flag and wakes up waiting callers.
 	Set(state State)
+
+	SetErr(err error)
+
+	IsErrorOccurred() (bool, error)
 
 	// ShutDown returns true if a ShutDown has been requested, false otherwise.
 	// This method should be called periodically in the job.
@@ -46,12 +53,13 @@ type CancelFlag interface {
 	Wait() (state State)
 
 	// C returns a channel which will be closed after calling Set()
-	C() (chan struct{})
+	C() chan struct{}
 }
 
 // ChanneledCancelFlag is a default implementation of the task.CancelFlag interface.
 type ChanneledCancelFlag struct {
 	state  State
+	err    error
 	ch     chan struct{}
 	closed bool
 	m      sync.RWMutex
@@ -77,6 +85,13 @@ func (t *ChanneledCancelFlag) ShutDown() bool {
 	return t.state == ShutDown
 }
 
+// ShutDown returns true if this flag has been set to ShutDown state, false otherwise.
+func (t *ChanneledCancelFlag) IsErrorOccurred() (bool, error) {
+	t.m.RLock()
+	defer t.m.RUnlock()
+	return t.err != nil, t.err
+}
+
 // State returns the current flag state.
 func (t *ChanneledCancelFlag) State() State {
 	t.m.RLock()
@@ -99,6 +114,20 @@ func (t *ChanneledCancelFlag) Set(state State) {
 	t.m.Lock()
 	defer t.m.Unlock()
 	t.state = state
+
+	// close channel to wake up routines that are waiting
+	if !t.closed {
+		// avoid double closing, which would panic
+		close(t.ch)
+		t.closed = true
+	}
+}
+
+func (t *ChanneledCancelFlag) SetErr(err error) {
+	t.m.Lock()
+	defer t.m.Unlock()
+	t.err = err
+	t.state = ErrerOccurred
 
 	// close channel to wake up routines that are waiting
 	if !t.closed {

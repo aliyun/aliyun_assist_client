@@ -3,26 +3,30 @@ package requester
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"net"
 	"net/http"
 	"sync"
 	"time"
 
-	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 	"github.com/aliyun/aliyun_assist_client/agent/util/atomicutil"
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 )
+
+type HTTPTransportOption func (logger logrus.FieldLogger, transport *http.Transport)
 
 var (
 	NilTransport *atomicutil.AtomicBoolean
 )
 
 var (
+	DefaultHTTPTransportOptions = []HTTPTransportOption{
+		WithProxy,
+		WithProvidedDialContextFunc,
+		WithRootCAs,
+	}
+
 	_httpTransport *http.Transport
 	_httpTransportLock sync.RWMutex
 	_initHTTPTransportOnce sync.Once
-
-	_proxiedHTTPTransport *http.Transport
-	_initProxiedHTTPTransportOnce sync.Once
 )
 
 func init() {
@@ -30,21 +34,20 @@ func init() {
 	NilTransport.Clear()
 }
 
-func GetHTTPTransport(logger logrus.FieldLogger) *http.Transport {
+func GetHTTPTransport(logger logrus.FieldLogger, options ...HTTPTransportOption) *http.Transport {
 	if NilTransport.IsSet() {
 		return nil
+	}
+
+	if len(options) > 0 {
+		return newHTTPTransport(logger, options...)
 	}
 
 	_initHTTPTransportOnce.Do(func() {
 		_httpTransportLock.Lock()
 		defer _httpTransportLock.Unlock()
 
-		_httpTransport = unsafeGetProxiedHTTPTransport(logger)
-		// TLSClientConfig specifies the TLS configuration, which uses custom
-		// Root CA for assist server
-		_httpTransport.TLSClientConfig = &tls.Config{
-			RootCAs: GetRootCAs(logger),
-		}
+		_httpTransport = newHTTPTransport(logger, DefaultHTTPTransportOptions...)
 	})
 
 	return _httpTransport
@@ -53,34 +56,35 @@ func GetHTTPTransport(logger logrus.FieldLogger) *http.Transport {
 func RefreshHTTPCas(logger logrus.FieldLogger, certPool *x509.CertPool) {
 	_httpTransportLock.Lock()
 	defer _httpTransportLock.Unlock()
-	_httpTransport.TLSClientConfig = &tls.Config{
-		RootCAs: certPool,
+	if _httpTransport != nil {
+		_httpTransport.TLSClientConfig = &tls.Config{
+			RootCAs: certPool,
+		}
 	}
+
 	UpdateRootCAs(logger, certPool)
 }
 
-func GetProxiedHTTPTransport(logger logrus.FieldLogger) *http.Transport {
-	if NilTransport.IsSet() {
-		return nil
-	}
-
-	_initProxiedHTTPTransportOnce.Do(func() {
-		_proxiedHTTPTransport = unsafeGetProxiedHTTPTransport(logger)
-	})
-
-	return _proxiedHTTPTransport
+func WithDefaultDialContextFunc(logger logrus.FieldLogger, transport *http.Transport) {
+	transport.DialContext = defaultDialContextFunc
 }
 
-func unsafeGetProxiedHTTPTransport(logger logrus.FieldLogger) *http.Transport {
-	return &http.Transport{
-		Proxy: GetProxyFunc(logger),
+func WithProvidedDialContextFunc(logger logrus.FieldLogger, transport *http.Transport) {
+	transport.DialContext = GetDialContextFunc(logger)
+}
 
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-			DualStack: true,
-		}).DialContext,
+func WithProxy(logger logrus.FieldLogger, transport *http.Transport) {
+	transport.Proxy = GetProxyFunc(logger)
+}
 
+func WithRootCAs(logger logrus.FieldLogger, transport *http.Transport) {
+	transport.TLSClientConfig = &tls.Config{
+		RootCAs: GetRootCAs(logger),
+	}
+}
+
+func newHTTPTransport(logger logrus.FieldLogger, options ...HTTPTransportOption) *http.Transport {
+	transport := &http.Transport{
 		// Enabled HTTP/2 protocol when `TLSClientConfig` is not nil
 		ForceAttemptHTTP2:     true,
 		MaxIdleConns:          100,
@@ -88,4 +92,9 @@ func unsafeGetProxiedHTTPTransport(logger logrus.FieldLogger) *http.Transport {
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
 	}
+
+	for _, option := range options {
+		option(logger, transport)
+	}
+	return transport
 }

@@ -111,19 +111,19 @@ func (c *CommanderClient) SubmitScript(logger logrus.FieldLogger, ctx context.Co
 	return nil
 }
 
-func (c *CommanderClient) CancelSubmitted(logger logrus.FieldLogger, ctx context.Context, submissionId string) *taskerrors.CommanderError {
+func (c *CommanderClient) CancelSubmitted(logger logrus.FieldLogger, ctx context.Context, submissionId string) (bool, *taskerrors.CommanderError) {
 	logger.Info("Request CancelSubmitted")
 	req := &pb.CancelSubmittedReq{
 		SubmissionId: submissionId,
 	}
 	resp, err := c.Client.CancelSubmitted(ctx, req)
 	if err != nil {
-		return taskerrors.NewIpcRequestFailedError(fmt.Sprintf("request fail, %v", err))
+		return false, taskerrors.NewIpcRequestFailedError(fmt.Sprintf("request fail, %v", err))
 	}
 	if resp.Status.StatusCode != 0 {
-		return taskerrors.NewIpcRequestFailedError(fmt.Sprintf("response status no-zero, %s", resp.Status.ErrMessage))
+		return false, taskerrors.NewIpcRequestFailedError(fmt.Sprintf("response status no-zero, %s", resp.Status.ErrMessage))
 	}
-	return nil
+	return resp.Effective, nil
 }
 
 func (c *CommanderClient) CleanUpSubmitted(logger logrus.FieldLogger, ctx context.Context, submissionId string) *taskerrors.CommanderError {
