@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -95,7 +96,7 @@ func New(p string, options ...Option) (*RotateLogs, error) {
 		maxAge:        maxAge,
 		pattern:       pattern,
 		rotationTime:  rotationTime,
-		rotationSize: rotationSize,
+		rotationSize:  rotationSize,
 		rotationCount: rotationCount,
 		forceNewFile:  forceNewFile,
 
@@ -152,6 +153,14 @@ func (rl *RotateLogs) getWriter_nolock(bailOnRotateFail, useGenerationalNames bo
 	// to log to, which may be newer than rl.currentFilename
 	baseFn := rl.genFilename()
 	filename := baseFn
+	if rl.curBaseFn == "" {
+		generation = rl.scanMaxGeneration(baseFn) // Scan existing files on disk (e.g., "foo.log.20251112", "foo.log.20251112.1") and find the highest generation number
+		if generation > 0 {
+			rl.generation = generation
+			rl.curFn = fmt.Sprintf("%s.%04d", baseFn, generation) //Zero-padding ensures correct sorting
+			filename = rl.curFn
+		}
+	}
 	var forceNewFile bool
 
 	fi, err := os.Stat(rl.curFn)
@@ -162,7 +171,10 @@ func (rl *RotateLogs) getWriter_nolock(bailOnRotateFail, useGenerationalNames bo
 	}
 
 	if baseFn != rl.curBaseFn {
-		generation = 0
+		if rl.curBaseFn != "" {
+			generation = 0
+			filename = baseFn
+		}
 		// even though this is the first write after calling New(),
 		// check if a new file needs to be created
 		if rl.forceNewFile {
@@ -183,9 +195,9 @@ func (rl *RotateLogs) getWriter_nolock(bailOnRotateFail, useGenerationalNames bo
 		var name string
 		for {
 			if generation == 0 {
-				name = filename
+				name = baseFn
 			} else {
-				name = fmt.Sprintf("%s.%d", filename, generation)
+				name = fmt.Sprintf("%s.%04d", baseFn, generation)
 			}
 			if _, err := os.Stat(name); err != nil {
 				filename = name
@@ -247,6 +259,20 @@ func (rl *RotateLogs) CurrentFileName() string {
 	rl.mutex.RLock()
 	defer rl.mutex.RUnlock()
 	return rl.curFn
+}
+
+// GetRotationSize returns the rotationSize
+func (rl *RotateLogs) GetRotationSize() int64 {
+	rl.mutex.RLock()
+	defer rl.mutex.RUnlock()
+	return rl.rotationSize
+}
+
+// GetRotationCount returns the rotationCount
+func (rl *RotateLogs) GetRotationCount() uint {
+	rl.mutex.RLock()
+	defer rl.mutex.RUnlock()
+	return rl.rotationCount
 }
 
 var patternConversionRegexps = []*regexp.Regexp{
@@ -391,6 +417,9 @@ func (rl *RotateLogs) rotate_nolock(filename string) error {
 	go func() {
 		// unlink files on a separate goroutine
 		for _, path := range toUnlink {
+			if path == filename { //not remove current file
+				continue
+			}
 			os.Remove(path)
 		}
 	}()
@@ -412,4 +441,38 @@ func (rl *RotateLogs) Close() error {
 	rl.outFh.Close()
 	rl.outFh = nil
 	return nil
+}
+
+func (rl *RotateLogs) scanMaxGeneration(baseFilename string) int {
+	maxGen := 0
+
+	dir := filepath.Dir(baseFilename)
+	basename := filepath.Base(baseFilename)
+	prefix := basename + "."
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return 0
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if name == basename {
+			continue
+		}
+		if !strings.HasPrefix(name, prefix) {
+			continue
+		}
+
+		numStr := name[len(prefix):]
+		if n, err := strconv.Atoi(numStr); err == nil {
+			if n > maxGen {
+				maxGen = n
+			}
+		}
+	}
+
+	return maxGen
 }

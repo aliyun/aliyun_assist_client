@@ -29,8 +29,8 @@ import (
 
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/i18n"
 
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
-	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
+	ecsclient "github.com/alibabacloud-go/ecs-20140526/v7/client"
+	"github.com/alibabacloud-go/tea/tea"
 )
 
 func NewSshCommand() *cli.Command {
@@ -65,25 +65,25 @@ func doSession(ctx *cli.Context, instance_id string, wss_url string) error {
 			return fmt.Errorf("get ecs client err:%v", err)
 		}
 
-		request := ecs.CreateStartTerminalSessionRequest()
-		request.Scheme = "https"
-
-		request.InstanceId = &[]string{instance_id}
-
 		port_val, _ := config.PortNumberFlag(ctx.Flags()).GetValue()
 		if port_val == "" {
 			port_val = "22"
 		}
 		port_i, _ := strconv.Atoi(port_val)
-		request.PortNumber = requests.NewInteger(port_i)
 
-		response, err := client.StartTerminalSession(request)
+		request := ecsclient.StartTerminalSessionRequest{
+			RegionId:     client.RegionId,
+			InstanceId:   []*string{tea.String(instance_id)},
+			PortNumber:   tea.Int32(int32(port_i)),
+		}
+
+		response, err := client.StartTerminalSession(&request)
 		if err != nil {
 			log.GetLogger().Errorln(err, response)
 			fmt.Print(err.Error())
 		}
 		log.GetLogger().Infof("response is %#v\n", response)
-		websocket_url = response.WebSocketUrl
+		websocket_url = *response.Body.WebSocketUrl
 	} else {
 		websocket_url = wss_url
 	}

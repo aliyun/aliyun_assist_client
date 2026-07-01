@@ -108,6 +108,7 @@ message CancelSubmittedReq {
 }
 message CancelSubmittedResp {
     RespStatus status = 1;
+    bool effective = 2;
 }
 
 message CleanUpSubmittedReq {

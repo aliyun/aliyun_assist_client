@@ -35,6 +35,7 @@ const (
 	EVENT_PLUGIN_EXECUTE                     MetricsEventID = "agent.plugin.execute"
 	EVENT_PLUGIN_LOCALLIST                   MetricsEventID = "agent.plugin.locallist"
 	EVENT_PLUGIN_UPDATE                      MetricsEventID = "agent.plugin.update"
+	EVENT_PLUGIN_CUSTOMIZED                  MetricsEventID = "agent.plugin.customized"
 	EVENT_LINUX_GUESTOS_PANIC                MetricsEventID = "Linux-GuestOS-Panic"
 	EVENT_WINDOWS_WER_SYSTEM_ERRORRE_PORTING MetricsEventID = "Microsoft-Windows-WER-SystemErrorReporting"
 	EVENT_AGENT_LAST_PANIC                   MetricsEventID = "agent.last.panic"
@@ -395,6 +396,18 @@ func GetPluginLocalListEvent(keywords ...string) *MetricsEvent {
 func GetPluginUpdateEvent(keywords ...string) *MetricsEvent {
 	event := &MetricsEvent{
 		EventId:    EVENT_PLUGIN_UPDATE,
+		Category:   EVENT_CATEGORY_PLUGIN,
+		EventLevel: EVENT_LEVEL_INFO,
+		EventTime:  time.Now().UnixNano() / 1e6,
+		Common:     getCommonInfoStr(),
+		KeyWords:   genKeyWordsStr(keywords...),
+	}
+	return event
+}
+
+func GetPluginCustomizedEvent(keywords ...string) *MetricsEvent {
+	event := &MetricsEvent{
+		EventId:    EVENT_PLUGIN_CUSTOMIZED,
 		Category:   EVENT_CATEGORY_PLUGIN,
 		EventLevel: EVENT_LEVEL_INFO,
 		EventTime:  time.Now().UnixNano() / 1e6,

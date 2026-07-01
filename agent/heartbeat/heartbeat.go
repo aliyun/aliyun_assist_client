@@ -6,7 +6,6 @@ import (
 	"math/rand"
 	"net/url"
 	"os"
-	"regexp"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -55,9 +54,6 @@ var (
 
 	_intervalRand *rand.Rand
 
-	// _fieldMissRegexp is used to match error messages for missing fields,
-	// like: "Required request parameter 'os_type' for method parameter type String is not present"
-	_fieldMissRegexp = regexp.MustCompile(`Required request parameter '(\w+)' for method parameter type (\w+) is not present`)
 	// if _useFullFields is true ping hear-beat with full fields,
 	// otherwise use the reduced fields
 	_useFullFields atomic.Bool
@@ -84,19 +80,15 @@ func init() {
 	_intervalRand = rand.New(rand.NewSource(time.Now().UnixNano()))
 }
 
-func invokePingRequest(isHttpScheme bool, urlWithoutScheme string, willSwitchScheme bool) (response string, err error) {
-	defer func() {
-		errMsg := extractErrMsg(response)
-		if errMsg != "" {
-			log.GetLogger().Error("heart-beat: ", errMsg)
-			if miss, fieldName, fieldType := checkFieldsdMissErr(errMsg); miss {
-				_useFullFields.Store(true)
-				log.GetLogger().Errorf("heart-beat request miss field[%s:%s] ", fieldName, fieldType)
-				err = fmt.Errorf("request field missing")
-			}
-		}
-	}()
-
+// retrievePingResponse would always return response content and error, although
+// either response content may be empty, or error is nil.
+//
+// * Response content would be empty when network error encountered.
+// * But non-empty response content would be returned along with
+//   [httpbase.StatusCodeError] for further processing.
+//
+//   See caller [invokePingRequest] for usages.
+func retrievePingResponse(isHttpScheme bool, urlWithoutScheme string, willSwitchScheme bool) (string, error) {
 	httpRequestURL := "http://" + urlWithoutScheme
 	httpsRequestURL := "https://" + urlWithoutScheme
 	var requestURL, switchedRequestUrl *string
@@ -107,7 +99,7 @@ func invokePingRequest(isHttpScheme bool, urlWithoutScheme string, willSwitchSch
 		requestURL = &httpsRequestURL
 		switchedRequestUrl = &httpRequestURL
 	}
-	err, response = util.HttpGet(*requestURL)
+	err, response := util.HttpGet(*requestURL)
 	if err != nil {
 		tmp_err, ok := err.(*httpbase.StatusCodeError)
 		if !(ok && tmp_err.StatusCode() < 500) {
@@ -171,6 +163,24 @@ func invokePingRequest(isHttpScheme bool, urlWithoutScheme string, willSwitchSch
 			_tryHttp = true
 		}
 
+		return response, err
+	}
+	return response, nil
+}
+
+// invokePingRequest would return either response content or error (e.g.,
+// [httpbase.StatusCodeError], [errMissingRequiredField], or others), but NEVER
+// BOTH.
+//
+// Possible side-effect(s): [_instanceDeregisteredHook]
+func invokePingRequest(isHttpScheme bool, urlWithoutScheme string, willSwitchScheme bool) (string, error) {
+	response, err := retrievePingResponse(isHttpScheme, urlWithoutScheme, willSwitchScheme)
+
+	if errInResponse := digErrorFromResponse(response); errInResponse != nil {
+		err = errInResponse
+	}
+
+	if err != nil {
 		return "", err
 	}
 	return response, nil
@@ -212,44 +222,6 @@ func extractNextInterval(content string) time.Duration {
 	return time.Duration(nextIntervalInMilliseconds) * time.Millisecond
 }
 
-func extractErrMsg(content string) string {
-	if !gjson.Valid(content) {
-		log.GetLogger().WithFields(log.Fields{
-			"response": content,
-		}).Errorln("Invalid json response")
-		return ""
-	}
-
-	json := gjson.Parse(content)
-	errMsgField := json.Get("errMsg")
-	if !errMsgField.Exists() {
-		return ""
-	}
-
-	errMsg, ok := errMsgField.Value().(string)
-	if !ok {
-		log.GetLogger().WithFields(log.Fields{
-			"response": content,
-		}).Errorln("Invalid errMsg value in json response")
-		return ""
-	}
-
-	return errMsg
-}
-
-func checkFieldsdMissErr(errMsg string) (matched bool, fieldName string, fieldType string) {
-	if _fieldMissRegexp.MatchString(errMsg) {
-		matched = true
-		items := _fieldMissRegexp.FindStringSubmatch(errMsg)
-		if len(items) != 3 {
-			return
-		}
-		fieldName = items[1]
-		fieldType = items[2]
-	}
-	return
-}
-
 func doPing() error {
 	sendCounter := _sendCounter
 	var querystring string
@@ -286,14 +258,12 @@ func doPing() error {
 		_consecutiveFailedCount += 1
 		_networkConnected.Store(false)
 		log.GetLogger().WithFields(log.Fields{
-			"requestURLWithourScheme": urlWithoutScheme,
+			"requestURLWithoutScheme": urlWithoutScheme,
 			"isHttpScheme":            isHttpScheme,
 		}).WithError(err).Errorln("Failed to invoke ping request")
 
 		if _consecutiveFailedCount >= 3 {
-			if e := checknet.ReportNetworkBlockToSerialPort(err); e != nil {
-				log.GetLogger().WithError(e).Error("Report network block to serial port failed.")
-			}
+			go checknet.ReportNetworkBlockToSerialPort(err)
 		}
 		return err
 	} else {
@@ -317,6 +287,11 @@ func doPing() error {
 	}
 	// Not so graceful way to reset interval of timer: too much implementation exposed.
 	mutableSchedule.SetInterval(extractNextInterval(responseContent))
+
+	err = flagging.UpdateConfOnConfigReceived(log.GetLogger(), responseContent)
+	if err != nil {
+		log.GetLogger().WithFields(log.Fields{"response": responseContent}).WithError(err).Errorln("UpdateConfOnConfigReceived failed in heartbeat.")
+	}
 	_heartbeatTimer.RefreshTimer()
 
 	return nil

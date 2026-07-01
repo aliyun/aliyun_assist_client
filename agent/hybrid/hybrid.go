@@ -8,10 +8,17 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
+	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
+	"golang.org/x/net/http/httpguts"
+
+	"github.com/aliyun/aliyun_assist_client/agent/hybrid/extid"
+	"github.com/aliyun/aliyun_assist_client/agent/hybrid/hwid1"
 	"github.com/aliyun/aliyun_assist_client/agent/hybrid/instance"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
@@ -21,17 +28,18 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/version"
 	"github.com/aliyun/aliyun_assist_client/common/apiserver"
 	"github.com/aliyun/aliyun_assist_client/common/httpbase"
+	"github.com/aliyun/aliyun_assist_client/common/machineid"
 	"github.com/aliyun/aliyun_assist_client/common/metaserver"
-	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
-	"golang.org/x/net/http/httpguts"
 )
 
 const (
+	ExternalMachineIdLengthLimit = 36
+
 	errCodeFingerprintDuplicate = "fingerprint_duplicate"
 	errCodeEcsRegDisabled       = "ecs_registration_disabled"
 )
 
-func Register(region string, code string, id string, name string, networkmode string, need_restart bool, tags []Tag) (ret bool) {
+func Register(region string, code string, id string, name string, networkmode string, need_restart bool, tags []Tag, externalMachineId string, forceReuse bool) (ret bool) {
 	logger := log.GetLogger().WithField("action", "register")
 	logger.Infoln(region, code, id, name)
 
@@ -69,16 +77,18 @@ func Register(region string, code string, id string, name string, networkmode st
 		return
 	}
 	encodeString := base64.StdEncoding.EncodeToString(pub.Bytes())
-	mid, _ := instance.MachineID()
-	fingerprint, err := instance.GenerateFingerprint()
-	if err != nil {
-		fmt.Printf("generate fingerprint failed: %v", err)
-		return
+	mid, _ := machineid.GetMachineID()
+
+	var ident MachineIdentifier
+	if externalMachineId != "" {
+		ident = extid.NewExternalMachineId(externalMachineId)
+	} else {
+		ident = &hwid1.Fingerprint{}
 	}
+
 	info := &RegisterInfo{
 		Code:            code,
 		MachineId:       mid,
-		Fingerprint:     fingerprint,
 		RegionId:        region,
 		InstanceName:    name,
 		Hostname:        hostname,
@@ -89,6 +99,7 @@ func Register(region string, code string, id string, name string, networkmode st
 		PublicKeyBase64: encodeString,
 		Id:              id,
 		Tag:             tags,
+		ForceReuse:      forceReuse,
 	}
 
 	headers := make(map[string]string)
@@ -101,38 +112,14 @@ func Register(region string, code string, id string, name string, networkmode st
 		headers["X-Client-Instance-ID"] = "unknown"
 	}
 
-	resp, err := doRegister(info, networkmode, headers)
+	managedInstanceId, err := tryRegister(info, ident, networkmode, headers, pub.String(), pri.String())
 	if err != nil {
-		fmt.Println("Register failed: ", err)
-		return
-	}
-	if resp.Code == 200 {
-		instance.SaveInstanceInfo(resp.InstanceId, fingerprint, region, pub.String(), pri.String(), networkmode)
-	} else if resp.ErrCode == errCodeEcsRegDisabled {
-		fmt.Println("The ECS instance is forbidden from registering as a managed instance.")
-		return
-	} else if resp.ErrCode == errCodeFingerprintDuplicate {
-		fmt.Println("Fingerprint is duplicated and needs to be regenerated")
-		fingerprint, err = instance.GenerateFingerprintIgnoreSavedHash()
-		if err != nil {
-			fmt.Println("Regenerate fingerprint failed: ", err)
-			return
-		}
-		info.Fingerprint = fingerprint
-		resp, err = doRegister(info, networkmode, headers)
-		if err == nil && resp.Code == 200 {
-			instance.SaveInstanceInfo(resp.InstanceId, fingerprint, region, pub.String(), pri.String(), networkmode)
-		} else {
-			fmt.Println("Register failed: ", err, resp)
-			return
-		}
-	} else {
-		fmt.Println("Register failed: ", resp)
+		fmt.Println(err.Error())
 		return
 	}
 
 	fmt.Println("register ok")
-	fmt.Println("instance id:", resp.InstanceId)
+	fmt.Println("instance id:", managedInstanceId)
 	if need_restart {
 		serviceutil.RestartAgentService(logger)
 	}
@@ -202,6 +189,46 @@ func CheckFingerprint() {
 	}
 }
 
+func tryRegister(info *RegisterInfo, ident MachineIdentifier, networkMode string, headers map[string]string, pubKey string, privKey string) (string, error) {
+	fingerprint, err := ident.Generate()
+	if err != nil {
+		return "", fmt.Errorf("generate fingerprint failed: %w", err)
+	}
+
+	info.Fingerprint = fingerprint
+	resp, err := doRegister(info, networkMode, headers)
+	if err != nil {
+		return "", fmt.Errorf("Register failed: %w", err)
+	}
+	if resp.Code == 200 {
+		instance.SaveInstanceInfo(resp.InstanceId, fingerprint, info.RegionId, pubKey, privKey, networkMode, ident.Name())
+	} else if resp.ErrCode == errCodeEcsRegDisabled {
+		return "", errors.New("The ECS instance is forbidden from registering as a managed instance.")
+	} else if resp.ErrCode == errCodeFingerprintDuplicate {
+		if refresher, ok := ident.(MachineIdentifyRefresher); ok {
+			fmt.Println("Fingerprint is duplicated and needs to be regenerated")
+			fingerprint, err = refresher.Refresh()
+			if err != nil {
+				return "", fmt.Errorf("Regenerate fingerprint failed: %w", err)
+			}
+
+			info.Fingerprint = fingerprint
+			resp, err = doRegister(info, networkMode, headers)
+			if err == nil && resp.Code == 200 {
+				instance.SaveInstanceInfo(resp.InstanceId, fingerprint, info.RegionId, pubKey, privKey, networkMode, ident.Name())
+			} else {
+				return "", fmt.Errorf("Register failed: %w %+v", err, resp)
+			}
+		} else {
+			return "", fmt.Errorf("Register failed of duplicate machine: %+v", resp)
+		}
+	} else {
+		return "", fmt.Errorf("Register failed: %+v", resp)
+	}
+
+	return resp.InstanceId, nil
+}
+
 func doRegister(info *RegisterInfo, networkmode string, headers map[string]string) (resp registerResponse, err error) {
 	jsonBytes, _ := json.Marshal(*info)
 	url := util.GetRegisterService(info.RegionId, networkmode)
@@ -252,15 +279,46 @@ func genRsaKey(pub io.Writer, pri io.Writer) error {
 }
 
 func clean_unregister_data(logger logrus.FieldLogger, need_restart bool) {
-	instance.RemoveInstanceInfo()
-	// update hardwareInfo and hope this instance will be recognized when next registration
-	if hardwareInfo, err := instance.ReadHardwareInfo(); err == nil {
-		if currentHardwareInfo, err := instance.CurrentHwHash(); err == nil {
-			instance.SaveHardwareInfo(hardwareInfo.Fingerprint, currentHardwareInfo)
+	if cleaner := resolveCleaner(); cleaner != nil {
+		if err := cleaner.Cleanup(); err != nil {
+			logger.WithField("identification", cleaner.Name()).WithError(err).Error("Failed to perform identification-specific cleanup")
 		}
 	}
+
+	instance.RemoveInstanceInfo()
 	if need_restart {
 		serviceutil.RestartAgentService(logger)
 		fmt.Println("restart service")
 	}
+}
+
+func resolveCleaner() MachineIdentifyCleaner {
+	type factory func () MachineIdentifyCleaner
+	source2cleaners := map[string]factory{
+		hwid1.MachineIdentifierName: func() MachineIdentifyCleaner {
+			return &hwid1.Fingerprint{}
+		},
+	}
+
+	// Detect in the authoritative machine-id-source file.
+	if source := instance.ReadMachineIdSource(); source != "" {
+		if factory, ok := source2cleaners[source]; ok {
+			return factory()
+		}
+	} else {
+		// Fallback to machine-id source detection based on its prefix, which is
+		// only valid and should be used for machine-ids generated by the agent.
+		//
+		// Detect in the obsolete fingerprint file at first if not yet migrated.
+		if fingerprintNotMigrated := instance.ReadDiscardFingerprintFile(); strings.HasPrefix(fingerprintNotMigrated, hwid1.FingerprintVersionPrefix) {
+			return &hwid1.Fingerprint{}
+		}
+
+		// Detect in the machine-id file at second.
+		if fingerprint := instance.ReadFingerprint(); strings.HasPrefix(fingerprint, hwid1.FingerprintVersionPrefix) {
+			return &hwid1.Fingerprint{}
+		}
+	}
+
+	return nil
 }

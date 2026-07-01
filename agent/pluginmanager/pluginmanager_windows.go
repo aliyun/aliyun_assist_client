@@ -11,11 +11,13 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/aliyun/aliyun_assist_client/agent/log"
-	"github.com/aliyun/aliyun_assist_client/agent/util/process"
-	"github.com/aliyun/aliyun_assist_client/common/executil"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 	"golang.org/x/sys/windows"
+
+	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/agent/pluginmodel"
+	"github.com/aliyun/aliyun_assist_client/agent/util/process"
+	"github.com/aliyun/aliyun_assist_client/common/executil"
 )
 
 // We use this struct to retreive process handle(which is unexported)
@@ -128,7 +130,7 @@ func syncRunKillGroup(workingDir string, commandName string, commandArguments []
 
 func GetArch() (formatArch string, rawArch string) {
 	// 云助手的windows版架构只有amd64的
-	formatArch = ARCH_64
+	formatArch = pluginmodel.ARCH_64
 	rawArch = "windows arch"
 	log.GetLogger().Infof("Get Arch: formatArch[%s] rawArch[%s]: ", formatArch, rawArch)
 	return

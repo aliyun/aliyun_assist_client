@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,11 +16,12 @@ import (
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/aliyun/aliyun_assist_client/agent/pluginmodel"
 	"github.com/aliyun/aliyun_assist_client/agent/taskengine/timermanager"
-	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 	"github.com/aliyun/aliyun_assist_client/common/fileutil"
-	"github.com/aliyun/aliyun_assist_client/internal/testutil"
+	"github.com/aliyun/aliyun_assist_client/common/pathutil"
 	"github.com/aliyun/aliyun_assist_client/common/requester"
+	"github.com/aliyun/aliyun_assist_client/internal/testutil"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 )
 
@@ -108,4 +110,105 @@ func TestPluginManager(t *testing.T) {
 	time.Sleep(time.Duration(10) * time.Second)
 	assert.Equal(t, healthCheck, true)
 	assert.Equal(t, updateCheck, true)
+}
+
+func TestTruncateStatusRequestFields(t *testing.T) {
+    testCases := []struct {
+        name     string
+        input    PluginStatusResquest
+        expected PluginStatusResquest
+    }{
+        {
+            name: "NormalCase",
+            input: PluginStatusResquest{
+                Plugin: []pluginmodel.PluginStatus{
+                    {Name: "validName", Version: "1.0.0"},
+                },
+            },
+            expected: PluginStatusResquest{
+                Plugin: []pluginmodel.PluginStatus{
+                    {Name: "validName", Version: "1.0.0"},
+                },
+            },
+        },
+        {
+            name: "NameExceedsMaxLength",
+            input: PluginStatusResquest{
+                Plugin: []pluginmodel.PluginStatus{
+                    {Name: strings.Repeat("a", PLUGIN_NAME_MAXLEN+1), Version: "1.0"},
+                },
+            },
+            expected: PluginStatusResquest{
+                Plugin: []pluginmodel.PluginStatus{
+                    {Name: strings.Repeat("a", PLUGIN_NAME_MAXLEN), Version: "1.0"},
+                },
+            },
+        },
+        {
+            name: "VersionExceedsMaxLength",
+            input: PluginStatusResquest{
+                Plugin: []pluginmodel.PluginStatus{
+                    {Name: "name", Version: strings.Repeat("1", PLUGIN_VERSION_MAXLEN+1)},
+                },
+            },
+            expected: PluginStatusResquest{
+                Plugin: []pluginmodel.PluginStatus{
+                    {Name: "name", Version: strings.Repeat("1", PLUGIN_VERSION_MAXLEN)},
+                },
+            },
+        },
+        {
+            name: "BothFieldsExceed",
+            input: PluginStatusResquest{
+                Plugin: []pluginmodel.PluginStatus{
+                    {
+                        Name:    strings.Repeat("b", PLUGIN_NAME_MAXLEN+1),
+                        Version: strings.Repeat("2", PLUGIN_VERSION_MAXLEN+1),
+                    },
+                },
+            },
+            expected: PluginStatusResquest{
+                Plugin: []pluginmodel.PluginStatus{
+                    {
+                        Name:    strings.Repeat("b", PLUGIN_NAME_MAXLEN),
+                        Version: strings.Repeat("2", PLUGIN_VERSION_MAXLEN),
+                    },
+                },
+            },
+        },
+        {
+            name: "MultiplePlugins",
+            input: PluginStatusResquest{
+                Plugin: []pluginmodel.PluginStatus{
+                    {
+                        Name:    strings.Repeat("c", PLUGIN_NAME_MAXLEN+1),
+                        Version: "1.0",
+                    },
+                    {
+                        Name:    "name2",
+                        Version: strings.Repeat("3", PLUGIN_VERSION_MAXLEN+1),
+                    },
+                },
+            },
+            expected: PluginStatusResquest{
+                Plugin: []pluginmodel.PluginStatus{
+                    {
+                        Name:    strings.Repeat("c", PLUGIN_NAME_MAXLEN),
+                        Version: "1.0",
+                    },
+                    {
+                        Name:    "name2",
+                        Version: strings.Repeat("3", PLUGIN_VERSION_MAXLEN),
+                    },
+                },
+            },
+        },
+    }
+
+    for _, tc := range testCases {
+        t.Run(tc.name, func(t *testing.T) {
+            result := _truncateStatusRequestFields(&tc.input)
+            assert.Equal(t, tc.expected.Plugin, result.Plugin)
+        })
+    }
 }

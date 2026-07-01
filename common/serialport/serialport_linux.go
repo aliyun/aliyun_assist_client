@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"syscall"
+	"time"
 	"unsafe"
 )
 
@@ -28,7 +29,8 @@ func newSerialPort() (sp *SerialPort) {
 
 // OpenPort opens the serial port which MUST be done before WritePort is called.
 func (sp *SerialPort) openPort(name string) (err error) {
-	fileHandle, err := os.OpenFile(name, syscall.O_RDWR, 0)
+	// Device may be not ready or not available, then open will be blocked if O_NONBLOCK is clear
+	fileHandle, err := os.OpenFile(name, syscall.O_RDWR | syscall.O_NONBLOCK, 0)
 
 	if err != nil {
 		return fmt.Errorf("Unable to open serial port %v: %v\n", name, err.Error())
@@ -81,6 +83,9 @@ func (sp *SerialPort) WritePort(data []byte) error {
 	if len(data) > MaxLenOfSingleWrite {
 		data = data[:MaxLenOfSingleWrite]
 	}
+	// Set write deadline to prevent blocked
+	sp.fileHandle.SetWriteDeadline(time.Now().Add(time.Second * time.Duration(SerialportWriteTimeoutSeconds)))
+
 	if _, err := sp.fileHandle.Write(data); err != nil {
 		return fmt.Errorf("Error occurred while writing to serial port: %v\n", err.Error())
 	}

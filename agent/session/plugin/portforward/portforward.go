@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 
@@ -12,11 +13,14 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/cli"
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/client"
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/config"
+	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/constant"
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/log"
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/session"
 
 	"github.com/aliyun/aliyun_assist_client/agent/session/plugin/i18n"
 
+	ecsclient "github.com/alibabacloud-go/ecs-20140526/v7/client"
+	"github.com/alibabacloud-go/tea/tea"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
 )
@@ -36,17 +40,38 @@ func NewPortForwardCommand() *cli.Command {
 			local_port, _ := config.LocalPortFlag(ctx.Flags()).GetValue()
 			remote_port, _ := config.RemotePortFlag(ctx.Flags()).GetValue()
 			service_instance, _ := config.ServiceInstanceFlag(ctx.Flags()).GetValue()
+			idle_timeout, _ := config.IdleTimeoutFlag(ctx.Flags()).GetValue()
+			connection_type, _ := config.ConnectionTypeFlag(ctx.Flags()).GetValue()
+			var idleTimeout int64
+			var err error
 			if instance_id == "" {
 				fmt.Println("params `instance` is necessary")
 				return nil
 			}
-			return doPortForward(ctx, instance_id, local_port, remote_port, service_instance)
+			if idle_timeout == "" {
+				// Default value is 180, because Agent will disconnect if no
+				// package received within 180 seconds.
+				idleTimeout = 180
+			} else {
+				idleTimeout, err = strconv.ParseInt(idle_timeout, 10, 32)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Parse param `%s` failed: %v", config.IdleTimeoutFlagName, err)
+					os.Exit(1)
+				}
+			}
+			if connection_type == "" {
+				connection_type = constant.CONNECTION_TYPE_INTERNET
+			} else if connection_type != constant.CONNECTION_TYPE_INTERNET && connection_type != constant.CONNECTION_TYPE_INTRANET {
+				fmt.Fprintf(os.Stderr, "Invalid param `%s`\n", config.ConnectionTypeFlagName)
+				os.Exit(1)
+			}
+			return doPortForward(ctx, instance_id, local_port, remote_port, service_instance, int32(idleTimeout), connection_type)
 		},
 	}
 	return c
 }
 
-func doPortForward(ctx *cli.Context, instance_id string, local_port string, remote_port string, service_instance string) error {
+func doPortForward(ctx *cli.Context, instance_id string, local_port string, remote_port string, service_instance string, idleTimeout int32, connectionType string) error {
 	session.CheckSessionEnabled(ctx)
 	var remote_host string
 	var err error
@@ -63,7 +88,7 @@ func doPortForward(ctx *cli.Context, instance_id string, local_port string, remo
 	if service_instance != "" {
 		websocket_url, session_id, err = callComputeNestStartTerminalSession(ctx, service_instance, instance_id, remote_port)
 	} else {
-		websocket_url, session_id, err = callEcsStartTerminalSession(ctx, instance_id, remote_port, remote_host)
+		websocket_url, session_id, err = callEcsStartTerminalSession(ctx, instance_id, remote_port, remote_host, connectionType)
 	}
 	if err != nil {
 		return fmt.Errorf("start tcp-listener err:%v", err)
@@ -90,32 +115,37 @@ func doPortForward(ctx *cli.Context, instance_id string, local_port string, remo
 		if err == nil {
 			log.GetLogger().Infof("new connection from %s %s\n", local_connect.RemoteAddr().Network(), local_connect.RemoteAddr().String())
 			fmt.Printf("new connection from %s %s\n", local_connect.RemoteAddr().Network(), local_connect.RemoteAddr().String())
-			go handleConnect(local_connect, url, ctx)
+			go handleConnect(local_connect, url, idleTimeout, ctx)
 		}
 	}
 }
 
-func callEcsStartTerminalSession(ctx *cli.Context, instance_id string, remote_port string, remort_server string) (string, string, error) {
-	ecs_client, err := session.GetEcsClient(ctx)
+func callEcsStartTerminalSession(ctx *cli.Context, instance_id string, remote_port string, remort_server string, connectionType string) (string, string, error) {
+	client, err := session.GetEcsClient(ctx)
 	if err != nil {
 		fmt.Print(err.Error())
 		log.GetLogger().Errorln(err)
 		return "", "", fmt.Errorf("get ecs client err:%v", err)
 	}
 	remote_port_i, _ := strconv.Atoi(remote_port)
-	request := ecs.CreateStartTerminalSessionRequest()
-	request.Scheme = "https"
-	request.InstanceId = &[]string{instance_id}
-	request.PortNumber = requests.NewInteger(remote_port_i)
-	request.TargetServer = remort_server
-	response, err := ecs_client.StartTerminalSession(request)
+
+	request := ecsclient.StartTerminalSessionRequest{
+		RegionId:       client.RegionId,
+		InstanceId:     []*string{tea.String(instance_id)},
+		PortNumber:     tea.Int32(int32(remote_port_i)),
+		TargetServer:   tea.String(remort_server),
+		ConnectionType: &connectionType,
+	}
+
+	response, err := client.StartTerminalSession(&request)
 	if err != nil {
 		log.GetLogger().Errorln(err, response)
 		fmt.Print(err.Error())
-		return "", "", err
 	}
 	log.GetLogger().Infof("response is %#v\n", response)
-	return response.WebSocketUrl, response.SessionId, nil
+	websocket_url := *response.Body.WebSocketUrl
+	sessionId := *response.Body.SessionId
+	return websocket_url, sessionId, nil
 }
 
 func callComputeNestStartTerminalSession(ctx *cli.Context, service_instance string, instance_id string, remote_port string) (string, string, error) {
@@ -167,13 +197,17 @@ func callComputeNestStartTerminalSession(ctx *cli.Context, service_instance stri
 	return response.WebSocketUrl, response.SessionId, err
 }
 
-func handleConnect(local_connect net.Conn, url string, ctx *cli.Context) {
-	client, err := client.NewClient(url, local_connect, local_connect, true, "", true, config.VerboseFlag(ctx.Flags()).IsAssigned(), 0)
+func handleConnect(local_connect net.Conn, url string, idleTimeout int32, ctx *cli.Context) {
+	client, err := client.NewClient(url, local_connect, local_connect, true, "", true, config.VerboseFlag(ctx.Flags()).IsAssigned(), idleTimeout)
 	if err = client.Loop(); err != nil {
 		fmt.Printf("connection[%s %s] err: %v\n", local_connect.RemoteAddr().Network(), local_connect.RemoteAddr().String(), err)
 		log.GetLogger().Infof("connection[%s %s] err: %v\n", local_connect.RemoteAddr().Network(), local_connect.RemoteAddr().String(), err)
 	} else {
 		fmt.Printf("connection[%s %s] closed\n", local_connect.RemoteAddr().Network(), local_connect.RemoteAddr().String())
 		log.GetLogger().Infof("connection[%s %s] closed\n", local_connect.RemoteAddr().Network(), local_connect.RemoteAddr().String())
+	}
+	if err := local_connect.Close(); err != nil {
+		fmt.Printf("close local connection[%s %s] failed, %v\n", local_connect.RemoteAddr().Network(), local_connect.RemoteAddr().String(), err)
+		log.GetLogger().WithError(err).Errorf("close connection[%s %s] failed\n", local_connect.RemoteAddr().Network(), local_connect.RemoteAddr().String())
 	}
 }

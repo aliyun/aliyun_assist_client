@@ -167,7 +167,7 @@ func runServerCmd(ctx *cli.Context, args []string) error {
 	signalCh := listenSignal()
 	for {
 		serveErr := make(chan error)
-		server, err := messagebus_server.ListenAndServe(log.GetLogger(), *endpoint.GetEndpoint(true), serveErr,
+		server, err := messagebus_server.ListenAndServeGRPC(log.GetLogger(), *endpoint.GetEndpoint(true), serveErr,
 			[]messagebus_server.RegisterFunc{
 				server.RegisterCommanderServer,
 			},

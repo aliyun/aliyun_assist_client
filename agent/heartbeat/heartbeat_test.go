@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -148,175 +149,290 @@ func generateFakeErrorResponseOrPanic() string {
 	return string(responseBytes)
 }
 
-func TestInvokePingRequest(t *testing.T) {
-	httpmock.Activate()
-	defer httpmock.DeactivateAndReset()
-	requester.NilTransport.Set()
-	defer requester.NilTransport.Clear()
-	const mockRegion = "cn-test100"
-	testutil.MockMetaServer(mockRegion)
+func TestRetrievePingResponse(t *testing.T) {
+	t.Run("NormalCase", func(t *testing.T) {
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+		requester.NilTransport.Set()
+		defer requester.NilTransport.Clear()
+		const mockRegion = "cn-test100"
+		testutil.MockMetaServer(mockRegion)
 
-	mockRequestURLWithoutScheme := generateFakePingRequest(mockRegion)
-	mockResponse := generateFakeSuccessfulResponseOrPanic()
+		mockRequestURLWithoutScheme := generateFakePingRequest(mockRegion)
+		mockResponse := generateFakeSuccessfulResponseOrPanic()
 
-	httpmock.RegisterResponder("GET",
-		fmt.Sprintf("https://%s.axt.aliyun.com/luban/api/heart-beat", mockRegion),
-		func(h *http.Request) (*http.Response, error) {
-			assert.Exactly(t, "https://"+mockRequestURLWithoutScheme, h.URL.String(), "Mock server should receive same request as generated")
-			return httpmock.NewStringResponse(200, mockResponse), nil
-		})
+		httpmock.RegisterResponder("GET",
+			fmt.Sprintf("https://%s.axt.aliyun.com/luban/api/heart-beat", mockRegion),
+			func(h *http.Request) (*http.Response, error) {
+				assert.Exactly(t, "https://"+mockRequestURLWithoutScheme, h.URL.String(), "Mock server should receive same request as generated")
+				return httpmock.NewStringResponse(200, mockResponse), nil
+			})
 
-	response, err := invokePingRequest(false, mockRequestURLWithoutScheme, false)
-	assert.NoError(t, err, "invokePingRequest should not return error for this testcase")
-	assert.Exactly(t, mockResponse, response, "invokePingRequest should return mockResponse without error")
-}
+		response, err := retrievePingResponse(false, mockRequestURLWithoutScheme, false)
+		assert.NoError(t, err, "retrievePingResponse should not return error for this testcase")
+		assert.Exactly(t, mockResponse, response, "retrievePingResponse should return mockResponse without error")
+	})
 
-func TestInvokePingRequestRetrying(t *testing.T) {
-	httpmock.Activate()
-	defer httpmock.DeactivateAndReset()
-	requester.NilTransport.Set()
-	defer requester.NilTransport.Clear()
+	t.Run("Retrying", func (t *testing.T) {
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+		requester.NilTransport.Set()
+		defer requester.NilTransport.Clear()
 
-	const mockRegion = "cn-test100"
-	testutil.MockMetaServer(mockRegion)
+		const mockRegion = "cn-test100"
+		testutil.MockMetaServer(mockRegion)
 
-	mockRequestURLWithoutScheme := generateFakePingRequest(mockRegion)
-	mockSuccessfulResponse := generateFakeSuccessfulResponseOrPanic()
-	mockErrorResponse := generateFakeErrorResponseOrPanic()
+		mockRequestURLWithoutScheme := generateFakePingRequest(mockRegion)
+		mockSuccessfulResponse := generateFakeSuccessfulResponseOrPanic()
+		mockErrorResponse := generateFakeErrorResponseOrPanic()
 
-	var callCount uint32 = 0
-	httpmock.RegisterResponder("GET",
-		fmt.Sprintf("https://%s.axt.aliyun.com/luban/api/heart-beat", mockRegion),
-		func(h *http.Request) (*http.Response, error) {
-			assert.Exactly(t, "https://"+mockRequestURLWithoutScheme, h.URL.String(), "Mock server should receive same request as generated")
+		var callCount uint32 = 0
+		httpmock.RegisterResponder("GET",
+			fmt.Sprintf("https://%s.axt.aliyun.com/luban/api/heart-beat", mockRegion),
+			func(h *http.Request) (*http.Response, error) {
+				assert.Exactly(t, "https://"+mockRequestURLWithoutScheme, h.URL.String(), "Mock server should receive same request as generated")
 
-			if atomic.AddUint32(&callCount, 1) < 2 {
-				return httpmock.NewStringResponse(503, mockErrorResponse), nil
-			}
-			return httpmock.NewStringResponse(200, mockSuccessfulResponse), nil
-		})
+				if atomic.AddUint32(&callCount, 1) < 2 {
+					return httpmock.NewStringResponse(503, mockErrorResponse), nil
+				}
+				return httpmock.NewStringResponse(200, mockSuccessfulResponse), nil
+			})
 
-	response, err := invokePingRequest(false, mockRequestURLWithoutScheme, false)
+		response, err := retrievePingResponse(false, mockRequestURLWithoutScheme, false)
 
-	assert.NoError(t, err, "invokePingRequest should not return error for this testcase")
-	assert.Exactly(t, mockSuccessfulResponse, response, "invokePingRequest should return mockResponse without error")
+		assert.NoError(t, err, "retrievePingResponse should not return error for this testcase")
+		assert.Exactly(t, mockSuccessfulResponse, response, "retrievePingResponse should return mockResponse without error")
+	})
 
-}
-
-func TestInvokePingRequestRetryingWithLimit(t *testing.T) {
-	httpmock.Activate()
-	defer httpmock.DeactivateAndReset()
-	requester.NilTransport.Set()
-	defer requester.NilTransport.Clear()
-	_retryCounter = 0
-	defer func() {
+	t.Run("RetryingWithLimit", func (t *testing.T) {
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+		requester.NilTransport.Set()
+		defer requester.NilTransport.Clear()
 		_retryCounter = 0
-	}()
+		defer func() {
+			_retryCounter = 0
+		}()
 
-	const mockRegion = "cn-test100"
-	testutil.MockMetaServer(mockRegion)
+		const mockRegion = "cn-test100"
+		testutil.MockMetaServer(mockRegion)
 
-	mockRequestURLWithoutScheme := generateFakePingRequest(mockRegion)
-	mockSuccessfulResponse := generateFakeSuccessfulResponseOrPanic()
-	mockErrorResponse := generateFakeErrorResponseOrPanic()
+		mockRequestURLWithoutScheme := generateFakePingRequest(mockRegion)
+		mockSuccessfulResponse := generateFakeSuccessfulResponseOrPanic()
+		mockErrorResponse := generateFakeErrorResponseOrPanic()
 
-	var callCount uint32 = 0
-	httpmock.RegisterResponder("GET",
-		fmt.Sprintf("https://%s.axt.aliyun.com/luban/api/heart-beat", mockRegion),
-		func(h *http.Request) (*http.Response, error) {
-			assert.Exactly(t, "https://"+mockRequestURLWithoutScheme, h.URL.String(), "Mock server should receive same request as generated")
+		var callCount uint32 = 0
+		httpmock.RegisterResponder("GET",
+			fmt.Sprintf("https://%s.axt.aliyun.com/luban/api/heart-beat", mockRegion),
+			func(h *http.Request) (*http.Response, error) {
+				assert.Exactly(t, "https://"+mockRequestURLWithoutScheme, h.URL.String(), "Mock server should receive same request as generated")
 
-			if atomic.AddUint32(&callCount, 1) < 2 {
-				return httpmock.NewStringResponse(503, mockErrorResponse), nil
-			}
-			atomic.StoreUint32(&callCount, 0)
-			return httpmock.NewStringResponse(200, mockSuccessfulResponse), nil
+				if atomic.AddUint32(&callCount, 1) < 2 {
+					return httpmock.NewStringResponse(503, mockErrorResponse), nil
+				}
+				atomic.StoreUint32(&callCount, 0)
+				return httpmock.NewStringResponse(200, mockSuccessfulResponse), nil
+			})
+
+		for i := 0; i < 3; i++ {
+			response, err := retrievePingResponse(false, mockRequestURLWithoutScheme, false)
+
+			assert.NoError(t, err, "retrievePingResponse should not return error for this testcase")
+			assert.Exactly(t, mockSuccessfulResponse, response, "retrievePingResponse should return mockResponse without error")
+		}
+
+		_, err := retrievePingResponse(false, mockRequestURLWithoutScheme, false)
+		assert.Error(t, err, "retrievePingResponse should return error for this testcase")
+	})
+
+	t.Run("NetworkErrorWithoutResponse", func (t *testing.T) {
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+		requester.NilTransport.Set()
+		defer requester.NilTransport.Clear()
+
+		const mockRegion = "cn-test100"
+		testutil.MockMetaServer(mockRegion)
+
+		mockRequestURLWithoutScheme := generateFakePingRequest(mockRegion)
+
+		httpmock.RegisterResponder("GET",
+			fmt.Sprintf("https://%s.axt.aliyun.com/luban/api/heart-beat", mockRegion),
+			httpmock.NewStringResponder(503, "https://"+mockRequestURLWithoutScheme))
+
+		patches := gomonkey.ApplyFunc(util.HttpGet, func(url string) (error, string) {
+			return fmt.Errorf("GET %s: %w", url, os.ErrDeadlineExceeded), ""
 		})
+		defer patches.Reset()
 
-	for i := 0; i < 3; i++ {
-		response, err := invokePingRequest(false, mockRequestURLWithoutScheme, false)
+		response, err := retrievePingResponse(false, mockRequestURLWithoutScheme, false)
 
-		assert.NoError(t, err, "invokePingRequest should not return error for this testcase")
-		assert.Exactly(t, mockSuccessfulResponse, response, "invokePingRequest should return mockResponse without error")
-	}
+		assert.Error(t, err, "retrievePingResponse should return error for this testcase")
+		fmt.Println(response, err)
+		assert.Empty(t, response, "retrievePingResponse should hide response to caller when error encountered")
+	})
 
-	_, err := invokePingRequest(false, mockRequestURLWithoutScheme, false)
-	assert.Error(t, err, "invokePingRequest should return error for this testcase")
+	t.Run("ServerErrorWithResponse", func (t *testing.T) {
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+		requester.NilTransport.Set()
+		defer requester.NilTransport.Clear()
 
+		const mockRegion = "cn-test100"
+		testutil.MockMetaServer(mockRegion)
+
+		mockRequestURLWithoutScheme := generateFakePingRequest(mockRegion)
+		mockErrorResponse := generateFakeErrorResponseOrPanic()
+
+		httpmock.RegisterResponder("GET",
+			fmt.Sprintf("https://%s.axt.aliyun.com/luban/api/heart-beat", mockRegion),
+			httpmock.NewStringResponder(503, mockErrorResponse))
+
+		response, err := retrievePingResponse(false, mockRequestURLWithoutScheme, false)
+
+		assert.Error(t, err, "retrievePingResponse should return error for this testcase")
+		assert.Exactly(t, mockErrorResponse, response, "retrievePingResponse should return mockResponse along with error")
+	})
+
+	t.Run("TimeOut", func (t *testing.T) {
+		httpmock.Activate()
+		defer httpmock.DeactivateAndReset()
+		requester.NilTransport.Set()
+		defer requester.NilTransport.Clear()
+		const mockRegion = "cn-test500"
+		testutil.MockMetaServer(mockRegion)
+
+		mockRequestURLWithoutScheme := generateFakePingRequest(mockRegion)
+		mockSuccessfulResponse := generateFakeSuccessfulResponseOrPanic()
+		mockErrorResponse := generateFakeErrorResponseOrPanic()
+
+		var callCount uint32 = 0
+		httpmock.RegisterResponder("GET",
+			fmt.Sprintf("https://%s.axt.aliyun.com/luban/api/heart-beat", mockRegion),
+			func(h *http.Request) (*http.Response, error) {
+				assert.Exactly(t, "https://"+mockRequestURLWithoutScheme, h.URL.String(), "Mock server should receive same request as generated")
+				if atomic.AddUint32(&callCount, 1) < 2 {
+					time.Sleep(time.Second * 20)
+					return httpmock.NewStringResponse(404, mockErrorResponse), nil
+				}
+				return httpmock.NewStringResponse(200, mockSuccessfulResponse), nil
+			})
+
+		response, err := retrievePingResponse(false, mockRequestURLWithoutScheme, false)
+
+		assert.NoError(t, err, "retrievePingResponse should not return error for this testcase")
+		assert.Exactly(t, mockSuccessfulResponse, response, "retrievePingResponse should return mockResponse without error")
+	})
 }
 
-func TestInvokePingRequestNetworkError(t *testing.T) {
-	httpmock.Activate()
-	defer httpmock.DeactivateAndReset()
-	requester.NilTransport.Set()
-	defer requester.NilTransport.Clear()
+func TestInvokePingRequest(t *testing.T) {
+	t.Run("NormalCase", func(t *testing.T) {
+		const mockRegion = "cn-normalcase"
+		mockRequestURLWithoutScheme := generateFakePingRequest(mockRegion)
+		mockSuccessfulResponse := generateFakeSuccessfulResponseOrPanic()
 
-	const mockRegion = "cn-test100"
-	testutil.MockMetaServer(mockRegion)
-
-	mockRequestURLWithoutScheme := generateFakePingRequest(mockRegion)
-
-	httpmock.RegisterResponder("GET",
-		fmt.Sprintf("https://%s.axt.aliyun.com/luban/api/heart-beat", mockRegion),
-		httpmock.NewStringResponder(503, "https://"+mockRequestURLWithoutScheme))
-
-	response, err := invokePingRequest(false, mockRequestURLWithoutScheme, false)
-
-	assert.Error(t, err, "invokePingRequest should return error for this testcase")
-	fmt.Println(response, err)
-	assert.Empty(t, response, "invokePingRequest should hide response to caller when error encountered")
-}
-
-func TestInvokePingRequestServerError(t *testing.T) {
-	httpmock.Activate()
-	defer httpmock.DeactivateAndReset()
-	requester.NilTransport.Set()
-	defer requester.NilTransport.Clear()
-
-	const mockRegion = "cn-test100"
-	testutil.MockMetaServer(mockRegion)
-
-	mockRequestURLWithoutScheme := generateFakePingRequest(mockRegion)
-	mockErrorResponse := generateFakeErrorResponseOrPanic()
-
-	httpmock.RegisterResponder("GET",
-		fmt.Sprintf("https://%s.axt.aliyun.com/luban/api/heart-beat", mockRegion),
-		httpmock.NewStringResponder(503, mockErrorResponse))
-
-	response, err := invokePingRequest(false, mockRequestURLWithoutScheme, false)
-
-	assert.Error(t, err, "invokePingRequest should return error for this testcase")
-	assert.Empty(t, response, "invokePingRequest should hide response to caller when error encountered")
-}
-
-func TestInvokePingRequestTimeOut(t *testing.T) {
-	httpmock.Activate()
-	defer httpmock.DeactivateAndReset()
-	requester.NilTransport.Set()
-	defer requester.NilTransport.Clear()
-	const mockRegion = "cn-test500"
-	testutil.MockMetaServer(mockRegion)
-
-	mockRequestURLWithoutScheme := generateFakePingRequest(mockRegion)
-	mockSuccessfulResponse := generateFakeSuccessfulResponseOrPanic()
-	mockErrorResponse := generateFakeErrorResponseOrPanic()
-
-	var callCount uint32 = 0
-	httpmock.RegisterResponder("GET",
-		fmt.Sprintf("https://%s.axt.aliyun.com/luban/api/heart-beat", mockRegion),
-		func(h *http.Request) (*http.Response, error) {
-			assert.Exactly(t, "https://"+mockRequestURLWithoutScheme, h.URL.String(), "Mock server should receive same request as generated")
-			if atomic.AddUint32(&callCount, 1) < 2 {
-				time.Sleep(time.Second * 20)
-				return httpmock.NewStringResponse(404, mockErrorResponse), nil
-			}
-			return httpmock.NewStringResponse(200, mockSuccessfulResponse), nil
+		patches := gomonkey.ApplyFunc(retrievePingResponse, func(_ bool, _ string, _ bool) (string, error) {
+			return mockSuccessfulResponse, nil
 		})
+		patches.ApplyFunc(digErrorFromResponse, func(responseContent string) error {
+			assert.Exactly(t, mockSuccessfulResponse, responseContent, "Response retrieved MUST be passes into digErrorFromResponse as is")
+			return nil
+		})
+		defer patches.Reset()
 
-	response, err := invokePingRequest(false, mockRequestURLWithoutScheme, false)
+		response, err := invokePingRequest(true, mockRequestURLWithoutScheme, false)
+		assert.NoError(t, err, "invokePingRequest SHOULD NOT return error for this testcase")
+		assert.Equal(t, mockSuccessfulResponse, response, "invokePingRequest SHOULD return response retrieved as is")
+	})
 
-	assert.NoError(t, err, "invokePingRequest should not return error for this testcase")
-	assert.Exactly(t, mockSuccessfulResponse, response, "invokePingRequest should return mockResponse without error")
+	t.Run("ErrorPassedThrough", func(t *testing.T) {
+		const mockRegion = "cn-networkerrorwithresponse"
+		mockRequestURLWithoutScheme := generateFakePingRequest(mockRegion)
+		expectedErr := fmt.Errorf("GET %s: %w", mockRequestURLWithoutScheme, os.ErrDeadlineExceeded)
+
+		patches := gomonkey.ApplyFunc(retrievePingResponse, func(_ bool, _ string, _ bool) (string, error) {
+			return "", expectedErr
+		})
+		patches.ApplyFunc(digErrorFromResponse, func(responseContent string) error {
+			assert.Empty(t, responseContent, "Empty response retrieved MUST be passes into digErrorFromResponse as is")
+			return nil
+		})
+		defer patches.Reset()
+
+		response, err := invokePingRequest(true, mockRequestURLWithoutScheme, false)
+		assert.ErrorIs(t, err, expectedErr, "invokePingRequest SHOULD return error for this testcase")
+		assert.Empty(t, response, "invokePingRequest MUST NOT return response retrieved but empty string")
+	})
+
+	t.Run("ErrorDugFromResponseOnly", func(t *testing.T) {
+		const mockRegion = "cn-errordugfromresponseonly"
+		mockRequestURLWithoutScheme := generateFakePingRequest(mockRegion)
+		mockErrorResponse := generateFakeErrorResponseOrPanic()
+		digErr := errors.New("dig error")
+
+		patches := gomonkey.ApplyFunc(retrievePingResponse, func(_ bool, _ string, _ bool) (string, error) {
+			return mockErrorResponse, nil
+		})
+		patches.ApplyFunc(digErrorFromResponse, func(responseContent string) error {
+			assert.Exactly(t, mockErrorResponse, responseContent, "Response retrieved MUST be passes into digErrorFromResponse as is")
+			return digErr
+		})
+		defer patches.Reset()
+
+		response, err := invokePingRequest(true, mockRequestURLWithoutScheme, false)
+		assert.ErrorIs(t, err, digErr, "invokePingRequest SHOULD return dig error for this testcase")
+		assert.Empty(t, response, "invokePingRequest MUST NOT return response retrieved but empty string")
+	})
+
+	t.Run("ErrorDugFromResponsePrioritize", func(t *testing.T) {
+		const mockRegion = "cn-errordugfromresponseprioritize"
+		mockRequestURLWithoutScheme := generateFakePingRequest(mockRegion)
+		mockErrorResponse := generateFakeErrorResponseOrPanic()
+		retrieveErr := errors.New("retrieve error")
+		digErr := errors.New("dig error")
+
+		patches := gomonkey.ApplyFunc(retrievePingResponse, func(_ bool, _ string, _ bool) (string, error) {
+			return mockErrorResponse, retrieveErr
+		})
+		patches.ApplyFunc(digErrorFromResponse, func(responseContent string) error {
+			assert.Exactly(t, mockErrorResponse, responseContent, "Response retrieved MUST be passes into digErrorFromResponse as is")
+			return digErr
+		})
+		defer patches.Reset()
+
+		response, err := invokePingRequest(true, mockRequestURLWithoutScheme, false)
+		assert.ErrorIs(t, err, digErr, "invokePingRequest MUST return dig error for this testcase, not retrieve error")
+		assert.Empty(t, response, "invokePingRequest MUST NOT return response retrieved but empty string")
+	})
+
+	t.Run("ParametersPassThrough", func(t *testing.T) {
+		const mockRegion = "cn-parameterspassthrough"
+		mockRequestURLWithoutScheme := generateFakePingRequest(mockRegion)
+		mockSuccessfulResponse := generateFakeSuccessfulResponseOrPanic()
+
+		var capturedIsHttp bool
+		var capturedUrl string
+		var capturedWillSwitch bool
+		patches := gomonkey.ApplyFunc(retrievePingResponse, func(isHttp bool, url string, willSwitch bool) (string, error) {
+			capturedIsHttp = isHttp
+			capturedUrl = url
+			capturedWillSwitch = willSwitch
+			return mockSuccessfulResponse, nil
+		})
+		patches.ApplyFunc(digErrorFromResponse, func(responseContent string) error {
+			assert.Exactly(t, mockSuccessfulResponse, responseContent, "Response retrieved MUST be passes into digErrorFromResponse as is")
+			return nil
+		})
+		defer patches.Reset()
+
+		response, err := invokePingRequest(false, mockRequestURLWithoutScheme, true)
+
+		assert.NoError(t, err, "invokePingRequest SHOULD NOT return error for this testcase")
+		assert.Equal(t, mockSuccessfulResponse, response, "invokePingRequest SHOULD return response retrieved as is")
+		assert.False(t, capturedIsHttp)
+		assert.Equal(t, mockRequestURLWithoutScheme, capturedUrl)
+		assert.True(t, capturedWillSwitch)
+	})
 }
 
 var (
@@ -497,7 +613,7 @@ func Test_doPingSwitchProtocol(t *testing.T) {
 	// use https and do not switch to http in hybrid mode
 	log.GetLogger().Info("Test: use https and do not switch to http in hybrid mode")
 	mockHybrid = true
-	
+
 	for i := 0; i < 25*60; i += 1 {
 		disableHttpx("https", mockRegion)
 		enableHttpx("http", mockRegion)

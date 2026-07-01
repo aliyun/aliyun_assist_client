@@ -1,14 +1,17 @@
+//go:build linux || freebsd
 // +build linux freebsd
 
 package pluginmanager
 
 import (
-	"github.com/aliyun/aliyun_assist_client/agent/util/process"
-	"github.com/aliyun/aliyun_assist_client/agent/log"
-	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
 	"io"
-	"syscall"
 	"strings"
+	"syscall"
+
+	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/agent/pluginmodel"
+	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
+	"github.com/aliyun/aliyun_assist_client/agent/util/process"
 )
 
 
@@ -29,24 +32,18 @@ func GetArch() (formatArch string, rawArch string) {
 	defer func() {
 		log.GetLogger().Infof("Get Arch: formatArch[%s] rawArch[%s]: ", formatArch, rawArch)
 	}()
-	formatArch = ARCH_UNKNOWN
-	arch, err := osutil.GetUnameMachine()
+
+	var err error
+	rawArch, err = osutil.GetUnameMachine()
 	if err != nil {
 		log.GetLogger().Errorln("Get Arch: GetUnameMachine err: ", err.Error())
 	}
-	arch = strings.TrimSpace(arch)
-	arch = strings.ToLower(arch)
-	rawArch = arch
+	rawArch = strings.TrimSpace(strings.ToLower(rawArch))
 
-	if strings.Contains(arch, "aarch") || strings.Contains(arch, "arm") { // arm: aarch arm
-		formatArch = ARCH_ARM
-	} else if strings.Contains(arch, "386") || strings.Contains(arch, "686") { // x86: i386 i686
-		formatArch = ARCH_32
-	} else if arch == "x86_64" || arch == "amd64" { // x64: x86_64
-		formatArch = ARCH_64
-	} else {
-		log.GetLogger().Errorln("Get Arch: unknown arch: ", arch)
-		formatArch = ARCH_UNKNOWN
+	var ok bool
+	formatArch, ok = pluginmodel.HostArchitecture2Model(rawArch)
+	if !ok {
+		log.GetLogger().Errorln("Get Arch: unknown arch: ", rawArch)
 	}
 	return
 }

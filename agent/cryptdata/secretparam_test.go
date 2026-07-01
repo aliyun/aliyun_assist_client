@@ -30,3 +30,37 @@ func TestSecretParam(t *testing.T) {
 	_, err = GetSecretParamValue(p.SecretName)
 	assert.ErrorIs(t, err, ErrParamNotExist)
 }
+
+func TestIsAnyKeyParamExist(t *testing.T) {
+	var (
+		paramName = "pname"
+		paramValue = "pvalue"
+		timeoutSecond = 1
+	)
+
+	key, err := GenRsaKey("key", 2)
+	defer RemoveRsaKey(key.Id)
+	assert.Nil(t, err)
+	encryptedParamValue, err := EncryptWithRsa(key.Id, paramValue)
+	assert.Nil(t, err)
+	_, err = CreateSecretParam(key.Id, paramName, int64(timeoutSecond), encryptedParamValue, nil)
+	assert.Nil(t, err)
+	
+	assert.True(t, IsAnyKeypairExist())
+	assert.True(t, IsAnyParamExist())
+
+	time.Sleep(time.Second)
+	assert.True(t, IsAnyKeypairExist())
+	assert.False(t, IsAnyParamExist())
+
+	time.Sleep(time.Second * time.Duration(2))
+	assert.False(t, IsAnyKeypairExist())
+	assert.False(t, IsAnyParamExist())
+
+	key, err = GenRsaKey("key", 2)
+	defer RemoveRsaKey(key.Id)
+	assert.Nil(t, err)
+	assert.True(t, IsAnyKeypairExist())
+	RemoveRsaKey(key.Id)
+	assert.False(t, IsAnyKeypairExist())
+}

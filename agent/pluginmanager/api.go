@@ -6,6 +6,7 @@ import (
 
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 
+	"github.com/aliyun/aliyun_assist_client/agent/pluginmodel"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/agent/util/osutil"
 )
@@ -31,14 +32,8 @@ type PluginListResponse struct {
 }
 
 // 状态上报的请求数据
-type PluginStatus struct {
-	Name    string `json:"name"`
-	Status  string `json:"status"`
-	Version string `json:"version"`
-	SysTagType string `json:"sysTagType,omitempty"`
-}
 type PluginStatusResquest struct {
-	Plugin []PluginStatus `json:"plugin"`
+	Plugin []pluginmodel.PluginStatus `json:"plugin"`
 }
 
 const (

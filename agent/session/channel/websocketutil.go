@@ -30,6 +30,7 @@ func NewWebsocketUtil(logger logrus.FieldLogger, dialerInput *websocket.Dialer) 
 		websocketUtil = &WebsocketUtil{
 			dialer: websocket.DefaultDialer,
 		}
+		websocketUtil.dialer.NetDialContext = requester.GetDialContextFunc(logger)
 		websocketUtil.dialer.Proxy = requester.GetProxyFunc(logger)
 	} else {
 		websocketUtil = &WebsocketUtil{

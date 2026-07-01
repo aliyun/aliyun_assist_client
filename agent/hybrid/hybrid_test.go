@@ -2,6 +2,7 @@ package hybrid
 
 import (
 	"bytes"
+	"errors"
 	"net/http"
 	"reflect"
 	"testing"
@@ -66,7 +67,7 @@ func TestRegister(t *testing.T) {
 	UnRegister(false)
 	restartAgentServiceCalled = false
 	needRestart := true
-	ret := Register(region, "test_code", "test_id", "test_machine", "vpc", needRestart, nil)
+	ret := Register(region, "test_code", "test_id", "test_machine", "vpc", needRestart, nil, "", false)
 	assert.True(t, ret)
 	assert.True(t, instance.IsHybrid())
 	assert.True(t, restartAgentServiceCalled)
@@ -79,15 +80,13 @@ func TestRegister(t *testing.T) {
 	needRestart = true
 	UnRegister(needRestart)
 	assert.False(t, instance.IsHybrid())
-	_, err := instance.ReadHardwareInfo()
-	assert.Equal(t, nil, err)
 	assert.True(t, restartAgentServiceCalled)
 
 	// Register and no need restart
 	UnRegister(false)
 	restartAgentServiceCalled = false
 	needRestart = false
-	ret = Register(region, "test_code", "test_id", "test_machine", "vpc", needRestart, nil)
+	ret = Register(region, "test_code", "test_id", "test_machine", "vpc", needRestart, nil, "", false)
 	assert.True(t, ret)
 	assert.True(t, instance.IsHybrid())
 	assert.False(t, restartAgentServiceCalled)
@@ -100,8 +99,303 @@ func TestRegister(t *testing.T) {
 	needRestart = false
 	UnRegister(needRestart)
 	assert.False(t, instance.IsHybrid())
-	_, err = instance.ReadHardwareInfo()
-	assert.Equal(t, nil, err)
 	assert.False(t, restartAgentServiceCalled)
 }
 
+type mockIdentifier struct {
+	generate func() (string, error)
+}
+
+func (m *mockIdentifier) Name() string {
+	return "mock"
+}
+
+func (m *mockIdentifier) Generate() (string, error) {
+	return m.generate()
+}
+
+type mockIdentifyRefresher struct {
+	generate func() (string, error)
+	refresh  func() (string, error)
+}
+
+func (m *mockIdentifyRefresher) Name() string {
+	return "mockRefresher"
+}
+
+func (m *mockIdentifyRefresher) Generate() (string, error) {
+	return m.generate()
+}
+
+func (m *mockIdentifyRefresher) Refresh() (string, error) {
+	return m.refresh()
+}
+
+func TestTryRegister(t *testing.T) {
+	t.Run("NormalCase", func(t *testing.T) {
+		doRegisterCounter := 0
+		saveCalled := false
+
+		mockIdent := &mockIdentifier{
+			generate: func() (string, error) {
+				return "validFingerprint", nil
+			},
+		}
+		patches := gomonkey.NewPatches()
+		defer patches.Reset()
+		patches.ApplyFunc(doRegister, func(*RegisterInfo, string, map[string]string) (registerResponse, error) {
+			doRegisterCounter++
+
+			return registerResponse{Code: 200, InstanceId: "test-123"}, nil
+		})
+		patches.ApplyFunc(instance.SaveInstanceInfo, func(string, string, string, string, string, string, string) { saveCalled = true })
+
+		instanceId, err := tryRegister(&RegisterInfo{}, mockIdent, "vpc", nil, "", "")
+		assert.NoError(t, err)
+		assert.Equal(t, "test-123", instanceId)
+		assert.Equal(t, 1, doRegisterCounter)
+		assert.True(t, saveCalled)
+	})
+
+	t.Run("DisableECSRegistration", func(t *testing.T) {
+		doRegisterCounter := 0
+		saveCalled := false
+
+		mockIdent := &mockIdentifier{
+			generate: func() (string, error) {
+				return "validFingerprint", nil
+			},
+		}
+		patches := gomonkey.NewPatches()
+		defer patches.Reset()
+		patches.ApplyFunc(doRegister, func(*RegisterInfo, string, map[string]string) (registerResponse, error) {
+			doRegisterCounter++
+
+			return registerResponse{Code: 403, ErrCode: errCodeEcsRegDisabled}, nil
+		})
+		patches.ApplyFunc(instance.SaveInstanceInfo, func(string, string, string, string, string, string, string) { saveCalled = true })
+
+		_, err := tryRegister(&RegisterInfo{}, mockIdent, "vpc", nil, "", "")
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "The ECS instance is forbidden from registering")
+		assert.Equal(t, 1, doRegisterCounter)
+		assert.False(t, saveCalled)
+	})
+
+	t.Run("DuplicateFingerprintButRefresh", func(t *testing.T) {
+		doRegisterCounter := 0
+		saveCalled := false
+
+		mockRefresher := &mockIdentifyRefresher{
+			generate: func() (string, error) {
+				return "duplicateFingerprint", nil
+			},
+			refresh: func() (string, error) {
+				return "newFingerprint", nil
+			},
+		}
+		patches := gomonkey.NewPatches()
+		defer patches.Reset()
+		patches.ApplyFunc(doRegister, func(info *RegisterInfo, _ string, _ map[string]string) (registerResponse, error) {
+			doRegisterCounter++
+
+			if info.Fingerprint == "duplicateFingerprint" {
+				return registerResponse{Code: 409, ErrCode: errCodeFingerprintDuplicate}, nil
+			}
+
+			return registerResponse{Code: 200, InstanceId: "test-123"}, nil
+		})
+		patches.ApplyFunc(instance.SaveInstanceInfo, func(string, string, string, string, string, string, string) { saveCalled = true })
+
+		instanceId, err := tryRegister(&RegisterInfo{}, mockRefresher, "vpc", nil, "", "")
+
+		assert.NoError(t, err)
+		assert.Equal(t, "test-123", instanceId)
+		assert.Equal(t, 2, doRegisterCounter)
+		assert.True(t, saveCalled)
+	})
+
+	t.Run("DuplicateFingerprintWithoutRefresh", func(t *testing.T) {
+		doRegisterCounter := 0
+		saveCalled := false
+
+		mockIdent := &mockIdentifier{
+			generate: func() (string, error) {
+				return "duplicateFingerprint", nil
+			},
+		}
+		patches := gomonkey.NewPatches()
+		defer patches.Reset()
+		patches.ApplyFunc(doRegister, func(*RegisterInfo, string, map[string]string) (registerResponse, error) {
+			doRegisterCounter++
+
+			return registerResponse{Code: 409, ErrCode: errCodeFingerprintDuplicate}, nil
+		})
+		patches.ApplyFunc(instance.SaveInstanceInfo, func(string, string, string, string, string, string, string) { saveCalled = true })
+
+		_, err := tryRegister(&RegisterInfo{}, mockIdent, "vpc", nil, "", "")
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "Register failed of duplicate machine")
+		assert.Equal(t, 1, doRegisterCounter)
+		assert.False(t, saveCalled)
+	})
+
+	t.Run("RefreshedFingerprintButDeclined", func(t *testing.T) {
+		doRegisterCounter := 0
+		saveCalled := false
+
+		mockRefresher := &mockIdentifyRefresher{
+			generate: func() (string, error) {
+				return "duplicateFingerprint", nil
+			},
+			refresh: func() (string, error) {
+				return "newFingerprint", nil
+			},
+		}
+		patches := gomonkey.NewPatches()
+		defer patches.Reset()
+		patches.ApplyFunc(doRegister, func(info *RegisterInfo, _ string, _ map[string]string) (registerResponse, error) {
+			doRegisterCounter++
+
+			if info.Fingerprint == "duplicateFingerprint" {
+				return registerResponse{Code: 409, ErrCode: errCodeFingerprintDuplicate}, nil
+			}
+
+			return registerResponse{Code: 418, ErrCode: "I'm a teapot"}, nil
+		})
+		patches.ApplyFunc(instance.SaveInstanceInfo, func(string, string, string, string, string, string, string) { saveCalled = true })
+
+		_, err := tryRegister(&RegisterInfo{}, mockRefresher, "vpc", nil, "", "")
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "Register failed")
+		assert.Contains(t, err.Error(), "I'm a teapot")
+		assert.Equal(t, 2, doRegisterCounter)
+		assert.False(t, saveCalled)
+	})
+
+	t.Run("GenerateFailure", func(t *testing.T) {
+		doRegisterCounter := 0
+		saveCalled := false
+
+		mockIdent := &mockIdentifier{
+			generate: func() (string, error) {
+				return "", errors.New("concrete failure")
+			},
+		}
+		patches := gomonkey.NewPatches()
+		defer patches.Reset()
+		patches.ApplyFunc(doRegister, func(*RegisterInfo, string, map[string]string) (registerResponse, error) {
+			doRegisterCounter++
+
+			return registerResponse{Code: 200, InstanceId: "test-123"}, nil
+		})
+		patches.ApplyFunc(instance.SaveInstanceInfo, func(string, string, string, string, string, string, string) { saveCalled = true })
+
+		_, err := tryRegister(&RegisterInfo{}, mockIdent, "vpc", nil, "", "")
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "generate fingerprint failed")
+		assert.Contains(t, err.Error(), "concrete failure")
+		assert.Equal(t, 0, doRegisterCounter)
+		assert.False(t, saveCalled)
+	})
+
+	t.Run("RefreshFailure", func(t *testing.T) {
+		doRegisterCounter := 0
+		saveCalled := false
+
+		mockRefresher := &mockIdentifyRefresher{
+			generate: func() (string, error) {
+				return "duplicateFingerprint", nil
+			},
+			refresh: func() (string, error) {
+				return "", errors.New("concrete failure")
+			},
+		}
+		patches := gomonkey.NewPatches()
+		defer patches.Reset()
+		patches.ApplyFunc(doRegister, func(*RegisterInfo, string, map[string]string) (registerResponse, error) {
+			doRegisterCounter++
+
+			return registerResponse{Code: 409, ErrCode: errCodeFingerprintDuplicate}, nil
+		})
+		patches.ApplyFunc(instance.SaveInstanceInfo, func(string, string, string, string, string, string, string) { saveCalled = true })
+
+		_, err := tryRegister(&RegisterInfo{}, mockRefresher, "vpc", nil, "", "")
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "Regenerate fingerprint failed")
+		assert.Contains(t, err.Error(), "concrete failure")
+		assert.Equal(t, 1, doRegisterCounter)
+		assert.False(t, saveCalled)
+	})
+
+	t.Run("DoRegisterError", func(t *testing.T) {
+		doRegisterCounter := 0
+		refreshCalled := false
+		saveCalled := false
+
+		mockRefresher := &mockIdentifyRefresher{
+			generate: func() (string, error) {
+				return "validFingerprint", nil
+			},
+			refresh: func() (string, error) {
+				refreshCalled = true
+				return "", errors.New("SHOULD NOT REACH HERE")
+			},
+		}
+		patches := gomonkey.NewPatches()
+		defer patches.Reset()
+		patches.ApplyFunc(doRegister, func(*RegisterInfo, string, map[string]string) (registerResponse, error) {
+			doRegisterCounter++
+
+			return registerResponse{}, errors.New("doRegister failure")
+		})
+		patches.ApplyFunc(instance.SaveInstanceInfo, func(string, string, string, string, string, string, string) { saveCalled = true })
+
+		_, err := tryRegister(&RegisterInfo{}, mockRefresher, "vpc", nil, "", "")
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "Register failed")
+		assert.Contains(t, err.Error(), "doRegister failure")
+		assert.Equal(t, 1, doRegisterCounter)
+		assert.False(t, refreshCalled)
+		assert.False(t, saveCalled)
+	})
+
+	t.Run("DoRegisterUnexpectedCode", func(t *testing.T) {
+		doRegisterCounter := 0
+		refreshCalled := false
+		saveCalled := false
+
+		mockRefresher := &mockIdentifyRefresher{
+			generate: func() (string, error) {
+				return "validFingerprint", nil
+			},
+			refresh: func() (string, error) {
+				refreshCalled = true
+				return "", errors.New("SHOULD NOT REACH HERE")
+			},
+		}
+		patches := gomonkey.NewPatches()
+		defer patches.Reset()
+		patches.ApplyFunc(doRegister, func(*RegisterInfo, string, map[string]string) (registerResponse, error) {
+			doRegisterCounter++
+
+			return registerResponse{Code: 418, ErrCode: "I'm a teapot"}, nil
+		})
+		patches.ApplyFunc(instance.SaveInstanceInfo, func(string, string, string, string, string, string, string) { saveCalled = true })
+
+		_, err := tryRegister(&RegisterInfo{}, mockRefresher, "vpc", nil, "", "")
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "Register failed")
+		assert.Contains(t, err.Error(), "I'm a teapot")
+		assert.Equal(t, 1, doRegisterCounter)
+		assert.False(t, refreshCalled)
+		assert.False(t, saveCalled)
+	})
+}

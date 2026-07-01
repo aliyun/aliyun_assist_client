@@ -1,4 +1,17 @@
-﻿2025-05-09
+﻿2026-06-30
+v2.x.x.1065
+1. 优先使用统一IP和域名连接服务端
+2. 托管实例注册支持从外部提供机器识别码 
+3. 支持插件自定义事件上报
+4. 命令任务支持支持输出内容投递到 OSS
+5. Session Manager 支持使用 KMS 进行端到端加密
+6. SessionManager端口转发Agent取消对目标端口的重连
+7. SessionManager登录windows支持指定用户名 
+8. 细化SessionManager错误码定义，并通过websocket透出错误信息
+9. 引入了新的日志轮转机制
+10. 其他问题修复
+
+2025-05-09
 v2.x.x.941
 1. 支持对任务的命令内容进行签名验证
 2. 保证第一次成功的task/list是reason=startup 

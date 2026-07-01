@@ -7,7 +7,8 @@ import (
 )
 
 const (
-	systemdScript = `[Unit]
+	systemdScript = `#Version=1.0
+[Unit]
 Description={{.Description}}
 ConditionFileIsExecutable={{.Path|cmdEscape}}
 {{range $i, $dep := .Dependencies}} 
@@ -145,7 +146,7 @@ case "$1" in
 esac
 exit 0
 `
-	
+
 	upstartScript = `# {{.Description}}
 
 {{if .DisplayName}}description    "{{.DisplayName}}"{{end}}
@@ -191,6 +192,9 @@ func ServiceConfig() *service.Config {
 	ServiceName := ""
 	depends := []string{}
 	option := make(service.KeyValue)
+	option["SystemdScript"] = systemdScript
+	option["SysvScript"] = sysvScript
+	option["UpstartScript"] = upstartScript
 	if systemdutil.IsRunningSystemd() {
 		ServiceName = "aliyun"
 		// Official doc https://www.freedesktop.org/wiki/Software/systemd/NetworkTarget/
@@ -198,7 +202,6 @@ func ServiceConfig() *service.Config {
 		// network is up. Need validation on ALL distros and releases.
 		depends = append(depends, "After=network-online.target")
 		depends = append(depends, "Wants=network-online.target")
-		option["SystemdScript"] = systemdScript
 		option["Restart"] = "on-failure"
 
 		// REMEMBER: Explicit disable LogOutput option of kardianos/service, and
@@ -206,8 +209,6 @@ func ServiceConfig() *service.Config {
 		option["LogOutput"] = false
 	} else {
 		ServiceName = "aliyun-service"
-		option["SysvScript"] = sysvScript
-		option["UpstartScript"] = upstartScript
 		option["LogOutput"] = true
 	}
 

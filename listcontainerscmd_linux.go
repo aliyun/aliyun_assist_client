@@ -7,8 +7,8 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/commandermanager"
+	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/aliyun-cli/cli"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/aliyun-cli/i18n"
 )
@@ -31,7 +31,7 @@ var (
 func runListContainersCmd(ctx *cli.Context, args []string) error {
 	// Extract value of persistent flags
 	logPath, _ := ctx.Flags().Get(LogPathFlagName).GetValue()
-	log.InitLog("aliyun_assist_main.log", logPath, true)
+	log.InitLog("aliyun_assist_cmd.log", logPath, true)
 	log.GetLogger().Info("Sub command start: ", listContainersCmdName)
 	commandermanager.InitCommanderManager(commandermanager.ContainerCommanderName)
 	containercommander, err := commandermanager.GetCommander(commandermanager.ContainerCommanderName)
@@ -41,7 +41,7 @@ func runListContainersCmd(ctx *cli.Context, args []string) error {
 	}
 
 	pluginPath := containercommander.CmdPath()
-	log.GetLogger().Infof("Plugin[%s]: %s",commandermanager.ContainerCommanderName, pluginPath)
+	log.GetLogger().Infof("Plugin[%s]: %s", commandermanager.ContainerCommanderName, pluginPath)
 	log.GetLogger().Info("Args: ", args)
 
 	args = append([]string{listContainersCmdName}, args...)

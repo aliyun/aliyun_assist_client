@@ -112,6 +112,9 @@ func init() {
 }
 
 func getConfig(ctx *cli.Context, args []string) error {
+	logPath, _ := ctx.Flags().Get(LogPathFlagName).GetValue()
+	log.InitLog("aliyun_assist_cmd.log", logPath, true)
+
 	runtime := ctx.Flags().Get(runtimeFlagName).IsAssigned()
 	var err error
 	var items []*pb.ConfItem
@@ -131,6 +134,9 @@ func getConfig(ctx *cli.Context, args []string) error {
 }
 
 func setConfig(ctx *cli.Context, args []string) error {
+	logPath, _ := ctx.Flags().Get(LogPathFlagName).GetValue()
+	log.InitLog("aliyun_assist_cmd.log", logPath, true)
+
 	runtime := ctx.Flags().Get(runtimeFlagName).IsAssigned()
 	crossVer := ctx.Flags().Get(crossVersionFlagName).IsAssigned()
 	items := ctx.Flags().Get(itemFlagName).GetValues()
@@ -159,11 +165,13 @@ func setConfig(ctx *cli.Context, args []string) error {
 		fmt.Fprintln(os.Stderr, err.Error())
 	}
 	cli.Exit(1)
-	
 	return nil
 }
 
 func reloadConfig(ctx *cli.Context, args []string) error {
+	logPath, _ := ctx.Flags().Get(LogPathFlagName).GetValue()
+	log.InitLog("aliyun_assist_cmd.log", logPath, true)
+
 	if err := client.ReloadConf(); err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 		cli.Exit(1)

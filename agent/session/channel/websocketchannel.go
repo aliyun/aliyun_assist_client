@@ -17,7 +17,7 @@ import (
 type IWebSocketChannel interface {
 	Initialize(channelUrl string,
 		onMessageHandler func([]byte),
-		onErrorHandler func(error)) error
+		onErrorHandler func(error))
 	Open() error
 	Close() error
 	StartPings()
@@ -36,11 +36,10 @@ type WebSocketChannel struct {
 
 func (webSocketChannel *WebSocketChannel) Initialize(channelUrl string,
 	onMessageHandler func([]byte),
-	onErrorHandler func(error)) error {
+	onErrorHandler func(error)) {
 	webSocketChannel.Url = channelUrl
 	webSocketChannel.OnError = onErrorHandler
 	webSocketChannel.OnMessage = onMessageHandler
-	return nil
 }
 
 func (webSocketChannel *WebSocketChannel) IsActive() bool {

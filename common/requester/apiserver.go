@@ -1,6 +1,8 @@
 package requester
 
 import (
+	"context"
+	"net"
 	"sync"
 
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
@@ -66,6 +68,24 @@ func GetExtraHTTPHeaders(logger logrus.FieldLogger) (map[string]string, error) {
 		logger.WithError(err).Warningf("Previously selected API server provider %s does not work for extra HTTP headers", _selectedAPIServerProvider.Name())
 	}
 	return extraHeaders, err
+}
+
+func GetDialContextFunc(logger logrus.FieldLogger) func(ctx context.Context, network, address string) (net.Conn, error) {
+	_apiServerProviderLock.RLock()
+	defer _apiServerProviderLock.RUnlock()
+	if _selectedAPIServerProvider == nil {
+		return defaultDialContextFunc
+	}
+
+	if dialContextFuncProvider, ok := _selectedAPIServerProvider.(DialContextFuncProvider); ok {
+		if dialContext, err := dialContextFuncProvider.DialContextFunc(logger, defaultDialContextFunc); err == nil {
+			return dialContext
+		} else {
+			logger.WithError(err).Warningf("Previously selected API server provider %s does not work for special DialContext function", _selectedAPIServerProvider.Name())
+		}
+	}
+
+	return defaultDialContextFunc
 }
 
 // unsafeSelectProviderForServerDomain MUST be called with protection under

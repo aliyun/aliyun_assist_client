@@ -1,6 +1,7 @@
 package checknet
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -58,6 +59,32 @@ func invokeNetcheck() (int, error) {
 	return 0, nil
 }
 
+type limitedBuffer struct {
+	b       bytes.Buffer
+	limit   int
+}
+
+func NewLimitedBuffer(limit int) *limitedBuffer {
+	return &limitedBuffer{
+		limit: limit,
+	}
+}
+
+func (buf *limitedBuffer) Write(p []byte) (int, error) {
+	l := len(p)
+	if l+buf.b.Len() <= buf.limit {
+		buf.b.Write(p)
+	} else {
+		l = buf.limit - buf.b.Len()
+		buf.b.Write(p[:l])
+	}
+	return len(p), nil
+}
+
+func (buf *limitedBuffer) String() string {
+	return buf.b.String()
+}
+
 // invokeCollection tries to invoke a collection task.
 func invokeCollection(logger logrus.FieldLogger, taskId string) (int, error) {
 	// There can only be one collection task at a time.
@@ -84,10 +111,18 @@ func invokeCollection(logger logrus.FieldLogger, taskId string) (int, error) {
 	logger.Infof("Invoke netcheck: %s %s", netcheckPath, strings.Join(args, " "))
 	cmd := exec.CommandContext(ctx, netcheckPath, args...)
 
+	// When the process exits with a non-zero exit code, the contents of stderr
+	// are intercepted as error message, similar to the functionality of
+	// exec.ExitError.Stderr.
+	// exec.ExitError.Stderr works only when cmd.Output() be called, cmd.Output()
+	// buffers all stdout but we not need it, so use a limited stderr buffer
+	// instead of exec.ExitError.Stderr.
+	stderrBuf := NewLimitedBuffer(1000)
+	cmd.Stderr = stderrBuf
 	if err := cmd.Run(); err != nil {
 		logger.Error("Netcheck cmd failed: %v", err)
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			return exitErr.ExitCode(), nil
+			return exitErr.ExitCode(), fmt.Errorf(stderrBuf.String())
 		}
 		return 0, err
 	}

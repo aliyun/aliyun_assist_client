@@ -5,10 +5,10 @@ package systemdutil
 
 import (
 	"context"
-	"os"
 	"strings"
 	"sync"
 
+	"github.com/aliyun/aliyun_assist_client/thirdparty/service"
 	systemdDbus "github.com/coreos/go-systemd/v22/dbus"
 )
 
@@ -28,8 +28,7 @@ var (
 // http://www.freedesktop.org/software/systemd/man/sd_booted.html
 func IsRunningSystemd() bool {
 	isRunningSystemdOnce.Do(func() {
-		fi, err := os.Lstat("/run/systemd/system")
-		isRunningSystemd = err == nil && fi.IsDir()
+		isRunningSystemd = service.IsSystemd()
 	})
 	return isRunningSystemd
 }

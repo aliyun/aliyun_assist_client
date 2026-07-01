@@ -10,6 +10,7 @@ var (
 	_generalProvider = &GeneralProvider{}
 	_hybridModeProvider = &HybridModeProvider{}
 	_inherentCAFileProvider = &InherentCAFileProvider{}
+	_unifiedDomainProvider = &UnifiedDomainProvider{}
 	cachedCAFileProvider = &CachedCAFileProvider{}
 	metaserverProvider = &MetaserverProvider{}
 	regionidFileProvider = &RegionIdFileProvider{}
@@ -27,6 +28,7 @@ var (
 		_externalExecutableProvider,
 		_hybridModeProvider,
 		metaserverProvider,
+		_unifiedDomainProvider,
 		_generalProvider,
 	}
 

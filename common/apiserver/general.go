@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"net/http"
 	"sync"
 
 	"github.com/aliyun/aliyun_assist_client/agent/flagging"
@@ -38,7 +39,6 @@ var (
 
 type GeneralProvider struct {
 	serverDomain             atomic.String
-	extraHTTPHeadersProvider atomic.Value
 }
 
 type GeneralHTTPHeadersProvider struct {
@@ -61,7 +61,7 @@ func (p *GeneralProvider) ServerDomain(logger logrus.FieldLogger) (string, error
 		domain := regionId + IntranetDomain
 		if err := ConnectionDetect(logger, domain); err == nil {
 			p.serverDomain.Store(domain)
-			go p.cacheRegionId(logger, regionId)
+			go cacheRegionId(logger, regionId)
 			networkcategory.Set(networkcategory.NetworkVPC)
 			return domain, nil
 		} else {
@@ -77,7 +77,7 @@ func (p *GeneralProvider) ServerDomain(logger logrus.FieldLogger) (string, error
 		domain := regionId + IntranetDomain
 		if err := ConnectionDetect(logger, domain); err == nil {
 			p.serverDomain.Store(domain)
-			go p.cacheRegionId(logger, regionId)
+			go cacheRegionId(logger, regionId)
 			networkcategory.Set(networkcategory.NetworkVPC)
 			return domain, nil
 		} else {
@@ -98,7 +98,7 @@ func (p *GeneralProvider) ServerDomain(logger logrus.FieldLogger) (string, error
 			domain := regionId + IntranetDomain
 			if err := ConnectionDetect(logger, domain); err == nil {
 				p.serverDomain.Store(domain)
-				go p.cacheRegionId(logger, regionId)
+				go cacheRegionId(logger, regionId)
 				networkcategory.Set(networkcategory.NetworkClassic)
 				return domain, nil
 			} else {
@@ -117,20 +117,7 @@ func (p *GeneralProvider) ExtraHTTPHeaders(logger logrus.FieldLogger) (map[strin
 		return nil, requester.ErrNotProvided
 	}
 
-	epp := p.extraHTTPHeadersProvider.Load()
-	if epp == nil {
-		return generalHTTPHeadersProvider.ExtraHTTPHeaders(logger)
-	}
-	ep, ok := epp.(requester.ExtraHTTPHeadersProvider)
-	if !ok {
-		return generalHTTPHeadersProvider.ExtraHTTPHeaders(logger)
-	}
-	return ep.ExtraHTTPHeaders(logger)
-}
-
-func (*GeneralProvider) cacheRegionId(logger logrus.FieldLogger, regionId string) {
-	requester.SetRegionId(regionId)
-	regionidFileProvider.SaveRegionId(logger, regionId)
+	return generalHTTPHeadersProvider.ExtraHTTPHeaders(logger)
 }
 
 func (gp *GeneralHTTPHeadersProvider) ExtraHTTPHeaders(logger logrus.FieldLogger) (map[string]string, error) {
@@ -169,15 +156,32 @@ func HttpGetWithoutExtraHeader(logger logrus.FieldLogger, url string) (string, e
 }
 
 func HttpGetWithSpecifiedHeader(logger logrus.FieldLogger, url string, headers map[string]string) (string, error) {
-	logger = logger.WithField("url", url)
-	transport := requester.GetHTTPTransport(logger)
-	request := httputil.NewGetReq(logger, transport, 5, headers)
+	transport := requester.GetHTTPTransport(logger, requester.WithProxy,
+		requester.WithDefaultDialContextFunc, requester.WithRootCAs)
+	return httpGetWithTransport(logger, url, headers, transport)
+}
 
+// httpGetWithTransport may return both response content and error, although
+// either response content may be empty, or error is nil.
+//
+// * Response content would be empty when network error encountered.
+// * But non-empty response content would be returned along with
+//   [httpbase.StatusCodeError] for further processing.
+func httpGetWithTransport(logger logrus.FieldLogger, url string, headers map[string]string, transport *http.Transport) (string, error) {
+	logger = logger.WithField("url", url)
+
+	request := httputil.NewGetReq(logger, transport, 5, headers)
 	response, err := request.Get(url)
 	if err != nil {
 		var certificateErr *tls.CertificateVerificationError
 		if !errors.As(err, &certificateErr) {
 			logger.WithError(err).Error("Failed to send HTTP GET request")
+			return "", err
+		}
+
+		// Nil transport means working with net/http.defaultHTTPTransport which
+		// does not hold the custom pool. Give up retrying
+		if transport == nil {
 			return "", err
 		}
 
@@ -220,7 +224,8 @@ func HttpGetWithSpecifiedHeader(logger logrus.FieldLogger, url string, headers m
 
 func HttpPostWithSpecifiedHeader(logger logrus.FieldLogger, url string, data string, contentType string, headers map[string]string) (string, error) {
 	logger = logger.WithField("url", url)
-	transport := requester.GetHTTPTransport(logger)
+	transport := requester.GetHTTPTransport(logger, requester.WithProxy,
+		requester.WithDefaultDialContextFunc, requester.WithRootCAs)
 	request := httputil.NewPostReq(logger, transport, contentType, 5, headers)
 	response, err := request.Post(url, data)
 	if err != nil {
@@ -265,4 +270,9 @@ func HttpPostWithSpecifiedHeader(logger logrus.FieldLogger, url string, data str
 		"responseContent": content,
 	}).WithError(err).Infoln("HTTP POST Requested")
 	return content, err
+}
+
+func cacheRegionId(logger logrus.FieldLogger, regionId string) {
+	requester.SetRegionId(regionId)
+	regionidFileProvider.SaveRegionId(logger, regionId)
 }

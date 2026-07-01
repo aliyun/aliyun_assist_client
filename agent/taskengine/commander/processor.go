@@ -171,10 +171,17 @@ func (p *CommanderProcessor) Cancel() error {
 		return err
 	}
 
-	err = client.CancelSubmitted(p.logger, context.Background(), p.submissionId)
+	var effective bool
+	effective, err = client.CancelSubmitted(p.logger, context.Background(), p.submissionId)
 	if err != nil {
 		p.logger.WithError(err).Error("cancel task failed")
 		return err
+	}
+	// The "effective" value indicates whether the task within the Commander has been truly terminated.
+	// If the task has been terminated, the Commander will immediately report the task's final status to the Agent.
+	// If the task has not been terminated, the Agent must proactively set the task's final status immediately.
+	if !effective {
+		p.SetFinalStatus(-1, process.Fail, taskerrors.NewCommanderExitError("task was canceled"))
 	}
 	return nil
 }
@@ -219,14 +226,16 @@ func (p *CommanderProcessor) SetFinalStatus(exitCode, taskStatus int, err *taske
 		if p.doneFunc != nil {
 			p.doneFunc()
 		}
+		p.stdoutWriter = nil
+		p.stderrWriter = nil
 	}
 }
 
 func (p *CommanderProcessor) WriteOutput(index int, output string) {
-	if p.stdoutWriter != nil {
-		p.stdoutWriter.Write([]byte(output))
-	} else if p.stderrWriter != nil {
-		p.stderrWriter.Write([]byte(output))
+	if w := p.stdoutWriter; w != nil {
+		w.Write([]byte(output))
+	} else if w := p.stderrWriter; w != nil {
+		w.Write([]byte(output))
 	}
 }
 

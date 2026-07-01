@@ -6,6 +6,11 @@ import (
 	"sync"
 )
 
+type GetPathOption int
+const (
+	GPNoCreation GetPathOption = 1
+)
+
 var (
 	scriptPath string
 
@@ -83,13 +88,25 @@ func GetLogPath() (string, error) {
 	return logPath, nil
 }
 
-func GetHybridPath() (string, error) {
+// GetHybridPath returns the path of hybrid directory. The optional gpo
+// parameter is used to pass bitwise GetPathOption. If specified, only the 1st
+// argument would be used and bitwise OR operation should be used to combine
+// multiple GetPathOption.
+func GetHybridPath(gpo1 ...GetPathOption) (string, error) {
 	crossVersionDir, err := GetCrossVersionInboundDir()
 	if err != nil {
 		return "", err
 	}
 
 	path := filepath.Join(crossVersionDir, "hybrid")
+
+	if len(gpo1) > 0 {
+		theGPO := gpo1[0]
+		if theGPO & GPNoCreation != 0 {
+			return path, nil
+		}
+	}
+
 	err = MakeSurePath(path)
 	return path, err
 }

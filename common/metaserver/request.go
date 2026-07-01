@@ -23,7 +23,7 @@ var (
 
 func fetch(logger logrus.FieldLogger, url string, requestOptions ...httpbase.RequestOption) (string, error) {
 	proxiedOptions := append([]httpbase.RequestOption{
-		httpbase.WithTransport(requester.GetProxiedHTTPTransport(logger)),
+		httpbase.WithTransport(requester.GetHTTPTransport(logger, requester.WithDefaultDialContextFunc, requester.WithProxy)),
 	}, requestOptions...)
 
 	content, err := fetchWithToken(url, proxiedOptions...)
@@ -55,7 +55,7 @@ func fetchWithToken(url string, requestOptions ...httpbase.RequestOption) (strin
 
 func acquireToken(logger logrus.FieldLogger, requestOptions ...httpbase.RequestOption) error {
 	acquiringOptions := append([]httpbase.RequestOption{
-		httpbase.WithTransport(requester.GetProxiedHTTPTransport(logger)),
+		httpbase.WithTransport(requester.GetHTTPTransport(logger, requester.WithDefaultDialContextFunc, requester.WithProxy)),
 		httpbase.WithHeaders(map[string]string{
 			_acquiringTokenTTLHeader: fmt.Sprint(_acquiringTokenTTLSeconds),
 		}),

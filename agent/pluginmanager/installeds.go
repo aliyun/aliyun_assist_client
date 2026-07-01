@@ -4,18 +4,24 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"runtime/debug"
+	"time"
 
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 	bolt "go.etcd.io/bbolt"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
+	"github.com/aliyun/aliyun_assist_client/common/fileutil"
 	"github.com/aliyun/aliyun_assist_client/common/fuzzyjson"
 )
 
 const (
 	_PluginListBucketName = "pluginList"
+	_CorruptedTimeformat = "2006-01-02-15_04_05"
 )
 
 var (
@@ -28,7 +34,8 @@ type _InstalledPluginsJson struct {
 }
 
 type InstalledPlugins struct {
-	boltdb *bolt.DB
+	boltdb     *bolt.DB
+	dbFilePath string
 }
 
 func LoadInstalledPlugins() (*InstalledPlugins, error) {
@@ -41,9 +48,8 @@ func LoadPreInstalledPlugins() (*InstalledPlugins, error) {
 
 // TODO-FIXME: Should LoadInstalledPlugins has a timeout limit? Now it simply
 // waits indefinitely.
-func loadInstalledPlugins(isPreInstalled bool) (*InstalledPlugins, error) {
+func loadInstalledPlugins(isPreInstalled bool) (installedPlugins *InstalledPlugins, err error) {
 	var boltPath string
-	var err error
 	if isPreInstalled {
 		boltPath, err = getPreInstalledPluginsBoltPath()
 		if err != nil {
@@ -56,16 +62,25 @@ func loadInstalledPlugins(isPreInstalled bool) (*InstalledPlugins, error) {
 		}
 	}
 
+	defer func() {
+		if r := recover(); r != nil {
+			installedPlugins = nil
+			err = _handlBoltdbPanic(r, boltPath)
+		}
+	}()
+
 	// 1. Just use the new BoltDB file if existed, but NEVER AUTO-CREATE IT if
 	// not existed
-	boltdb, err := bolt.Open(boltPath, os.FileMode(0o0640), &bolt.Options{
+	var boltdb *bolt.DB
+	boltdb, err = bolt.Open(boltPath, os.FileMode(0o0640), &bolt.Options{
 		OpenFile: func(name string, flag int, perm os.FileMode) (*os.File, error) {
 			return os.OpenFile(name, flag & ^os.O_CREATE, perm)
 		},
 	})
 	if err == nil {
 		return &InstalledPlugins{
-			boltdb: boltdb,
+			boltdb:     boltdb,
+			dbFilePath: boltPath,
 		}, nil
 	}
 	if !errors.Is(err, os.ErrNotExist) {
@@ -120,7 +135,8 @@ func loadInstalledPlugins(isPreInstalled bool) (*InstalledPlugins, error) {
 	}
 
 	return &InstalledPlugins{
-		boltdb: boltdb,
+		boltdb:     boltdb,
+		dbFilePath: boltPath,
 	}, nil
 }
 
@@ -131,7 +147,8 @@ func _loadInstalledPluginsBolt(boltPath string) (*InstalledPlugins, error) {
 	}
 
 	return &InstalledPlugins{
-		boltdb: boltdb,
+		boltdb:     boltdb,
+		dbFilePath: boltPath,
 	}, nil
 }
 
@@ -198,11 +215,14 @@ func (ip *InstalledPlugins) Close() error {
 	return ip.boltdb.Close()
 }
 
-func (ip *InstalledPlugins) FindAll() ([]int, []PluginInfo, error) {
-	var keys []int
-	var values []PluginInfo
+func (ip *InstalledPlugins) FindAll() (keys []int, values []PluginInfo, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = _handlBoltdbPanic(r, ip.dbFilePath)
+		}
+	}()
 
-	err := ip.boltdb.View(func(tx *bolt.Tx) error {
+	err = ip.boltdb.View(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket([]byte(_PluginListBucketName))
 		if bucket == nil {
 			return nil
@@ -221,7 +241,7 @@ func (ip *InstalledPlugins) FindAll() ([]int, []PluginInfo, error) {
 		})
 	})
 	if err != nil {
-		return nil, nil, err
+		return
 	}
 
 	return keys, values, nil
@@ -247,11 +267,15 @@ func (ip *InstalledPlugins) FindManyByName(name string) ([]int, []PluginInfo, er
 	return foundKeys, foundValues, nil
 }
 
-func (ip *InstalledPlugins) FindOneWithPredicate(predicate func(plugin *PluginInfo) bool) (int, *PluginInfo, error) {
-	var foundKey int = -1
-	var foundValue *PluginInfo
+func (ip *InstalledPlugins) FindOneWithPredicate(predicate func(plugin *PluginInfo) bool) (foundKey int, foundValue *PluginInfo, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = _handlBoltdbPanic(r, ip.dbFilePath)
+		}
+	}()
 
-	err := ip.boltdb.View(func(tx *bolt.Tx) error {
+	foundKey = -1
+	err = ip.boltdb.View(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket([]byte(_PluginListBucketName))
 		if bucket == nil {
 			return nil
@@ -283,13 +307,20 @@ func (ip *InstalledPlugins) FindOneWithPredicate(predicate func(plugin *PluginIn
 	return foundKey, foundValue, nil
 }
 
-func (ip *InstalledPlugins) Insert(value *PluginInfo) (int, error) {
-	content, err := json.Marshal(value)
+func (ip *InstalledPlugins) Insert(value *PluginInfo) (insertedKey int, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = _handlBoltdbPanic(r, ip.dbFilePath)
+		}
+	}()
+
+	insertedKey = -1
+	var content []byte
+	content, err = json.Marshal(value)
 	if err != nil {
-		return -1, err
+		return
 	}
 
-	var insertedKey int = -1
 	err = ip.boltdb.Update(func(tx *bolt.Tx) error {
 		bucket, err := tx.CreateBucketIfNotExists([]byte(_PluginListBucketName))
 		if err != nil {
@@ -307,7 +338,7 @@ func (ip *InstalledPlugins) Insert(value *PluginInfo) (int, error) {
 		return bucket.Put(_itob(insertedKey), []byte(content))
 	})
 	if err != nil {
-		return -1, err
+		return
 	}
 
 	return insertedKey, nil
@@ -315,8 +346,15 @@ func (ip *InstalledPlugins) Insert(value *PluginInfo) (int, error) {
 
 // Update method simply stores new value to specified position in JSON array.
 // Would PANIC if key is out of range.
-func (ip *InstalledPlugins) Update(key int, value *PluginInfo) error {
-	content, err := json.Marshal(value)
+func (ip *InstalledPlugins) Update(key int, value *PluginInfo) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = _handlBoltdbPanic(r, ip.dbFilePath)
+		}
+	}()
+
+	var content []byte
+	content, err = json.Marshal(value)
 	if err != nil {
 		return err
 	}
@@ -331,7 +369,13 @@ func (ip *InstalledPlugins) Update(key int, value *PluginInfo) error {
 	})
 }
 
-func (ip *InstalledPlugins) DeleteByKey(key int) error {
+func (ip *InstalledPlugins) DeleteByKey(key int) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = _handlBoltdbPanic(r, ip.dbFilePath)
+		}
+	}()
+
 	return ip.boltdb.Update(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket([]byte(_PluginListBucketName))
 		if bucket == nil {
@@ -351,4 +395,28 @@ func _itob(v int) []byte {
 
 func _b8toi(b []byte) int {
 	return int(binary.LittleEndian.Uint64(b))
+}
+
+func _handlBoltdbPanic(r any, boltPath string) (panicErr error) {
+	panicErr = errors.New(fmt.Sprint(r))
+	stacktrace := debug.Stack()
+	if fileutil.CheckFileIsExist(boltPath) {
+		boltDir := filepath.Dir(boltPath)
+		corruptedBoltFile := filepath.Base(boltPath)
+		corruptedBoltFile = "corrupted-and-removeable." + time.Now().Format(_CorruptedTimeformat) + "." + corruptedBoltFile
+		corruptedBoltFile = filepath.Join(boltDir, corruptedBoltFile)
+		if err := os.Rename(boltPath, corruptedBoltFile); err != nil {
+			log.GetLogger().WithFields(logrus.Fields{
+				"src":  boltPath,
+				"dest": corruptedBoltFile,
+			}).WithError(err).Errorf("rename failed")
+		} else {
+			log.GetLogger().WithFields(logrus.Fields{
+				"src":  boltPath,
+				"dest": corruptedBoltFile,
+			}).Info("rename success")
+		}
+	}
+	log.GetLogger().WithField("boltPath", boltPath).Error(r, ": ", string(stacktrace))
+	return
 }

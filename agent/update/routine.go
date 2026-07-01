@@ -14,6 +14,7 @@ import (
 
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 
+	"github.com/aliyun/aliyun_assist_client/agent/cryptdata"
 	"github.com/aliyun/aliyun_assist_client/agent/flagging"
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/metrics"
@@ -141,6 +142,10 @@ func safeUpdate(startTime time.Time, preparationTimeout time.Duration, maximumDo
 	updatingDisabled := !flagging.GetUpdatorUpdate()
 	if updatingDisabled {
 		log.GetLogger().Infoln("Updating has been disabled due to configuration")
+		return nil
+	}
+	if cryptdata.IsAnyKeypairExist() || cryptdata.IsAnyParamExist() {
+		log.GetLogger().Infoln("Updating has been disabled because of secret keypair/param exist")
 		return nil
 	}
 	// Check updator existence for possible disabling, compatibile with 1.* version
@@ -528,6 +533,9 @@ func executeUpdateScript(updateScriptPath string) error {
 			// fetching tasks
 			_criticalActionRunning.Set()
 			defer _criticalActionRunning.Clear()
+			if cryptdata.IsAnyKeypairExist() || cryptdata.IsAnyParamExist() {
+				return false
+			}
 			if !taskengine.FetchingTaskLock.TryLock() {
 				time.Sleep(time.Duration(5) * time.Second)
 				return false

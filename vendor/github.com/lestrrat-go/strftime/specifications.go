@@ -1,10 +1,9 @@
 package strftime
 
 import (
+	"errors"
 	"fmt"
 	"sync"
-
-	"github.com/pkg/errors"
 )
 
 // because there is no such thing was a sync.RWLocker
@@ -78,6 +77,8 @@ var defaultSpecifications = map[byte]Appender{
 	'D': mdy,
 	'd': dayOfMonthZeroPad,
 	'e': dayOfMonthSpacePad,
+	'G': weekyear,
+	'g': weekyearNoCentury,
 	'F': ymd,
 	'H': twentyFourHourClockZeroPad,
 	'h': abbrvMonthName,
@@ -124,7 +125,7 @@ func (ds *specificationSet) Lookup(b byte) (Appender, error) {
 	}
 	v, ok := ds.store[b]
 	if !ok {
-		return nil, errors.Errorf(`lookup failed: '%%%c' was not found in specification set`, b)
+		return nil, fmt.Errorf(`lookup failed: '%%%c' was not found in specification set`, b)
 	}
 	return v, nil
 }

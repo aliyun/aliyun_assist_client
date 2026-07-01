@@ -75,6 +75,10 @@ func TestMetrics(t *testing.T) {
 		"key", "value",
 	).ReportEvent()
 
+	GetPluginCustomizedEvent(
+		"key", "value",
+	).ReportEvent()
+
 	url := util.GetMetricsService()
 	doReport(url, "content")
 }

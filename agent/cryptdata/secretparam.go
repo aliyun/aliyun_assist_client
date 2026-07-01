@@ -64,6 +64,20 @@ func GetSecretParamValue(secretName string) (*ParamValueInfo, error) {
 	}, nil
 }
 
+func IsAnyParamExist() (res bool) {
+	now := time.Now().Unix()
+	secretParams_.Range(func(k, v interface{}) bool {
+		if param, ok := v.(*secretParam); ok {
+			if param.ExpiredTimestamp > now {
+				res = true
+				return false
+			}
+		}
+		return true
+	})
+	return
+}
+
 func clearExpiredParam() {
 	ps := getParams()
 	now := time.Now().Unix()
@@ -84,7 +98,7 @@ func loadParam(name string) (*secretParam, error) {
 			return nil, errors.New("Type convert failed")
 		}
 		now := time.Now().Unix()
-		if param.ExpiredTimestamp < now {
+		if param.ExpiredTimestamp <= now {
 			log.GetLogger().Infof("SecretParam[%s] has expired for %d second, so delete it", param.SecretName, now-param.ExpiredTimestamp)
 			secretParams_.Delete(name)
 			return nil, ErrParamNotExist

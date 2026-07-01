@@ -14,8 +14,8 @@ import (
 
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 
-	"github.com/tidwall/gjson"
 	"github.com/kirinlabs/HttpRequest"
+	"github.com/tidwall/gjson"
 
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/common/httpbase"
@@ -122,8 +122,8 @@ func HttpPostWithTimeout(url string, data string, contentType string, timeoutSec
 	transport := GetHTTPTransport()
 	var (
 		extraHeaders map[string]string
-		httpReqErr error
-		httpResp *HttpRequest.Response
+		httpReqErr   error
+		httpResp     *HttpRequest.Response
 	)
 	defer func() {
 		if httpReqErr != nil && httpPostErrHandler_ != nil {
@@ -266,6 +266,25 @@ func HttpDownloadWithTimeout(url string, filePath string, timeout time.Duration)
 
 	_, err = io.Copy(f, res.Body)
 	return err
+}
+
+func HttpPUTFromReaderWithTimeout(url string, bodyReader io.Reader, timeout time.Duration) (*http.Response, error) {
+	client := http.Client{
+		Timeout: timeout,
+	}
+	if transport := GetHTTPTransport(); transport != nil {
+		client.Transport = transport
+	}
+	req, err := http.NewRequest("PUT", url, bodyReader)
+	if err != nil {
+		return nil, err
+	}
+
+	rsp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	return rsp, nil
 }
 
 func CallApi(httpMethod, url string, parameters map[string]interface{}, respObj interface{}, apiTimeoutSecond int, noLog bool) error {

@@ -8,9 +8,14 @@ import (
 	"github.com/aliyun/aliyun_assist_client/agent/log"
 	"github.com/aliyun/aliyun_assist_client/agent/session/message"
 	"github.com/aliyun/aliyun_assist_client/agent/session/retry"
+	"github.com/aliyun/aliyun_assist_client/agent/session/sessionresult"
 	"github.com/aliyun/aliyun_assist_client/agent/util"
 	"github.com/aliyun/aliyun_assist_client/thirdparty/sirupsen/logrus"
 	"github.com/gorilla/websocket"
+)
+
+const (
+	idleTimeoutSecond = 60 * 3
 )
 
 type InputStreamMessageHandler func(streamDataMessage message.Message) error
@@ -20,6 +25,7 @@ type ISessionChannel interface {
 	Close() error
 	Reconnect() error
 	SendStreamDataMessage(inputData []byte) (err error)
+	SendKeyExchangeMessage(inputData []byte) (err error)
 	GetChannelId() string
 	IsActive() bool
 }
@@ -33,7 +39,7 @@ type SessionChannel struct {
 	logger                    logrus.FieldLogger
 }
 
-func NewSessionChannel(url string, sessionId string, inputStreamMessageHandler InputStreamMessageHandler, cancelFlag util.CancelFlag) (*SessionChannel, error) {
+func NewSessionChannel(url string, sessionId string, inputStreamMessageHandler InputStreamMessageHandler, cancelFlag util.CancelFlag) *SessionChannel {
 	logger := log.GetLogger().WithField("channelId", sessionId)
 	sessionChannel := &SessionChannel{}
 	sessionChannel.StreamDataSequenceNumber = 0
@@ -63,17 +69,13 @@ func NewSessionChannel(url string, sessionId string, inputStreamMessageHandler I
 			MaxAttempts:         10,
 		}
 		if _, err := retryer.Call(); err != nil {
-			cancelFlag.Set(util.Canceled)
+			retryErr := sessionresult.NewReadFromWebsocketFailedError(err)
+			cancelFlag.SetErr(retryErr)
 			logger.Error(err)
 		}
 	}
-	if err := sessionChannel.wsChannel.Initialize(
-		url,
-		streamMessageHandler,
-		onErrorHandler); err != nil {
-		logger.Errorf("failed to initialize websocket channel for datachannel, error: %s", err)
-		return nil, err
-	}
+	sessionChannel.wsChannel.Initialize(url, streamMessageHandler, onErrorHandler)
+
 	go func() {
 		for {
 			select {
@@ -83,11 +85,11 @@ func NewSessionChannel(url string, sessionId string, inputStreamMessageHandler I
 			}
 
 			// SessionChnanel will be closed if Agent does not receive any
-			// package whthin 3*60 seconds. So if the client has no real data
+			// package whthin idleTimeoutSecond seconds. So if the client has no real data
 			// to send for a long time, it needs to send an empty data packet
 			// to keep channel alive.
-			if atomic.LoadUint32(&sessionChannel.input_stream_cnt) > 60*3 {
-				cancelFlag.Set(util.Canceled)
+			if atomic.LoadUint32(&sessionChannel.input_stream_cnt) > idleTimeoutSecond {
+				cancelFlag.SetErr(sessionresult.NewIdleTimeoutError(idleTimeoutSecond))
 				sessionChannel.logger.Infoln("timeout in sessionChannel")
 				break
 			}
@@ -97,7 +99,7 @@ func NewSessionChannel(url string, sessionId string, inputStreamMessageHandler I
 
 	}()
 
-	return sessionChannel, nil
+	return sessionChannel
 }
 
 func (sessionChannel *SessionChannel) IsActive() bool {
@@ -165,7 +167,7 @@ func (sessionChannel *SessionChannel) inputMessageHandler(rawMessage []byte) err
 	atomic.StoreUint32(&sessionChannel.input_stream_cnt, 0)
 
 	switch streamDataMessage.MessageType {
-	case message.InputStreamDataMessage, message.SetSizeDataMessage, message.StatusDataMessage, message.CloseDataChannel:
+	case message.InputStreamDataMessage, message.SetSizeDataMessage, message.StatusDataMessage, message.CloseDataChannel, message.KeyExchangeMessage:
 		return sessionChannel.handleStreamDataMessage(*streamDataMessage, rawMessage)
 	default:
 		sessionChannel.logger.Warnf("Invalid message type received: %d", streamDataMessage.MessageType)
@@ -217,6 +219,38 @@ func (sessionChannel *SessionChannel) SendStreamDataMessage(inputData []byte) (e
 	if err = sessionChannel.SendMessage(msg, websocket.BinaryMessage); err != nil {
 		if util.IsVerboseMode() {
 			sessionChannel.logger.Errorf("Error sending stream data message %v", err)
+		}
+	}
+
+	sessionChannel.StreamDataSequenceNumber = sessionChannel.StreamDataSequenceNumber + 1
+	return nil
+}
+
+// SendKeyExchangeMessage sends a key exchange message in a form of AgentMessage for streaming.
+func (sessionChannel *SessionChannel) SendKeyExchangeMessage(inputData []byte) (err error) {
+	agentMessage := &message.Message{
+		MessageType:    message.KeyExchangeMessage,
+		SchemaVersion:  "1.01",
+		SessionId:      sessionChannel.ChannelId,
+		CreatedDate:    uint64(time.Now().UnixNano() / 1000000),
+		SequenceNumber: sessionChannel.StreamDataSequenceNumber,
+		PayloadLength:  uint32(len(inputData)),
+		Payload:        inputData,
+	}
+	msg, err := agentMessage.Serialize()
+
+	if util.IsVerboseMode() {
+		sessionChannel.logger.Infoln("output data: ", string(msg))
+		sessionChannel.logger.Infoln("output data num: ", sessionChannel.StreamDataSequenceNumber)
+	}
+
+	if err != nil {
+		return fmt.Errorf("cannot serialize KeyExchange message %v", agentMessage)
+	}
+
+	if err = sessionChannel.SendMessage(msg, websocket.BinaryMessage); err != nil {
+		if util.IsVerboseMode() {
+			sessionChannel.logger.Errorf("Error sending key exchange message %v", err)
 		}
 	}
 
