@@ -107,8 +107,15 @@ func (p *HostProcessor) Prepare(commandContent string) error {
 		"TaskId": p.TaskId,
 		"Phase":  "HostProcessor-Preparing",
 	})
-	if langutil.NeedTransformEncoding() {
-		commandContent = langutil.UTF8ToLocal(commandContent)
+	// cmd.exe, and interpreters such as cscript that a launcher may name, read
+	// the script in the local code page
+	localEncoded := (p.CommandType != "RunPowerShellScript" || p.Launcher != "") && langutil.NeedTransformEncoding()
+	if localEncoded {
+		local, err := langutil.Utf8ToGbk([]byte(commandContent))
+		if err != nil {
+			return taskerrors.NewSaveScriptFileError(fmt.Errorf("script has characters GBK lacks: %w", err))
+		}
+		commandContent = string(local)
 	}
 	p.CommandContent = commandContent
 
@@ -203,10 +210,9 @@ func (p *HostProcessor) Prepare(commandContent string) error {
 		}
 		p.scriptFilePath = filepath.Join(scriptDir, fmt.Sprintf("%s%s%s%s", commandName, p.TaskId, iVersion, scriptFileExtension))
 
-		// In english environment PowerShell scripts need to be saved in utf8-bom format,
-		// otherwise no-ASCII characters will not be recognized
+		// Without the BOM PowerShell reads a UTF-8 script in the ANSI code page
 		commandContent = p.CommandContent
-		if p.CommandType == "RunPowerShellScript" && !langutil.NeedTransformEncoding() {
+		if p.CommandType == "RunPowerShellScript" && !localEncoded {
 			commandContent = string(append([]byte{0xEF, 0xBB, 0xBF}, []byte(commandContent)...))
 		}
 		if err := scriptmanager.SaveScriptFile(p.scriptFilePath, commandContent); err != nil {
