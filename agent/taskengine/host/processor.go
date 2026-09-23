@@ -277,10 +277,12 @@ func (p *HostProcessor) Prepare(commandContent string) error {
 		}
 	} else if p.CommandType == "RunPowerShellScript" {
 		p.invokeCommand = "powershell"
+		// Nobody can answer a prompt: PowerShell 3.0 and 4.0 would wait for
+		// the answer until the task times out
 		if useScriptFile {
-			p.invokeCommandArgs = []string{"-file", p.scriptFilePath}
+			p.invokeCommandArgs = []string{"-NonInteractive", "-file", p.scriptFilePath}
 		} else {
-			p.invokeCommandArgs = []string{"-command", p.CommandContent}
+			p.invokeCommandArgs = []string{"-NonInteractive", "-command", p.CommandContent}
 		}
 
 		if _, err := executil.LookPath(p.invokeCommand); err != nil {
