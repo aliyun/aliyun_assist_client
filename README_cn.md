@@ -10,22 +10,25 @@
 
 ### 系统要求
 
--   windows Server 2008/2012/2016
--   Ubuntu
--   CentOS
--   Debian
--   RedHat
--   SUSE Linux Enterprise Server
--   OpenSUSE
--   Aliyun Linux
--   FreeBSD
+-   Windows Server 2012+
+-   Alibaba Cloud Linux
+-   AlmaLinux 8+
+-   Anolis OS 7+
+-   CentOS 6+
+-   Debian 8+
+-   Ubuntu 12+
+-   RHEL 6+
+-   SUSE 11 SP1+
+-   Fedora 33+
 -   CoreOS
+-   OpenSUSE
+-   FreeBSD 12+
 
-### [安装方法](https://help.aliyun.com/document_detail/64921.html)
+### [安装方法](https://help.aliyun.com/zh/ecs/user-guide/install-the-cloud-assistant-agent)
 
 
 
-### [如何使用](https://help.aliyun.com/document_detail/64741.html)
+### [如何使用](https://help.aliyun.com/zh/ecs/user-guide/java-programs-use-cloud-assistant-to-manage-ecs-instances)
 
 
 ### Contributing
