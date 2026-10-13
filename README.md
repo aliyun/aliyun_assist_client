@@ -10,27 +10,30 @@ Aliyun assist is a platform that makes your applications easier to deploy, for e
 
 For example, you can create a command using aliyun openapi, then select some virtual machines to execute the command, and last you can get the task result.
 
-### Verify Requirements
+### System Requirements
 
--   Windows Server 2008/2012/2016
--   Ubuntu
--   CentOS
--   Debian
--   RedHat
--   SUSE Linux Enterprise Server
--   OpenSUSE
--   Aliyun Linux
--   FreeBSD
+-   Windows Server 2012+
+-   Alibaba Cloud Linux
+-   AlmaLinux 8+
+-   Anolis OS 7+
+-   CentOS 6+
+-   Debian 8+
+-   Ubuntu 12+
+-   RHEL 6+
+-   SUSE 11 SP1+
+-   Fedora 33+
 -   CoreOS
+-   OpenSUSE
+-   FreeBSD 12+
 
 ### Setup
-- [English Version](https://www.alibabacloud.com/help/doc-detail/64921.htm)
-- [Chinese Version](https://help.aliyun.com/document_detail/64921.html)
+- [English Version](https://www.alibabacloud.com/help/en/ecs/user-guide/install-the-cloud-assistant-agent)
+- [Chinese Version](https://help.aliyun.com/zh/ecs/user-guide/install-the-cloud-assistant-agent)
 
 
 ### How to use
-- [English Version](https://www.alibabacloud.com/help/doc-detail/64741.html)
-- [Chinese Version](https://help.aliyun.com/document_detail/64741.html)
+- [English Version](https://www.alibabacloud.com/help/en/ecs/user-guide/java-programs-use-cloud-assistant-to-manage-ecs-instances)
+- [Chinese Version](https://help.aliyun.com/zh/ecs/user-guide/java-programs-use-cloud-assistant-to-manage-ecs-instances)
 
 ### Contributing
 
