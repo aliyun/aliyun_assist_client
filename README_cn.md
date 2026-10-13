@@ -30,6 +30,12 @@
 
 ### [如何使用](https://help.aliyun.com/zh/ecs/user-guide/java-programs-use-cloud-assistant-to-manage-ecs-instances)
 
+### 插件
+
+本仓库在 [contrib/](contrib/) 目录下开发了部分云助手插件：
+
+- [ACS-ECS-OSAgent](contrib/ACS-ECS-OSAgent/)：专业执行 OS 管理和运维等更多任务的 AI Agent
+- [config_ecs_instance_connect](contrib/config_ecs_instance_connect/)：从云助手服务端获取临时秘钥，实现 SSH 临时秘钥登录功能
 
 ### Contributing
 

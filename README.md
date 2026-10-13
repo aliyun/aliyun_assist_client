@@ -35,6 +35,13 @@ For example, you can create a command using aliyun openapi, then select some vir
 - [English Version](https://www.alibabacloud.com/help/en/ecs/user-guide/java-programs-use-cloud-assistant-to-manage-ecs-instances)
 - [Chinese Version](https://help.aliyun.com/zh/ecs/user-guide/java-programs-use-cloud-assistant-to-manage-ecs-instances)
 
+### Plugins
+
+Some Cloud Assistant plugins are developed under the [contrib/](contrib/) directory:
+
+- [ACS-ECS-OSAgent](contrib/ACS-ECS-OSAgent/): an AI agent for OS administration and operations tasks
+- [config_ecs_instance_connect](contrib/config_ecs_instance_connect/): fetches temporary SSH keys from the Cloud Assistant server to enable temporary-key SSH login
+
 ### Contributing
 
     Welcome use Github pull requests to commit.  
